@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FlipLab 3.0 Admin</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root { --nav:#1f2933; --mint:#3ecf9e; --mint-soft:#e6f8f1; --bg:#f3f5f7; --text:#1f2933; --muted:#6b7680; --line:#e2e6ea; --danger:#d64545; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--text); }
+  nav { background:var(--nav); color:#fff; padding:12px 16px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:5; }
+  nav b { font-size:17px; } nav b span { color:var(--mint); }
+  nav button { background:transparent; color:#cfd6dc; border:1px solid #3a4651; border-radius:6px; padding:6px 10px; font-size:13px; }
+  main { max-width:760px; margin:0 auto; padding:16px; }
+  .card { background:#fff; border-radius:10px; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:16px; margin-bottom:12px; }
+  .hdr { background:var(--mint); color:#fff; font-weight:600; padding:8px 12px; border-radius:8px; margin:16px 0 8px; display:flex; justify-content:space-between; }
+  input, select, textarea { width:100%; padding:10px; border:1px solid var(--line); border-radius:8px; font-size:16px; margin:4px 0 10px; background:#fff; }
+  label { font-size:13px; color:var(--muted); }
+  .btn { background:var(--mint); color:#fff; border:0; border-radius:8px; padding:11px 16px; font-size:15px; font-weight:600; width:100%; }
+  .btn.ghost { background:#fff; color:var(--text); border:1px solid var(--line); }
+  .row2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .stu { display:flex; justify-content:space-between; align-items:center; padding:12px 4px; border-bottom:1px solid var(--line); cursor:pointer; }
+  .stu:last-child { border-bottom:0; }
+  .stu small { color:var(--muted); display:block; margin-top:2px; }
+  .pill { font-size:12px; padding:3px 9px; border-radius:20px; background:var(--mint-soft); color:#1c7a5a; white-space:nowrap; }
+  .pill.off { background:#eef0f2; color:var(--muted); }
+  .msg { font-size:14px; margin:8px 0; } .msg.err { color:var(--danger); }
+  .tabs { display:flex; gap:8px; margin-bottom:12px; }
+  .tabs button { flex:1; }
+  .hidden { display:none !important; }
+  .toolbar { display:flex; gap:8px; } .toolbar input { margin:0; } .toolbar .btn { width:auto; white-space:nowrap; }
+  .chk { display:flex; gap:8px; align-items:center; margin-bottom:10px; } .chk input { width:auto; margin:0; }
+  .center { text-align:center; color:var(--muted); padding:20px; }
+</style>
+</head>
+<body>
+<nav><b>Flip<span>Lab</span> 3.0</b><button id="outBtn" class="hidden" onclick="signOut()">Sign out</button></nav>
+<main>
+
+  <!-- Login -->
+  <section id="loginView" class="hidden">
+    <div class="card">
+      <div class="tabs">
+        <button class="btn" id="tabIn" onclick="setMode('in')">Sign in</button>
+        <button class="btn ghost" id="tabUp" onclick="setMode('up')">Create account</button>
+      </div>
+      <label>Email</label><input id="email" type="email" autocomplete="email">
+      <label>Password</label><input id="pw" type="password" autocomplete="current-password">
+      <button class="btn" id="authBtn" onclick="doAuth()">Sign in</button>
+      <div id="authMsg" class="msg"></div>
+    </div>
+  </section>
+
+  <!-- No gym access yet -->
+  <section id="waitView" class="hidden">
+    <div class="card center">Your account is created. Waiting for it to be linked to a gym.</div>
+  </section>
+
+  <!-- Students -->
+  <section id="studentsView" class="hidden">
+    <div class="toolbar">
+      <input id="q" placeholder="Search students or parents" oninput="render()">
+      <button class="btn" onclick="openEdit(null)">+ Add</button>
+    </div>
+    <div class="chk" style="margin-top:10px"><input type="checkbox" id="showInactive" onchange="render()"><label for="showInactive">Show inactive</label></div>
+    <div class="hdr"><span id="gymName">Students</span><span id="count"></span></div>
+    <div class="card" id="list"></div>
+  </section>
+
+  <!-- Edit student -->
+  <section id="editView" class="hidden">
+    <div class="hdr"><span id="editTitle">Student</span></div>
+    <div class="card">
+      <div class="row2">
+        <div><label>First name</label><input id="f_first_name"></div>
+        <div><label>Last name</label><input id="f_last_name"></div>
+      </div>
+      <div class="row2">
+        <div><label>Birthday</label><input id="f_dob" type="date"></div>
+        <div><label>Skill level</label>
+          <select id="f_skill_level"><option value=""></option><option>L1</option><option>L2</option><option>L3</option><option>L4</option><option>L5</option><option>L6</option></select>
+        </div>
+      </div>
+      <label>Parent name</label><input id="f_parent_name">
+      <div class="row2">
+        <div><label>Parent phone</label><input id="f_parent_phone" type="tel"></div>
+        <div><label>Parent email</label><input id="f_parent_email" type="email"></div>
+      </div>
+      <div class="row2">
+        <div><label>Emergency contact</label><input id="f_emergency_name"></div>
+        <div><label>Emergency phone</label><input id="f_emergency_phone" type="tel"></div>
+      </div>
+      <label>Notes</label><textarea id="f_notes" rows="3"></textarea>
+      <div class="chk"><input type="checkbox" id="f_active"><label for="f_active">Active</label></div>
+      <div class="chk"><input type="checkbox" id="f_unsubscribed"><label for="f_unsubscribed">Unsubscribed from emails/texts</label></div>
+      <div class="row2">
+        <button class="btn ghost" onclick="show('studentsView')">Cancel</button>
+        <button class="btn" onclick="saveStudent()">Save</button>
+      </div>
+      <div id="editMsg" class="msg"></div>
+    </div>
+  </section>
+
+</main>
+<script>
+const sb = supabase.createClient('https://angmtyojkwlrefxpcgoa.supabase.co', 'sb_publishable_fPciNfnNHpHQikB8mqHNpw_hIVRIGo5');
+const FIELDS = ['first_name','last_name','dob','skill_level','parent_name','parent_phone','parent_email','emergency_name','emergency_phone','notes'];
+let mode = 'in', gymId = null, students = [], editingId = null;
+
+const $ = id => document.getElementById(id);
+function show(view) {
+  ['loginView','waitView','studentsView','editView'].forEach(v => $(v).classList.toggle('hidden', v !== view));
+  $('outBtn').classList.toggle('hidden', view === 'loginView');
+}
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function setMode(m) {
+  mode = m;
+  $('tabIn').className = 'btn' + (m === 'in' ? '' : ' ghost');
+  $('tabUp').className = 'btn' + (m === 'up' ? '' : ' ghost');
+  $('authBtn').textContent = m === 'in' ? 'Sign in' : 'Create account';
+  $('authMsg').textContent = '';
+}
+
+async function doAuth() {
+  const email = $('email').value.trim(), password = $('pw').value;
+  const msg = $('authMsg'); msg.className = 'msg'; msg.textContent = 'Working…';
+  const res = mode === 'in'
+    ? await sb.auth.signInWithPassword({ email, password })
+    : await sb.auth.signUp({ email, password });
+  if (res.error) { msg.className = 'msg err'; msg.textContent = res.error.message; return; }
+  if (mode === 'up' && !res.data.session) { msg.textContent = 'Account created. You can sign in once it is approved.'; return; }
+  boot();
+}
+
+async function signOut() { await sb.auth.signOut(); show('loginView'); }
+
+async function boot() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { show('loginView'); return; }
+  const { data: gyms, error } = await sb.from('gyms').select('id,name').limit(1);
+  if (error || !gyms || !gyms.length) { show('waitView'); return; }
+  gymId = gyms[0].id; $('gymName').textContent = gyms[0].name + ' — Students';
+  await loadStudents();
+  show('studentsView');
+}
+
+async function loadStudents() {
+  $('list').innerHTML = '<div class="center">Loading…</div>';
+  const { data, error } = await sb.from('students').select('*').order('last_name').order('first_name');
+  if (error) { $('list').innerHTML = '<div class="msg err">' + esc(error.message) + '</div>'; return; }
+  students = data; render();
+}
+
+function render() {
+  const q = $('q').value.trim().toLowerCase(), all = $('showInactive').checked;
+  const rows = students.filter(s => (all || s.active) &&
+    (!q || [s.first_name, s.last_name, s.parent_name, s.parent_phone, s.parent_email].join(' ').toLowerCase().includes(q)));
+  $('count').textContent = rows.length;
+  $('list').innerHTML = rows.length ? rows.map(s => `
+    <div class="stu" onclick="openEdit('${esc(s.id)}')">
+      <div><b>${esc(s.first_name)} ${esc(s.last_name)}</b>
+        <small>${esc(s.parent_name || '')}${s.parent_phone ? ' · ' + esc(s.parent_phone) : ''}</small></div>
+      <span class="pill ${s.active ? '' : 'off'}">${s.active ? esc(s.skill_level || 'Active') : 'Inactive'}</span>
+    </div>`).join('') : '<div class="center">No students yet.</div>';
+}
+
+function openEdit(id) {
+  editingId = id;
+  const s = students.find(x => x.id === id) || { active: true };
+  FIELDS.forEach(f => $('f_' + f).value = s[f] ?? '');
+  $('f_active').checked = !!s.active; $('f_unsubscribed').checked = !!s.unsubscribed;
+  $('editTitle').textContent = id ? (s.first_name + ' ' + s.last_name) : 'New student';
+  $('editMsg').textContent = '';
+  show('editView'); window.scrollTo(0, 0);
+}
+
+async function saveStudent() {
+  const rec = { gym_id: gymId, active: $('f_active').checked, unsubscribed: $('f_unsubscribed').checked };
+  FIELDS.forEach(f => { const v = $('f_' + f).value.trim(); rec[f] = v === '' ? null : v; });
+  if (!rec.first_name) { $('editMsg').className = 'msg err'; $('editMsg').textContent = 'First name is required.'; return; }
+  $('editMsg').className = 'msg'; $('editMsg').textContent = 'Saving…';
+  const res = editingId
+    ? await sb.from('students').update(rec).eq('id', editingId)
+    : await sb.from('students').insert(rec);
+  if (res.error) { $('editMsg').className = 'msg err'; $('editMsg').textContent = res.error.message; return; }
+  await loadStudents(); show('studentsView');
+}
+
+boot();
+</script>
+</body>
+</html>
