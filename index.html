@@ -50,6 +50,14 @@
   .srow.away .tm { color:#B45309; } .pairwrap { display:flex; align-items:stretch; background:#FAF7FF; border-bottom:1px solid #f0f0f0; }
   .pairwrap .bar { width:3px; background:#7C3AED; margin:8px 8px; border-radius:2px; } .pairwrap .srow { background:transparent; border-bottom:1px dashed #d8cfee; padding-left:4px; }
   .pairwrap .srow:last-child { border-bottom:0; }
+  .srow.tap { cursor:pointer; } .srow.tap:hover { background:#f6fbf9; }
+  .ovl { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:flex-start; justify-content:center; z-index:20; overflow:auto; padding:30px 12px; }
+  .mdl { background:#fff; border-radius:12px; width:100%; max-width:460px; padding:16px; }
+  .mdl .mh { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; } .mdl .mh b { font-size:16px; }
+  .mdl .x { background:#fff; border:1px solid var(--line); border-radius:6px; padding:4px 10px; }
+  .mdl input[readonly] { background:#f9f8f5; }
+  .pairbox { background:#EAF4FF; border:1px solid #B8D9F5; border-radius:8px; padding:10px; margin-bottom:10px; font-size:13px; color:#185FA5; }
+  .btnrow { display:flex; gap:8px; } .btn.red { background:var(--danger); }
 </style>
 </head>
 <body>
@@ -140,6 +148,42 @@
   </section>
 
 </main>
+
+<!-- Edit lesson modal (port of 2.0 modal-move-lesson) -->
+<div class="ovl hidden" id="lessonModal" onclick="if(event.target===this)closeLesson()">
+  <div class="mdl">
+    <div class="mh"><b id="lm_title">Edit lesson</b><button class="x" onclick="closeLesson()">✕</button></div>
+    <label>Student</label><input id="lm_student" readonly>
+    <div class="row2">
+      <div><label>Coach</label><select id="lm_coach"></select></div>
+      <div><label>Skill level</label><input id="lm_skill" readonly></div>
+    </div>
+    <div class="row2">
+      <div><label>Move to day</label><select id="lm_day"></select></div>
+      <div><label>Move to time</label><select id="lm_time"></select></div>
+    </div>
+    <div class="row2">
+      <div><label>Duration</label><select id="lm_duration"><option>30 min</option><option>45 min</option><option>60 min</option></select></div>
+      <div><label>Lesson type</label><select id="lm_type"><option>Solo</option><option>Shared</option><option>Group</option></select></div>
+    </div>
+    <div id="lm_pair" class="pairbox hidden">🔗 Shared lesson with <b id="lm_partner"></b>
+      <div class="chk" style="margin:6px 0 0"><input type="checkbox" id="lm_movePartner" checked><label for="lm_movePartner" style="color:#185FA5">Also apply to partner</label></div></div>
+    <div id="lm_scopeWrap">
+      <label>Apply change to</label>
+      <select id="lm_scope" onchange="$('lm_startWrap').classList.toggle('hidden', this.value !== 'permanent')">
+        <option value="week">This week only</option><option value="permanent">Permanent (from start week forward)</option></select>
+      <div id="lm_startWrap" class="hidden"><label>New schedule starts the week of</label><input type="date" id="lm_start">
+        <div style="font-size:11px;color:#888;margin:-6px 0 10px">Earlier weeks are left alone.</div></div>
+    </div>
+    <div id="lm_oneoff" class="msg hidden" style="color:#185FA5">One-week lesson (claimed spot / extra) — changes apply to this week only.</div>
+    <label>Notes</label><textarea id="lm_notes" rows="2" placeholder="Lesson notes..."></textarea>
+    <div class="btnrow">
+      <button class="btn red" style="flex:1" onclick="cancelLesson()">Cancel lesson</button>
+      <button class="btn" style="flex:2" id="lm_save" onclick="saveLesson()">Save changes</button>
+    </div>
+    <div id="lm_msg" class="msg"></div>
+  </div>
+</div>
 <script>
 const sb = supabase.createClient('https://angmtyojkwlrefxpcgoa.supabase.co', 'sb_publishable_fPciNfnNHpHQikB8mqHNpw_hIVRIGo5');
 const FIELDS = ['first_name','last_name','dob','skill_level','parent_name','parent_phone','parent_email','emergency_name','emergency_phone','notes'];
@@ -233,7 +277,7 @@ async function saveStudent() {
 
 // ================= SCHEDULE (port of 2.0 getPrivates + applyExceptionsToPrivates_ + renderDynScheduleList_) =================
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-let weekOffset = 0, weekRows = [], weekSlots = [], weekLoading = 0;
+let weekOffset = 0, weekRows = [], weekSlots = [], weekEx = [], weekLoading = 0;
 
 const ymd = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 function weekDates() {
@@ -260,6 +304,7 @@ async function loadWeek() {
   const err = L.error || X.error || S.error;
   if (err) { $('schedGrid').innerHTML = '<div class="msg err">' + esc(err.message) + '</div>'; return; }
   const base = L.data.filter(p => !(p.start_date && p.start_date > we) && !(p.end_date && p.end_date <= ws));
+  weekEx = X.data;
   weekRows = applyExceptions(base, X.data);
   weekSlots = S.data;
   const coaches = [...new Set(weekRows.map(p => p.coach).concat(weekSlots.map(s => s.coach)).filter(Boolean))].sort();
@@ -272,7 +317,7 @@ function applyExceptions(lessons, exs) {
   const map = {}, addRows = [], attached = {}, out = [];
   exs.forEach(e => { if (e.lesson_id) map[e.lesson_id] = e; if (e.type === 'Add') addRows.push(e); });
   lessons.forEach(src => {
-    const p = { ...src, exType: '' }, ex = map[p.id];
+    const p = { ...src, exType: '', bday: src.day, btime: src.time }, ex = map[p.id];
     if (!ex) return out.push(p);
     if (ex.type === 'Cancel') return out.push({ ...p, status: 'Cancelled', exType: 'Cancel' });
     if (ex.type === 'Move') {
@@ -290,7 +335,7 @@ function applyExceptions(lessons, exs) {
   addRows.forEach(e => {
     if (attached[e.id]) return;
     out.push({ id: 'EX_ONLY_' + e.id, student_id: e.student_id, student_name: e.student_name, coach: e.new_coach || e.coach,
-      day: e.new_day || '', time: e.new_time || '', duration: '30 min', status: 'Confirmed', lesson_type: e.lesson_type || 'Solo',
+      day: e.new_day || '', time: e.new_time || '', bday: e.new_day || '', btime: e.new_time || '', duration: '30 min', status: 'Confirmed', lesson_type: e.lesson_type || 'Solo',
       notes: e.notes, pair_id: '', exType: 'Add' });
   });
   // Auto "Shared" when 2+ active lessons share a day+time (unless a PriceOverride kept it Solo)
@@ -315,7 +360,7 @@ function renderWeek() {
   const pills = p => (p.lesson_type === 'Shared' && !p.pair_id ? '<span class="tag t-shared">Shared</span>' : '')
     + (photo[p.student_id] === 'No' ? '<span class="tag t-nophoto">No Photo</span>' : photo[p.student_id] === 'Yes' ? '<span class="tag t-photo">Photo OK</span>' : '')
     + (p.exType === 'Move' ? '<span class="tag t-ex">Moved</span>' : p.exType === 'Add' ? '<span class="tag t-ex">This week</span>' : '');
-  const row = (p, showTime) => `<div class="srow"><div class="tm">${showTime ? esc(p.time) : ''}</div><div class="nm"><b>${esc(p.student_name)}</b>${pills(p)}</div><div class="co">${esc(p.coach || 'TBD')}</div></div>`;
+  const row = (p, showTime) => `<div class="srow tap" onclick="openLesson('${esc(p.id)}')"><div class="tm">${showTime ? esc(p.time) : ''}</div><div class="nm"><b>${esc(p.student_name)}</b>${pills(p)}</div><div class="co">${esc(p.coach || 'TBD')}</div></div>`;
 
   let html = '';
   wd.forEach(d => {
@@ -339,13 +384,126 @@ function renderWeek() {
         });
       } else {
         const away = weekRows.find(p => p.day === d.name && p.time === slot.time && p.status === 'Cancelled');
-        if (away) html += `<div class="srow away"><div class="tm">${esc(slot.time)}</div><div class="nm"><span class="tag t-away">🏖 Away</span><b style="color:#92400E">${esc(away.student_name)}</b><i style="font-size:11px;color:#B45309">out this week</i></div><div class="co">${esc(away.coach || slot.coach)}</div></div>`;
+        if (away) html += `<div class="srow away tap" onclick="restoreLesson('${esc(away.id)}')"><div class="tm">${esc(slot.time)}</div><div class="nm"><span class="tag t-away">🏖 Away</span><b style="color:#92400E">${esc(away.student_name)}</b><i style="font-size:11px;color:#B45309">out this week</i></div><div class="co">${esc(away.coach || slot.coach)}</div></div>`;
         else html += `<div class="srow open${slot.summer ? ' summer' : ''}"><div class="tm">${esc(slot.time)}</div><div class="nm"><span class="tag ${slot.summer ? 't-summer' : 't-open'}">${slot.summer ? '☀️ Summer Open' : 'Open'}</span></div><div class="co" style="color:#bbb">${esc(slot.coach)}</div></div>`;
       }
     });
     html += '</div>';
   });
   $('schedGrid').innerHTML = html;
+}
+
+// ================= EDIT LESSON (port of 2.0 openMoveLesson / saveMoveLesson / cancelFromSchedule) =================
+let lmRow = null;
+const TIMES = (() => { const a = []; for (let m = 8 * 60; m <= 21 * 60; m += 15) { const h = Math.floor(m / 60), mm = m % 60; a.push(((h + 11) % 12 + 1) + ':' + String(mm).padStart(2, '0') + ' ' + (h < 12 ? 'AM' : 'PM')); } return a; })();
+const opts = (arr, cur) => [...new Set([cur, ...arr].filter(Boolean))].map(v => `<option${v === cur ? ' selected' : ''}>${esc(v)}</option>`).join('');
+const weekStartStr = () => ymd(weekDates()[0].date);
+const dateFor = day => { const d = weekDates().find(x => x.name === day); return d ? ymd(d.date) : null; };
+const mondayOf = s => { const d = new Date(s + 'T00:00:00'); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return ymd(d); };
+// One-week lessons: claimed spots (EX_ONLY_x) and extras attached to a lesson (lessonId_EX_x) — both are Add exceptions
+const addExId = id => id.startsWith('EX_ONLY_') ? id.slice(8) : (id.includes('_EX_') ? id.split('_EX_')[1] : null);
+const partnersOf = p => p.pair_id ? weekRows.filter(r => r.pair_id === p.pair_id && r.id !== p.id && r.status !== 'Cancelled' && !addExId(r.id)) : [];
+function lmMsg(t, err) { $('lm_msg').className = 'msg' + (err ? ' err' : ''); $('lm_msg').textContent = t; }
+function closeLesson() { $('lessonModal').classList.add('hidden'); lmRow = null; }
+
+function openLesson(id) {
+  const p = weekRows.find(r => r.id === id && r.status !== 'Cancelled'); if (!p) return;
+  lmRow = p;
+  const stu = students.find(s => s.id === p.student_id) || {};
+  const coaches = [...new Set(weekRows.map(r => r.coach).concat(weekSlots.map(s => s.coach)).filter(Boolean))].sort();
+  $('lm_title').textContent = p.student_name + ' — ' + p.day + ' ' + p.time;
+  $('lm_student').value = p.student_name || '';
+  $('lm_skill').value = stu.skill_level || p.focus || '';
+  $('lm_coach').innerHTML = opts(coaches.concat('TBD'), p.coach || 'TBD');
+  $('lm_day').innerHTML = opts(DAYS, p.day);
+  $('lm_time').innerHTML = opts(TIMES, p.time);
+  $('lm_duration').value = p.duration || '30 min';
+  $('lm_type').value = ['Solo','Shared','Group'].includes(p.lesson_type) ? p.lesson_type : 'Solo';
+  $('lm_notes').value = p.notes || '';
+  const oneOff = !!addExId(p.id);
+  $('lm_scopeWrap').classList.toggle('hidden', oneOff); $('lm_oneoff').classList.toggle('hidden', !oneOff);
+  $('lm_scope').value = 'week'; $('lm_startWrap').classList.add('hidden'); $('lm_start').value = weekStartStr();
+  const pr = oneOff ? [] : partnersOf(p);
+  $('lm_pair').classList.toggle('hidden', !pr.length); $('lm_partner').textContent = pr.map(r => r.student_name).join(', ');
+  $('lm_movePartner').checked = true;
+  lmMsg('');
+  $('lessonModal').classList.remove('hidden');
+}
+
+// Upsert one exception per lesson+week (same as 2.0 saveScheduleException)
+async function saveException(p, fields) {
+  const ws = weekStartStr(), cur = weekEx.find(e => e.lesson_id === p.id && e.type !== 'Add');
+  const rec = { gym_id: gymId, lesson_id: p.id, student_id: p.student_id, student_name: p.student_name, coach: p.coach,
+    base_day: p.bday, base_time: p.btime, week_start: ws, original_date: dateFor(p.bday), status: 'Active',
+    new_day: null, new_time: null, new_coach: null, ...fields };
+  return cur ? sb.from('schedule_exceptions').update(rec).eq('id', cur.id) : sb.from('schedule_exceptions').insert({ ...rec, created_at: new Date().toISOString() });
+}
+
+// Permanent: end the old lesson the Monday before start week, add a new lesson from that Monday (2.0 moveLesson permanent)
+async function permanentChange(p, ch, startMonday) {
+  const { data: src, error } = await sb.from('private_lessons').select('*').eq('id', p.id).single();
+  if (error) return { error };
+  const e1 = await sb.from('private_lessons').update({ end_date: startMonday }).eq('id', p.id);
+  if (e1.error) return e1;
+  const { id, created_at, ...copy } = src;
+  return sb.from('private_lessons').insert({ ...copy, ...ch, status: 'Confirmed', paid: 'Unpaid', start_date: startMonday, end_date: null });
+}
+
+async function saveLesson() {
+  const p = lmRow; if (!p) return;
+  const ch = { day: $('lm_day').value, time: $('lm_time').value, coach: $('lm_coach').value, duration: $('lm_duration').value, lesson_type: $('lm_type').value, notes: $('lm_notes').value.trim() || null };
+  const moved = ch.day !== p.day || ch.time !== p.time || ch.coach !== (p.coach || 'TBD');
+  const other = ch.duration !== (p.duration || '30 min') || ch.lesson_type !== p.lesson_type;
+  const exId = addExId(p.id);
+  $('lm_save').disabled = true; lmMsg('Saving…');
+  let res;
+  if (exId) {
+    res = await sb.from('schedule_exceptions').update({ new_day: ch.day, new_time: ch.time, new_coach: ch.coach, lesson_type: ch.lesson_type, notes: ch.notes }).eq('id', exId);
+  } else if ($('lm_scope').value === 'permanent' && (moved || other)) {
+    const start = mondayOf($('lm_start').value || weekStartStr());
+    for (const r of [p, ...($('lm_movePartner').checked ? partnersOf(p) : [])]) {
+      res = await permanentChange(r, r === p ? ch : { day: ch.day, time: ch.time, coach: ch.coach, duration: ch.duration, lesson_type: ch.lesson_type }, start);
+      if (res.error) break;
+    }
+  } else {
+    if (moved) for (const r of [p, ...($('lm_movePartner').checked ? partnersOf(p) : [])]) {
+      res = await saveException(r, { type: 'Move', new_day: ch.day, new_time: ch.time, new_coach: ch.coach, notes: ch.notes });
+      if (res.error) break;
+    }
+    if ((!res || !res.error) && (ch.notes !== (p.notes || null) || other))
+      res = await sb.from('private_lessons').update({ notes: ch.notes, duration: ch.duration, lesson_type: ch.lesson_type }).eq('id', p.id);
+  }
+  $('lm_save').disabled = false;
+  if (!res) return closeLesson();
+  if (res.error) return lmMsg(res.error.message, true);
+  closeLesson(); loadWeek();
+}
+
+async function cancelLesson() {
+  const p = lmRow; if (!p) return;
+  const exId = addExId(p.id), perm = !exId && $('lm_scope').value === 'permanent';
+  if (exId) { if (!confirm('Cancel ' + p.student_name + '?\n\nThis was a one-week spot. The slot opens back up and the family stays on the waitlist.')) return; }
+  else if (perm) { if (!confirm('Permanently remove ' + p.student_name + ' from the week of ' + mondayOf($('lm_start').value || weekStartStr()) + ' forward?\n\nEarlier weeks are left alone.')) return; }
+  else if (!confirm('Cancel lesson for ' + p.student_name + ' for this week only?')) return;
+  lmMsg('Cancelling…');
+  let res;
+  if (exId) {
+    res = await sb.from('schedule_exceptions').update({ status: 'Deleted' }).eq('id', exId);
+    if (!res.error && p.student_id) await sb.from('waitlist').update({ status: 'Drop-In' }).eq('student_id', p.student_id).eq('status', 'Claimed');
+  } else if (perm) res = await sb.from('private_lessons').update({ end_date: mondayOf($('lm_start').value || weekStartStr()) }).eq('id', p.id);
+  else res = await saveException(p, { type: 'Cancel', notes: 'Cancelled from schedule' });
+  if (res.error) return lmMsg(res.error.message, true);
+  closeLesson(); loadWeek();
+}
+
+// Tap an "Away" row → undo this week's cancel/move
+async function restoreLesson(id) {
+  const p = weekRows.find(r => r.id === id), ex = weekEx.find(e => e.lesson_id === id && e.type !== 'Add');
+  if (!p || !ex) return;
+  if (!confirm('Put ' + p.student_name + ' back on ' + p.bday + ' ' + p.btime + ' this week?')) return;
+  const res = await sb.from('schedule_exceptions').update({ status: 'Deleted' }).eq('id', ex.id);
+  if (res.error) return alert(res.error.message);
+  loadWeek();
 }
 
 boot();
