@@ -57,6 +57,8 @@
   .mdl .x { background:#fff; border:1px solid var(--line); border-radius:6px; padding:4px 10px; }
   .mdl input[readonly] { background:#f9f8f5; }
   .pairbox { background:#EAF4FF; border:1px solid #B8D9F5; border-radius:8px; padding:10px; margin-bottom:10px; font-size:13px; color:#185FA5; }
+  .ddwrap { position:relative; } .dd { position:absolute; left:0; right:0; top:62px; background:#fff; border:1px solid var(--line); border-radius:8px; max-height:200px; overflow:auto; z-index:3; box-shadow:0 4px 12px rgba(0,0,0,.1); }
+  .dd div { padding:9px 10px; font-size:14px; cursor:pointer; border-bottom:1px solid #f3f3f3; } .dd div:hover { background:var(--mint-soft); } .dd small { color:var(--muted); }
   .btnrow { display:flex; gap:8px; } .btn.red { background:var(--danger); }
 </style>
 </head>
@@ -104,6 +106,7 @@
       <button onclick="shiftWeek(0)">This week</button>
       <button onclick="shiftWeek(1)">Next →</button>
       <div class="wklabel" id="wkLabel"></div>
+      <button onclick="openAdd()" style="background:var(--mint);color:#fff;border:0;font-weight:600">+ Add lesson</button>
     </div>
     <div class="wk">
       <select id="coachFilter" onchange="renderWeek()"><option value="">All coaches</option></select>
@@ -182,6 +185,31 @@
       <button class="btn" style="flex:2" id="lm_save" onclick="saveLesson()">Save changes</button>
     </div>
     <div id="lm_msg" class="msg"></div>
+  </div>
+</div>
+<!-- Add lesson modal (port of 2.0 modal-add-lesson) -->
+<div class="ovl hidden" id="addModal" onclick="if(event.target===this)closeAdd()">
+  <div class="mdl">
+    <div class="mh"><b>Add lesson for student</b><button class="x" onclick="closeAdd()">✕</button></div>
+    <div class="ddwrap"><label>Student</label><input id="al_student" placeholder="Search student..." autocomplete="off" oninput="alDD('student')" onfocus="alDD('student')" onblur="setTimeout(()=>$('al_studentDD').classList.add('hidden'),150)">
+      <div class="dd hidden" id="al_studentDD"></div></div>
+    <div class="ddwrap"><label>Partner <span style="color:#aaa">(optional — share this slot)</span></label><input id="al_partner" placeholder="Search student to share with..." autocomplete="off" oninput="alDD('partner')" onfocus="alDD('partner')" onblur="setTimeout(()=>$('al_partnerDD').classList.add('hidden'),150)">
+      <div class="dd hidden" id="al_partnerDD"></div></div>
+    <div id="al_price" style="font-size:11px;color:#888;margin:-6px 0 10px"></div>
+    <div class="row2">
+      <div><label>Coach</label><select id="al_coach"></select></div>
+      <div><label>Focus</label><input id="al_focus" placeholder="e.g. Back handspring"></div>
+    </div>
+    <label>Duration</label><select id="al_duration" onchange="alPrice()"><option>30 min</option><option>45 min</option><option>60 min</option></select>
+    <div class="row2">
+      <div><label>Day</label><select id="al_day"></select></div>
+      <div><label>Time</label><select id="al_time"></select></div>
+    </div>
+    <label>Scope</label>
+    <select id="al_scope" onchange="$('al_startWrap').classList.toggle('hidden', this.value !== 'permanent')"><option value="permanent">Permanent (every week)</option><option value="week">This week only</option></select>
+    <div id="al_startWrap"><label>Start date (week the lesson begins)</label><input type="date" id="al_start"></div>
+    <button class="btn" id="al_save" onclick="saveAdd()">Add lesson</button>
+    <div id="al_msg" class="msg"></div>
   </div>
 </div>
 <script>
@@ -385,7 +413,7 @@ function renderWeek() {
       } else {
         const away = weekRows.find(p => p.day === d.name && p.time === slot.time && p.status === 'Cancelled');
         if (away) html += `<div class="srow away tap" onclick="restoreLesson('${esc(away.id)}')"><div class="tm">${esc(slot.time)}</div><div class="nm"><span class="tag t-away">🏖 Away</span><b style="color:#92400E">${esc(away.student_name)}</b><i style="font-size:11px;color:#B45309">out this week</i></div><div class="co">${esc(away.coach || slot.coach)}</div></div>`;
-        else html += `<div class="srow open${slot.summer ? ' summer' : ''}"><div class="tm">${esc(slot.time)}</div><div class="nm"><span class="tag ${slot.summer ? 't-summer' : 't-open'}">${slot.summer ? '☀️ Summer Open' : 'Open'}</span></div><div class="co" style="color:#bbb">${esc(slot.coach)}</div></div>`;
+        else html += `<div class="srow open tap${slot.summer ? ' summer' : ''}" onclick="openAdd('${d.name}','${esc(slot.time)}','${esc(slot.coach)}')"><div class="tm">${esc(slot.time)}</div><div class="nm"><span class="tag ${slot.summer ? 't-summer' : 't-open'}">${slot.summer ? '☀️ Summer Open' : 'Open'}</span></div><div class="co" style="color:#bbb">${esc(slot.coach)}</div></div>`;
       }
     });
     html += '</div>';
@@ -494,6 +522,70 @@ async function cancelLesson() {
   else res = await saveException(p, { type: 'Cancel', notes: 'Cancelled from schedule' });
   if (res.error) return lmMsg(res.error.message, true);
   closeLesson(); loadWeek();
+}
+
+// ================= ADD LESSON (port of 2.0 openAddLessonForSlot_ / addLessonForStudent) =================
+const PRICING = { Solo: { '30 min': '$40', '45 min': '$60', '60 min': '$80' }, Shared: { '30 min': '$30', '45 min': '$45', '60 min': '$60' } };
+const priceFor = (dur, type) => (PRICING[type] || PRICING.Solo)[dur] || (PRICING[type] || PRICING.Solo)['30 min'];
+let alPick = { student: null, partner: null };
+function alMsg(t, err) { $('al_msg').className = 'msg' + (err ? ' err' : ''); $('al_msg').textContent = t; }
+function closeAdd() { $('addModal').classList.add('hidden'); }
+function openAdd(day, time, coach) {
+  const coaches = [...new Set(weekRows.map(r => r.coach).concat(weekSlots.map(s => s.coach)).filter(Boolean))].sort();
+  alPick = { student: null, partner: null };
+  $('al_student').value = ''; $('al_partner').value = ''; $('al_focus').value = '';
+  $('al_coach').innerHTML = opts(coaches.concat('TBD'), coach || coaches[0] || 'TBD');
+  $('al_day').innerHTML = opts(DAYS, day || 'Monday');
+  $('al_time').innerHTML = opts(TIMES, time || '4:00 PM');
+  $('al_duration').value = '30 min';
+  $('al_scope').value = 'permanent'; $('al_startWrap').classList.remove('hidden'); $('al_start').value = weekStartStr();
+  alPrice(); alMsg('');
+  $('addModal').classList.remove('hidden'); $('al_student').focus();
+}
+function alDD(which) {
+  const q = $('al_' + which).value.trim().toLowerCase(), other = alPick[which === 'student' ? 'partner' : 'student'];
+  alPick[which] = null; alPrice();
+  const list = students.filter(s => isOn(s) && (!other || s.id !== other.id) && (!q || (s.first_name + ' ' + s.last_name).toLowerCase().includes(q))).slice(0, 30);
+  const dd = $('al_' + which + 'DD');
+  dd.innerHTML = list.map(s => `<div onmousedown="alSet('${which}','${esc(s.id)}')">${esc(s.first_name)} ${esc(s.last_name)} <small>${esc(s.status || '')}${s.skill_level ? ' · ' + esc(s.skill_level) : ''}</small></div>`).join('') || '<div><small>No match</small></div>';
+  dd.classList.remove('hidden');
+}
+function alSet(which, id) {
+  const s = students.find(x => x.id === id); alPick[which] = s;
+  $('al_' + which).value = s.first_name + ' ' + s.last_name; $('al_' + which + 'DD').classList.add('hidden');
+  if (which === 'student' && s.skill_level && !$('al_focus').value) $('al_focus').value = s.skill_level;
+  alPrice();
+}
+function alPrice() {
+  const dur = $('al_duration').value, shared = !!alPick.partner;
+  $('al_price').textContent = (shared ? 'Shared — ' + priceFor(dur, 'Shared') + '/wk each' : 'Solo — ' + priceFor(dur, 'Solo') + '/wk') + ' (' + dur + ')';
+}
+async function saveAdd() {
+  const st = alPick.student, pt = alPick.partner;
+  if (!st) return alMsg('Pick a student from the list.', true);
+  if ($('al_partner').value.trim() && !pt) return alMsg('Pick the partner from the list (or clear it).', true);
+  const day = $('al_day').value, time = $('al_time').value, coach = $('al_coach').value, dur = $('al_duration').value;
+  const type = pt ? 'Shared' : 'Solo', kids = pt ? [st, pt] : [st], name = s => s.first_name + ' ' + s.last_name;
+  $('al_save').disabled = true; alMsg('Saving…');
+  let res;
+  if ($('al_scope').value === 'week') {
+    // One-week lesson = Add exception (shows as "This week")
+    res = await sb.from('schedule_exceptions').insert(kids.map(k => ({ gym_id: gymId, lesson_id: 'BASE_' + k.id + '_' + day, student_id: k.id, student_name: name(k),
+      coach, base_day: '', base_time: '', week_start: weekStartStr(), original_date: dateFor(day), type: 'Add', new_day: day, new_time: time, new_coach: coach,
+      status: 'Active', notes: $('al_focus').value.trim() || null, lesson_type: type, created_at: new Date().toISOString() })));
+  } else {
+    const start = mondayOf($('al_start').value || weekStartStr()), pairId = pt ? 'PAIR' + Date.now() : null;
+    res = await sb.from('private_lessons').insert(kids.map(k => ({ gym_id: gymId, student_id: k.id, student_name: name(k), coach, day, time, duration: dur,
+      focus: $('al_focus').value.trim() || k.skill_level || null, price: priceFor(dur, type), status: 'Confirmed', booked_date: ymd(new Date()), paid: 'Unpaid',
+      lesson_type: type, share_type: pt ? 'Matched' : 'No', pair_id: pairId, matched_with: pt ? name(k === st ? pt : st) : null, friend_name: pt ? name(k === st ? pt : st) : null,
+      start_date: start })));
+    // Same as 2.0: a permanent lesson makes a Waitlist/Drop-In/Inactive student Active (waitlist row left alone)
+    const flip = kids.filter(k => ['Waitlist','Drop-In','Inactive'].includes(k.status)).map(k => k.id);
+    if (!res.error && flip.length) { await sb.from('students').update({ status: 'Active', active: true }).in('id', flip); flip.forEach(id => students.find(s => s.id === id).status = 'Active'); }
+  }
+  $('al_save').disabled = false;
+  if (res.error) return alMsg(res.error.message, true);
+  closeAdd(); loadWeek();
 }
 
 // Tap an "Away" row → undo this week's cancel/move
