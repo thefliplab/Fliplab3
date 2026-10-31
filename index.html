@@ -63,7 +63,7 @@
       <input id="q" placeholder="Search students or parents" oninput="render()">
       <button class="btn" onclick="openEdit(null)">+ Add</button>
     </div>
-    <div class="chk" style="margin-top:10px"><input type="checkbox" id="showInactive" onchange="render()"><label for="showInactive">Show inactive</label></div>
+    <div class="chk" style="margin-top:10px"><input type="checkbox" id="showInactive" onchange="render()"><label for="showInactive">Show inactive &amp; dropped</label></div>
     <div class="hdr"><span id="gymName">Students</span><span id="count"></span></div>
     <div class="card" id="list"></div>
   </section>
@@ -92,7 +92,8 @@
         <div><label>Emergency phone</label><input id="f_emergency_phone" type="tel"></div>
       </div>
       <label>Notes</label><textarea id="f_notes" rows="3"></textarea>
-      <div class="chk"><input type="checkbox" id="f_active"><label for="f_active">Active</label></div>
+      <label>Status</label>
+      <select id="f_status"><option>Active</option><option>Waitlist</option><option>Drop-In</option><option>Inactive</option><option>Dropped</option></select>
       <div class="chk"><input type="checkbox" id="f_unsubscribed"><label for="f_unsubscribed">Unsubscribed from emails/texts</label></div>
       <div class="row2">
         <button class="btn ghost" onclick="show('studentsView')">Cancel</button>
@@ -106,6 +107,8 @@
 <script>
 const sb = supabase.createClient('https://angmtyojkwlrefxpcgoa.supabase.co', 'sb_publishable_fPciNfnNHpHQikB8mqHNpw_hIVRIGo5');
 const FIELDS = ['first_name','last_name','dob','skill_level','parent_name','parent_phone','parent_email','emergency_name','emergency_phone','notes'];
+const OFF = ['Inactive','Dropped'];
+const isOn = s => !OFF.includes(s.status);
 let mode = 'in', gymId = null, students = [], editingId = null;
 
 const $ = id => document.getElementById(id);
@@ -155,29 +158,30 @@ async function loadStudents() {
 
 function render() {
   const q = $('q').value.trim().toLowerCase(), all = $('showInactive').checked;
-  const rows = students.filter(s => (all || s.active) &&
+  const rows = students.filter(s => (all || isOn(s)) &&
     (!q || [s.first_name, s.last_name, s.parent_name, s.parent_phone, s.parent_email].join(' ').toLowerCase().includes(q)));
   $('count').textContent = rows.length;
   $('list').innerHTML = rows.length ? rows.map(s => `
     <div class="stu" onclick="openEdit('${esc(s.id)}')">
       <div><b>${esc(s.first_name)} ${esc(s.last_name)}</b>
         <small>${esc(s.parent_name || '')}${s.parent_phone ? ' · ' + esc(s.parent_phone) : ''}</small></div>
-      <span class="pill ${s.active ? '' : 'off'}">${s.active ? esc(s.skill_level || 'Active') : 'Inactive'}</span>
+      <span class="pill ${isOn(s) ? '' : 'off'}">${esc(s.status || 'Active')}${s.skill_level ? ' · ' + esc(s.skill_level) : ''}</span>
     </div>`).join('') : '<div class="center">No students yet.</div>';
 }
 
 function openEdit(id) {
   editingId = id;
-  const s = students.find(x => x.id === id) || { active: true };
+  const s = students.find(x => x.id === id) || { status: 'Active' };
   FIELDS.forEach(f => $('f_' + f).value = s[f] ?? '');
-  $('f_active').checked = !!s.active; $('f_unsubscribed').checked = !!s.unsubscribed;
+  $('f_status').value = s.status || 'Active'; $('f_unsubscribed').checked = !!s.unsubscribed;
   $('editTitle').textContent = id ? (s.first_name + ' ' + s.last_name) : 'New student';
   $('editMsg').textContent = '';
   show('editView'); window.scrollTo(0, 0);
 }
 
 async function saveStudent() {
-  const rec = { gym_id: gymId, active: $('f_active').checked, unsubscribed: $('f_unsubscribed').checked };
+  const st = $('f_status').value;
+  const rec = { gym_id: gymId, status: st, active: !OFF.includes(st), unsubscribed: $('f_unsubscribed').checked };
   FIELDS.forEach(f => { const v = $('f_' + f).value.trim(); rec[f] = v === '' ? null : v; });
   if (!rec.first_name) { $('editMsg').className = 'msg err'; $('editMsg').textContent = 'First name is required.'; return; }
   $('editMsg').className = 'msg'; $('editMsg').textContent = 'Saving…';
