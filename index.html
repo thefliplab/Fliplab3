@@ -32,10 +32,30 @@
   .toolbar { display:flex; gap:8px; } .toolbar input { margin:0; } .toolbar .btn { width:auto; white-space:nowrap; }
   .chk { display:flex; gap:8px; align-items:center; margin-bottom:10px; } .chk input { width:auto; margin:0; }
   .center { text-align:center; color:var(--muted); padding:20px; }
+  #tabs { display:flex; gap:4px; } #tabs button { border:0; color:#cfd6dc; } #tabs button.on { background:#3a4651; color:#fff; }
+  .wk { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
+  .wk button { background:#fff; border:1px solid var(--line); border-radius:8px; padding:7px 10px; font-size:13px; }
+  .wk input, .wk select { width:auto; flex:1; min-width:120px; margin:0; padding:7px 10px; font-size:14px; }
+  .wklabel { font-size:13px; color:var(--muted); font-weight:600; min-width:120px; text-align:center; }
+  .dayhd { background:#9FE1CB; color:#2c2c2a; padding:6px 12px; font-weight:600; font-size:13px; margin-top:6px; border-radius:6px 6px 0 0; }
+  .dayhd.today { background:#1c9a73; color:#fff; } .dayhd span { font-weight:400; opacity:.85; font-size:11px; margin-left:6px; }
+  .srow { display:flex; align-items:center; gap:10px; padding:8px 12px; border-bottom:1px solid #f0f0f0; font-size:14px; background:#fff; }
+  .srow .tm { min-width:72px; color:#666; font-weight:500; }
+  .srow .nm { flex:1; display:flex; align-items:center; flex-wrap:wrap; gap:4px; min-width:0; }
+  .srow .co { font-size:11px; color:#888; flex-shrink:0; }
+  .tag { font-size:10px; padding:2px 7px; border-radius:10px; font-weight:600; }
+  .t-shared { background:#EFE7FF; color:#3C3489; } .t-nophoto { background:#FCEBEB; color:#A32D2D; } .t-photo { background:#EAF3DE; color:#3B6D11; }
+  .t-away { background:#FEF3C7; color:#92400E; } .t-open { background:#EAF3DE; color:#3B6D11; } .t-summer { background:#FEF3C7; color:#92400E; } .t-ex { background:#E6F1FB; color:#185FA5; }
+  .srow.open { background:#fafafa; } .srow.open .tm { color:#999; } .srow.summer { background:#FFFBEB; border-left:3px solid #F59E0B; }
+  .srow.away .tm { color:#B45309; } .pairwrap { display:flex; align-items:stretch; background:#FAF7FF; border-bottom:1px solid #f0f0f0; }
+  .pairwrap .bar { width:3px; background:#7C3AED; margin:8px 8px; border-radius:2px; } .pairwrap .srow { background:transparent; border-bottom:1px dashed #d8cfee; padding-left:4px; }
+  .pairwrap .srow:last-child { border-bottom:0; }
 </style>
 </head>
 <body>
-<nav><b>Flip<span>Lab</span> 3.0</b><button id="outBtn" class="hidden" onclick="signOut()">Sign out</button></nav>
+<nav><b>Flip<span>Lab</span> 3.0</b>
+  <div id="tabs" class="hidden"><button id="tabBtn_schedule" onclick="go('schedule')">Schedule</button><button id="tabBtn_students" onclick="go('students')">Students</button></div>
+  <button id="outBtn" class="hidden" onclick="signOut()">Sign out</button></nav>
 <main>
 
   <!-- Login -->
@@ -66,6 +86,22 @@
     <div class="chk" style="margin-top:10px"><input type="checkbox" id="showInactive" onchange="render()"><label for="showInactive">Show inactive &amp; dropped</label></div>
     <div class="hdr"><span id="gymName">Students</span><span id="count"></span></div>
     <div class="card" id="list"></div>
+  </section>
+
+
+  <!-- Schedule -->
+  <section id="scheduleView" class="hidden">
+    <div class="wk">
+      <button onclick="shiftWeek(-1)">← Prev</button>
+      <button onclick="shiftWeek(0)">This week</button>
+      <button onclick="shiftWeek(1)">Next →</button>
+      <div class="wklabel" id="wkLabel"></div>
+    </div>
+    <div class="wk">
+      <select id="coachFilter" onchange="renderWeek()"><option value="">All coaches</option></select>
+      <input id="schedSearch" placeholder="Search student…" oninput="renderWeek()">
+    </div>
+    <div id="schedGrid"><div class="center">Loading…</div></div>
   </section>
 
   <!-- Edit student -->
@@ -113,8 +149,10 @@ let mode = 'in', gymId = null, students = [], editingId = null;
 
 const $ = id => document.getElementById(id);
 function show(view) {
-  ['loginView','waitView','studentsView','editView'].forEach(v => $(v).classList.toggle('hidden', v !== view));
+  ['loginView','waitView','studentsView','editView','scheduleView'].forEach(v => $(v).classList.toggle('hidden', v !== view));
   $('outBtn').classList.toggle('hidden', view === 'loginView');
+  $('tabs').classList.toggle('hidden', !gymId);
+  ['schedule','students'].forEach(t => $('tabBtn_' + t).classList.toggle('on', view === t + 'View'));
 }
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
@@ -146,8 +184,9 @@ async function boot() {
   if (error || !gyms || !gyms.length) { show('waitView'); return; }
   gymId = gyms[0].id; $('gymName').textContent = gyms[0].name + ' — Students';
   await loadStudents();
-  show('studentsView');
+  go('schedule');
 }
+function go(tab) { if (tab === 'schedule') { show('scheduleView'); loadWeek(); } else show('studentsView'); }
 
 async function loadStudents() {
   $('list').innerHTML = '<div class="center">Loading…</div>';
@@ -190,6 +229,123 @@ async function saveStudent() {
     : await sb.from('students').insert(rec);
   if (res.error) { $('editMsg').className = 'msg err'; $('editMsg').textContent = res.error.message; return; }
   await loadStudents(); show('studentsView');
+}
+
+// ================= SCHEDULE (port of 2.0 getPrivates + applyExceptionsToPrivates_ + renderDynScheduleList_) =================
+const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+let weekOffset = 0, weekRows = [], weekSlots = [], weekLoading = 0;
+
+const ymd = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+function weekDates() {
+  const t = new Date(); t.setHours(0,0,0,0);
+  const mon = new Date(t); mon.setDate(t.getDate() + (t.getDay() === 0 ? -6 : 1 - t.getDay()) + weekOffset * 7);
+  return DAYS.map((name, i) => { const d = new Date(mon); d.setDate(mon.getDate() + i); return { name, date: d, label: d.toLocaleDateString(undefined, { month:'short', day:'numeric' }) }; });
+}
+function timeVal(t) {
+  const m = String(t || '').trim().match(/^(\d{1,2}):?(\d{2})?\s*([AaPp])?/); if (!m) return 9999;
+  let h = +m[1] % 12; if (m[3] && /p/i.test(m[3])) h += 12; return h * 60 + (+m[2] || 0);
+}
+function shiftWeek(n) { weekOffset = n === 0 ? 0 : weekOffset + n; loadWeek(); }
+
+async function loadWeek() {
+  const wd = weekDates(), ws = ymd(wd[0].date), we = ymd(wd[6].date), my = ++weekLoading;
+  $('wkLabel').textContent = (weekOffset === 0 ? 'This week · ' : '') + wd[0].label + ' – ' + wd[6].label;
+  $('schedGrid').innerHTML = '<div class="center">Loading…</div>';
+  const [L, X, S] = await Promise.all([
+    sb.from('private_lessons').select('*').not('status', 'in', '("Cancelled","Dropped")'),
+    sb.from('schedule_exceptions').select('*').eq('week_start', ws).not('status', 'in', '("Deleted","Expired")'),
+    sb.from('available_slots').select('*').eq('active', true)
+  ]);
+  if (my !== weekLoading) return;
+  const err = L.error || X.error || S.error;
+  if (err) { $('schedGrid').innerHTML = '<div class="msg err">' + esc(err.message) + '</div>'; return; }
+  const base = L.data.filter(p => !(p.start_date && p.start_date > we) && !(p.end_date && p.end_date <= ws));
+  weekRows = applyExceptions(base, X.data);
+  weekSlots = S.data;
+  const coaches = [...new Set(weekRows.map(p => p.coach).concat(weekSlots.map(s => s.coach)).filter(Boolean))].sort();
+  const cf = $('coachFilter'), cur = cf.value;
+  cf.innerHTML = '<option value="">All coaches</option>' + coaches.map(c => `<option${c === cur ? ' selected' : ''}>${esc(c)}</option>`).join('');
+  renderWeek();
+}
+
+function applyExceptions(lessons, exs) {
+  const map = {}, addRows = [], attached = {}, out = [];
+  exs.forEach(e => { if (e.lesson_id) map[e.lesson_id] = e; if (e.type === 'Add') addRows.push(e); });
+  lessons.forEach(src => {
+    const p = { ...src, exType: '' }, ex = map[p.id];
+    if (!ex) return out.push(p);
+    if (ex.type === 'Cancel') return out.push({ ...p, status: 'Cancelled', exType: 'Cancel' });
+    if (ex.type === 'Move') {
+      out.push({ ...p, status: 'Cancelled', exType: 'MoveOrigin' });
+      attached[ex.id] = true;
+      return out.push({ ...p, day: ex.new_day || p.day, time: ex.new_time || p.time, coach: ex.new_coach || p.coach, exType: 'Move' });
+    }
+    if (ex.type === 'PriceOverride') return out.push({ ...p, lesson_type: ex.lesson_type || 'Solo', exType: 'PriceOverride' });
+    if (ex.type === 'Add') {
+      out.push(p); attached[ex.id] = true;
+      return out.push({ ...p, id: p.id + '_EX_' + ex.id, day: ex.new_day || p.day, time: ex.new_time || p.time, coach: ex.new_coach || p.coach, exType: 'Add' });
+    }
+    out.push(p);
+  });
+  addRows.forEach(e => {
+    if (attached[e.id]) return;
+    out.push({ id: 'EX_ONLY_' + e.id, student_id: e.student_id, student_name: e.student_name, coach: e.new_coach || e.coach,
+      day: e.new_day || '', time: e.new_time || '', duration: '30 min', status: 'Confirmed', lesson_type: e.lesson_type || 'Solo',
+      notes: e.notes, pair_id: '', exType: 'Add' });
+  });
+  // Auto "Shared" when 2+ active lessons share a day+time (unless a PriceOverride kept it Solo)
+  const cnt = {};
+  out.forEach(p => { if (p.status !== 'Cancelled') { const k = p.day + '|' + p.time; cnt[k] = (cnt[k] || 0) + 1; } });
+  out.forEach(p => { if (p.status !== 'Cancelled' && p.exType !== 'PriceOverride' && cnt[p.day + '|' + p.time] >= 2) p.lesson_type = 'Shared'; });
+  return out;
+}
+
+function renderWeek() {
+  const wd = weekDates(), ws = ymd(wd[0].date), md = ws.slice(5);
+  const coach = $('coachFilter').value, q = $('schedSearch').value.trim().toLowerCase();
+  const isSummer = md >= '05-25' && md <= '08-31';
+  const todayName = weekOffset === 0 ? DAYS[(new Date().getDay() + 6) % 7] : '';
+  const live = weekRows.filter(p => p.status !== 'Cancelled' && (!coach || p.coach === coach) && (!q || (p.student_name || '').toLowerCase().includes(q)));
+  let slots = weekSlots.filter(s => !s.is_summer && (!coach || s.coach === coach));
+  if (isSummer) {
+    const have = new Set(slots.map(s => s.day + '|' + s.time));
+    weekSlots.filter(s => s.is_summer && (!coach || s.coach === coach) && !have.has(s.day + '|' + s.time)).forEach(s => slots.push(s));
+  }
+  const photo = {}; students.forEach(s => photo[s.id] = (s.extra || {}).PhotoPermission || '');
+  const pills = p => (p.lesson_type === 'Shared' && !p.pair_id ? '<span class="tag t-shared">Shared</span>' : '')
+    + (photo[p.student_id] === 'No' ? '<span class="tag t-nophoto">No Photo</span>' : photo[p.student_id] === 'Yes' ? '<span class="tag t-photo">Photo OK</span>' : '')
+    + (p.exType === 'Move' ? '<span class="tag t-ex">Moved</span>' : p.exType === 'Add' ? '<span class="tag t-ex">This week</span>' : '');
+  const row = (p, showTime) => `<div class="srow"><div class="tm">${showTime ? esc(p.time) : ''}</div><div class="nm"><b>${esc(p.student_name)}</b>${pills(p)}</div><div class="co">${esc(p.coach || 'TBD')}</div></div>`;
+
+  let html = '';
+  wd.forEach(d => {
+    const byTime = {};
+    live.forEach(p => { if (p.day === d.name) (byTime[p.time] = byTime[p.time] || []).push(p); });
+    const times = {};
+    slots.filter(s => s.day === d.name).forEach(s => { if (s.time) times[s.time] = { time: s.time, coach: s.coach || '', summer: !!s.is_summer }; });
+    Object.keys(byTime).forEach(t => { if (!times[t]) times[t] = { time: t, coach: '' }; });
+    const list = Object.values(times).sort((a, b) => timeVal(a.time) - timeVal(b.time));
+    html += `<div class="dayhd${d.name === todayName ? ' today' : ''}">${d.name}<span>${d.label}</span></div><div class="card" style="padding:0;margin-bottom:6px;border-radius:0 0 10px 10px;overflow:hidden">`;
+    if (!list.length) html += '<div class="srow" style="color:#aaa;font-style:italic">No slots configured</div>';
+    list.forEach(slot => {
+      const ls = byTime[slot.time] || [];
+      if (ls.length) {
+        const groups = [], gi = {};
+        ls.forEach(p => { const k = p.pair_id || ('solo:' + p.id); if (gi[k] === undefined) { gi[k] = groups.length; groups.push([]); } groups[gi[k]].push(p); });
+        groups.forEach(g => {
+          if (g.length > 1 && g[0].pair_id) {
+            html += `<div class="pairwrap"><div class="srow" style="border:0;background:transparent;padding-right:0"><div class="tm">${esc(g[0].time)}</div></div><div class="bar"></div><div style="flex:1;min-width:0"><div style="padding:6px 0 0 4px"><span class="tag t-shared">Shared</span></div>${g.map(p => row(p, false).replace('<div class="tm"></div>', '')).join('')}</div></div>`;
+          } else html += row(g[0], true);
+        });
+      } else {
+        const away = weekRows.find(p => p.day === d.name && p.time === slot.time && p.status === 'Cancelled');
+        if (away) html += `<div class="srow away"><div class="tm">${esc(slot.time)}</div><div class="nm"><span class="tag t-away">🏖 Away</span><b style="color:#92400E">${esc(away.student_name)}</b><i style="font-size:11px;color:#B45309">out this week</i></div><div class="co">${esc(away.coach || slot.coach)}</div></div>`;
+        else html += `<div class="srow open${slot.summer ? ' summer' : ''}"><div class="tm">${esc(slot.time)}</div><div class="nm"><span class="tag ${slot.summer ? 't-summer' : 't-open'}">${slot.summer ? '☀️ Summer Open' : 'Open'}</span></div><div class="co" style="color:#bbb">${esc(slot.coach)}</div></div>`;
+      }
+    });
+    html += '</div>';
+  });
+  $('schedGrid').innerHTML = html;
 }
 
 boot();
