@@ -72,12 +72,20 @@
   .bal { font-size:12px; color:#854F0B; font-weight:600; min-width:70px; text-align:right; } .bal.ok { color:#3B6D11; }
   .sec { font-weight:600; font-size:14px; margin:14px 0 6px; display:flex; justify-content:space-between; align-items:center; gap:8px; }
   .sec select { width:auto; margin:0; padding:5px 8px; font-size:13px; }
+  .mbtn { padding:5px 9px; border-radius:5px; border:1px solid var(--line); background:#fff; font-size:12px; font-weight:600; }
+  .mbtn.on { background:#d1fae5; color:#065f46; border-color:#d1fae5; } .mbtn.off { background:#f3f4f6; color:#888; border-color:#f3f4f6; }
+  .mlist { width:100%; background:#f6fbf9; border-radius:8px; padding:6px 10px; font-size:13px; } .mlist div { padding:4px 0; }
+  .mlist a { color:#185FA5; text-decoration:none; font-weight:600; }
+  .slotpick { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0; } .slotpick label { display:flex; align-items:center; gap:5px; background:#f3f5f7; border-radius:16px; padding:5px 10px; font-size:13px; color:var(--text); }
+  .slotpick input { width:auto; margin:0; }
+  #tabs { overflow-x:auto; }
+  @media (max-width:640px) { nav { flex-wrap:wrap; row-gap:8px; } #tabs { order:3; width:100%; } #tabs button { flex:1; padding:6px 4px; } }
   .paid { font-size:11px; padding:3px 8px; border-radius:10px; background:#EAF3DE; color:#3B6D11; font-weight:600; } .btn.red { background:var(--danger); }
 </style>
 </head>
 <body>
 <nav><b>Flip<span>Lab</span> 3.0</b>
-  <div id="tabs" class="hidden"><button id="tabBtn_schedule" onclick="go('schedule')">Schedule</button><button id="tabBtn_attendance" onclick="go('attendance')">Attendance</button><button id="tabBtn_payments" onclick="go('payments')">Payments</button><button id="tabBtn_students" onclick="go('students')">Students</button></div>
+  <div id="tabs" class="hidden"><button id="tabBtn_schedule" onclick="go('schedule')">Schedule</button><button id="tabBtn_attendance" onclick="go('attendance')">Attendance</button><button id="tabBtn_openings" onclick="go('openings')">Openings</button><button id="tabBtn_payments" onclick="go('payments')">Payments</button><button id="tabBtn_students" onclick="go('students')">Students</button></div>
   <button id="outBtn" class="hidden" onclick="signOut()">Sign out</button></nav>
 <main>
 
@@ -143,6 +151,30 @@
       <div class="metric"><small>Unpaid</small><b id="m_unpaid">—</b></div>
     </div>
     <div id="attList"><div class="center">Loading…</div></div>
+  </section>
+
+  <!-- Openings (port of 2.0 v-openings) -->
+  <section id="openingsView" class="hidden">
+    <div class="wk">
+      <button onclick="shiftWeek(-1)">← Prev</button>
+      <button onclick="shiftWeek(0)">This week</button>
+      <button onclick="shiftWeek(1)">Next →</button>
+      <div class="wklabel" id="openWkLabel"></div>
+    </div>
+    <div class="card">
+      <div class="sec" style="margin:0;cursor:pointer" onclick="$('mkWrap').classList.toggle('hidden')">📋 Makeup Availability Text <span style="color:#888">▾</span></div>
+      <div id="mkWrap" class="hidden">
+        <div style="font-size:12px;color:#999;margin-top:6px">Pick slots → copy → send to parents → first to confirm gets the spot</div>
+        <div class="slotpick" id="mkPick"></div>
+        <button class="btn" id="mkCopy" onclick="mkCopy()">📋 Copy Text</button>
+      </div>
+    </div>
+    <div class="sec">Openings</div>
+    <div class="card" style="padding:0;overflow:hidden" id="openList"><div class="center">Loading…</div></div>
+    <div class="sec">Waitlist <span id="wlCount" style="font-weight:400;font-size:12px;color:#888"></span></div>
+    <div class="card" style="padding:0;overflow:hidden" id="wlList"></div>
+    <div class="sec">Drop-In <span id="diCount" style="font-weight:400;font-size:12px;color:#888"></span></div>
+    <div class="card" style="padding:0;overflow:hidden" id="diList"></div>
   </section>
 
   <!-- Payments (port of 2.0 v-payments / getOutstandingBalances) -->
@@ -287,10 +319,10 @@ let mode = 'in', gymId = null, students = [], editingId = null;
 
 const $ = id => document.getElementById(id);
 function show(view) {
-  ['loginView','waitView','studentsView','editView','scheduleView','attendanceView','paymentsView'].forEach(v => $(v).classList.toggle('hidden', v !== view));
+  ['loginView','waitView','studentsView','editView','scheduleView','attendanceView','paymentsView','openingsView'].forEach(v => $(v).classList.toggle('hidden', v !== view));
   $('outBtn').classList.toggle('hidden', view === 'loginView');
   $('tabs').classList.toggle('hidden', !gymId);
-  ['schedule','attendance','payments','students'].forEach(t => $('tabBtn_' + t).classList.toggle('on', view === t + 'View'));
+  ['schedule','attendance','openings','payments','students'].forEach(t => $('tabBtn_' + t).classList.toggle('on', view === t + 'View'));
 }
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
@@ -372,7 +404,7 @@ async function saveStudent() {
 
 // ================= SCHEDULE (port of 2.0 getPrivates + applyExceptionsToPrivates_ + renderDynScheduleList_) =================
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-let monthTotal = 0;
+let monthTotal = 0, waitlist = [], openSlots = [];
 let weekOffset = 0, weekRows = [], weekSlots = [], weekEx = [], weekAtt = [], weekPay = [], weekLoading = 0;
 
 const ymd = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
@@ -389,21 +421,22 @@ function shiftWeek(n) { weekOffset = n === 0 ? 0 : weekOffset + n; loadWeek(); }
 
 async function loadWeek() {
   const wd = weekDates(), ws = ymd(wd[0].date), we = ymd(wd[6].date), my = ++weekLoading;
-  $('wkLabel').textContent = $('attWkLabel').textContent = $('payWkLabel').textContent = (weekOffset === 0 ? 'This week · ' : '') + wd[0].label + ' – ' + wd[6].label;
-  $('schedGrid').innerHTML = $('attList').innerHTML = $('balList').innerHTML = '<div class="center">Loading…</div>';
+  $('wkLabel').textContent = $('attWkLabel').textContent = $('payWkLabel').textContent = $('openWkLabel').textContent = (weekOffset === 0 ? 'This week · ' : '') + wd[0].label + ' – ' + wd[6].label;
+  $('schedGrid').innerHTML = $('attList').innerHTML = $('balList').innerHTML = $('openList').innerHTML = '<div class="center">Loading…</div>';
   const att = curTab === 'attendance' || curTab === 'payments', mStart = ymd(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
-  const [L, X, S, A, P, M] = await Promise.all([
+  const [L, X, S, A, P, M, W] = await Promise.all([
     sb.from('private_lessons').select('*').not('status', 'in', '("Cancelled","Dropped")'),
     sb.from('schedule_exceptions').select('*').eq('week_start', ws).not('status', 'in', '("Deleted","Expired")'),
     sb.from('available_slots').select('*').eq('active', true),
     att ? sb.from('attendance').select('*').eq('week_start', ws) : { data: [] },
     att ? sb.from('payments').select('*').eq('week_start', ws) : { data: [] },
-    curTab === 'payments' ? sb.from('payments').select('amount').gte('date', mStart) : { data: [] }
+    curTab === 'payments' ? sb.from('payments').select('amount').gte('date', mStart) : { data: [] },
+    curTab === 'openings' ? sb.from('waitlist').select('*').in('status', ['Waiting','Waitlist','Drop-In']).order('signup_date') : { data: [] }
   ]);
   if (my !== weekLoading) return;
-  const err = L.error || X.error || S.error || A.error || P.error;
+  const err = L.error || X.error || S.error || A.error || P.error || M.error || W.error;
   if (err) { $('schedGrid').innerHTML = $('attList').innerHTML = '<div class="msg err">' + esc(err.message) + '</div>'; return; }
-  weekAtt = A.data; weekPay = P.data; monthTotal = (M.data || []).reduce((t, x) => t + (+x.amount || 0), 0);
+  weekAtt = A.data; weekPay = P.data; waitlist = W.data || []; monthTotal = (M.data || []).reduce((t, x) => t + (+x.amount || 0), 0);
   const base = L.data.filter(p => !(p.start_date && p.start_date > we) && !(p.end_date && p.end_date <= ws));
   weekEx = X.data;
   weekRows = applyExceptions(base, X.data);
@@ -411,7 +444,7 @@ async function loadWeek() {
   const coaches = [...new Set(weekRows.map(p => p.coach).concat(weekSlots.map(s => s.coach)).filter(Boolean))].sort();
   const cf = $('coachFilter'), cur = cf.value;
   cf.innerHTML = '<option value="">All coaches</option>' + coaches.map(c => `<option${c === cur ? ' selected' : ''}>${esc(c)}</option>`).join('');
-  if (curTab === 'payments') renderPay(); else if (att) renderAtt(); else renderWeek();
+  if (curTab === 'openings') renderOpen(); else if (curTab === 'payments') renderPay(); else if (att) renderAtt(); else renderWeek();
 }
 
 function applyExceptions(lessons, exs) {
@@ -616,7 +649,8 @@ const priceFor = (dur, type) => (PRICING[type] || PRICING.Solo)[dur] || (PRICING
 let alPick = { student: null, partner: null };
 function alMsg(t, err) { $('al_msg').className = 'msg' + (err ? ' err' : ''); $('al_msg').textContent = t; }
 function closeAdd() { $('addModal').classList.add('hidden'); }
-function openAdd(day, time, coach) {
+let alWl = null;
+function openAdd(day, time, coach, o = {}) {
   const coaches = [...new Set(weekRows.map(r => r.coach).concat(weekSlots.map(s => s.coach)).filter(Boolean))].sort();
   alPick = { student: null, partner: null };
   $('al_student').value = ''; $('al_partner').value = ''; $('al_focus').value = '';
@@ -624,9 +658,11 @@ function openAdd(day, time, coach) {
   $('al_day').innerHTML = opts(DAYS, day || 'Monday');
   $('al_time').innerHTML = opts(TIMES, time || '4:00 PM');
   $('al_duration').value = '30 min';
-  $('al_scope').value = 'permanent'; $('al_startWrap').classList.remove('hidden'); $('al_start').value = weekStartStr();
+  $('al_scope').value = o.scope || 'permanent'; $('al_startWrap').classList.toggle('hidden', $('al_scope').value !== 'permanent'); $('al_start').value = weekStartStr();
+  alWl = o.wl || null;
   alPrice(); alMsg('');
-  $('addModal').classList.remove('hidden'); $('al_student').focus();
+  if (o.studentId && students.find(x => x.id === o.studentId)) alSet('student', o.studentId);
+  $('addModal').classList.remove('hidden'); if (!o.studentId) $('al_student').focus();
 }
 function alDD(which) {
   const q = $('al_' + which).value.trim().toLowerCase(), other = alPick[which === 'student' ? 'partner' : 'student'];
@@ -671,6 +707,8 @@ async function saveAdd() {
   }
   $('al_save').disabled = false;
   if (res.error) return alMsg(res.error.message, true);
+  // Convert from the waitlist: a permanent lesson marks the entry Converted (same as 2.0)
+  if (alWl && $('al_scope').value === 'permanent' && alWl.student_id === st.id) await sb.from('waitlist').update({ status: 'Converted' }).eq('id', alWl.id);
   closeAdd(); loadWeek();
 }
 
@@ -807,6 +845,76 @@ async function savePay(method) {
     date: ymd(new Date()), week_start: weekStartStr(), lesson_type: p.lesson_type || 'Solo', extra: $('qp_special').checked ? { Adjusted: 'Yes' } : {} }).select().single();
   if (res.error) { $('qp_msg').className = 'msg err'; $('qp_msg').textContent = res.error.message; return; }
   weekPay.push(res.data); $('payModal').classList.add('hidden'); afterPay(amount);
+}
+
+// ================= OPENINGS (port of 2.0 renderOpenings_ / renderWaitlistPanel_ / makeup text) =================
+const SHORT = { Monday:'Mon', Tuesday:'Tue', Wednesday:'Wed', Thursday:'Thu', Friday:'Fri', Saturday:'Sat', Sunday:'Sun' };
+const slotPast = (day, time) => { const d = dateFor(day); if (!d) return false; const t = new Date(d + 'T00:00:00'); t.setMinutes(timeVal(time)); return t < new Date(); };
+const ageOf = dob => { if (!dob) return ''; const b = new Date(dob + 'T00:00:00'), n = new Date(); let a = n.getFullYear() - b.getFullYear(); if (n < new Date(n.getFullYear(), b.getMonth(), b.getDate())) a--; return a; };
+const smsHref = (phone, body) => 'sms:' + String(phone || '').replace(/\D/g, '') + (body ? '?body=' + encodeURIComponent(body) : '');
+// Same rule as 2.0 countWaitlistMatchesForSlot_: open-to-anything, or preferred day + time listed; skip unsubscribed
+const matchesSlot = (w, day, time) => {
+  if ((w.extra || {}).Unsubscribed === 'Yes') return false;
+  if (w.open_to_anything) return true;
+  return String(w.preferred_days || '').toLowerCase().includes(day.toLowerCase()) && String(w.preferred_times || '').includes(time);
+};
+function computeOpenings() {
+  // Same slots the Schedule shows as Open or Away (nobody live in that slot this week), minus slots already past
+  const md = weekStartStr().slice(5), isSummer = md >= '05-25' && md <= '08-31';
+  let slots = weekSlots.filter(s => !s.is_summer);
+  if (isSummer) { const have = new Set(slots.map(s => s.day + '|' + s.time)); weekSlots.filter(s => s.is_summer && !have.has(s.day + '|' + s.time)).forEach(s => slots.push(s)); }
+  const busy = new Set(weekRows.filter(p => p.status !== 'Cancelled').map(p => p.day + '|' + p.time)), seen = new Set();
+  return slots.filter(s => { const k = s.day + '|' + s.time; if (busy.has(k) || seen.has(k) || slotPast(s.day, s.time)) return false; seen.add(k); return true; })
+    .sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || timeVal(a.time) - timeVal(b.time));
+}
+function renderOpen() {
+  openSlots = computeOpenings();
+  // Booked this week via a one-week lesson → hidden from the lists (same as 2.0 getWaitlist with weekStart)
+  const booked = new Set(weekEx.filter(e => e.type === 'Add').map(e => e.student_id));
+  const live = waitlist.filter(w => !(w.student_id && booked.has(w.student_id)));
+  $('openList').innerHTML = openSlots.length ? openSlots.map((o, i) => {
+    const d = weekDates().find(x => x.name === o.day), m = live.filter(w => matchesSlot(w, o.day, o.time));
+    return `<div class="arow"><div class="who"><b>${SHORT[o.day]} ${d.label} · ${esc(o.time)}</b><small>${esc(o.coach || '')}</small></div>
+      ${o.is_summer ? '<span class="tag t-summer">☀️ Summer</span>' : ''}
+      <button class="mbtn ${m.length ? 'on' : 'off'}" onclick="$('om${i}').classList.toggle('hidden')">${m.length ? '✓ ' + m.length + ' match' + (m.length === 1 ? '' : 'es') : 'No matches'}</button>
+      <button class="paybtn" style="background:var(--mint-soft);color:#1c7a5a" onclick="openAdd('${o.day}','${esc(o.time)}','${esc(o.coach || '')}',{scope:'week'})">Book Student</button>
+      <div id="om${i}" class="mlist hidden">${m.length ? m.map(w => `<div>${esc(w.student_name)} <small style="color:#888">${esc(w.status)}</small> ·
+        ${w.parent_phone ? `<a href="${smsHref(w.parent_phone, 'Hi' + (w.parent_name ? ' ' + w.parent_name.split(' ')[0] : '') + '! A spot opened up ' + o.day + ' ' + d.label + ' at ' + o.time + ' for ' + (w.student_name || '').split(' ')[0] + '. Want it?')}">📱 Text</a>` : '<i>no phone</i>'}</div>`).join('') : 'No waitlist or drop-in families match this slot.'}</div></div>`;
+  }).join('') : '<div class="center">No openings this week</div>';
+  // Makeup picker
+  const prev = new Set([...document.querySelectorAll('#mkPick input:checked')].map(x => x.value));
+  $('mkPick').innerHTML = openSlots.length ? openSlots.map(o => { const k = o.day + '|' + o.time; return `<label><input type="checkbox" value="${esc(k)}"${prev.has(k) ? ' checked' : ''}>${SHORT[o.day]} ${esc(o.time)}</label>`; }).join('') : '<span style="color:#aaa;font-size:13px">No openings this week.</span>';
+  // Waitlist / Drop-In cards
+  const row = (w, i) => {
+    const prefs = w.open_to_anything ? '<span class="tag t-ex">Open to anything</span>' : (w.preferred_times || w.preferred_days ? `<small>${esc(w.preferred_times || w.preferred_days)}</small>` : '<small>No preference set</small>');
+    const age = ageOf(w.dob);
+    return `<div class="arow"><div class="who"><b>${i + 1}. ${esc(w.student_name || '—')}</b> <span style="font-size:11px;color:#888">${age !== '' ? 'Age ' + age : ''}${w.skill_level ? ' · ' + esc(w.skill_level) : ''}</span>
+      ${prefs}<small>${esc(w.parent_name || '')}${w.parent_phone ? ` · <a href="${smsHref(w.parent_phone)}">${esc(w.parent_phone)}</a>` : ''}${w.signup_date ? ' · signed up ' + esc(w.signup_date) : ''}</small></div>
+      <button class="paybtn" style="background:var(--mint);color:#fff" onclick="convertWl('${esc(w.id)}')">Convert →</button>
+      <button class="paybtn" style="background:#FCEBEB;color:#A32D2D" onclick="removeWl('${esc(w.id)}')">Remove</button></div>`;
+  };
+  const wl = live.filter(w => w.status !== 'Drop-In'), di = live.filter(w => w.status === 'Drop-In');
+  $('wlCount').textContent = wl.length ? wl.length + ' waiting' : ''; $('diCount').textContent = di.length ? di.length + ' drop-in' : '';
+  $('wlList').innerHTML = wl.length ? wl.map(row).join('') : '<div class="center">No one on the waitlist</div>';
+  $('diList').innerHTML = di.length ? di.map(row).join('') : '<div class="center">No drop-in families</div>';
+}
+function mkCopy() {
+  const pick = new Set([...document.querySelectorAll('#mkPick input:checked')].map(x => x.value));
+  if (!pick.size) return alert('Pick at least one slot.');
+  const lines = openSlots.filter(o => pick.has(o.day + '|' + o.time)).map(o => '• ' + SHORT[o.day] + ' ' + o.time);
+  const text = 'Hi! Here are our open makeup slots this week:\n\n' + lines.join('\n') + '\n\nLet me know if any of these work for you!';
+  navigator.clipboard.writeText(text).then(() => { $('mkCopy').textContent = '✓ Copied!'; setTimeout(() => $('mkCopy').textContent = '📋 Copy Text', 2500); }, () => prompt('Copy this text:', text));
+}
+function convertWl(id) {
+  const w = waitlist.find(x => x.id === id); if (!w) return;
+  if (!w.student_id || !students.find(s => s.id === w.student_id)) return alert(w.student_name + ' is not on the Students list yet — add them on the Students tab first.');
+  openAdd('', '', '', { scope: 'permanent', studentId: w.student_id, wl: w });
+}
+async function removeWl(id) {
+  const w = waitlist.find(x => x.id === id); if (!w || !confirm('Remove ' + w.student_name + ' from the ' + (w.status === 'Drop-In' ? 'drop-in' : 'waitlist') + ' list?')) return;
+  const res = await sb.from('waitlist').update({ status: 'Removed' }).eq('id', id);
+  if (res.error) return alert(res.error.message);
+  waitlist = waitlist.filter(x => x !== w); renderOpen();
 }
 
 // Tap an "Away" row → undo this week's cancel/move
