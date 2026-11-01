@@ -60,6 +60,16 @@
   .ddwrap { position:relative; } .dd { position:absolute; left:0; right:0; top:62px; background:#fff; border:1px solid var(--line); border-radius:8px; max-height:200px; overflow:auto; z-index:3; box-shadow:0 4px 12px rgba(0,0,0,.1); }
   .dd div { padding:9px 10px; font-size:14px; cursor:pointer; border-bottom:1px solid #f3f3f3; } .dd div:hover { background:var(--mint-soft); } .dd small { color:var(--muted); }
   .btnrow { display:flex; gap:8px; }
+  .shead { display:flex; gap:12px; align-items:center; margin:12px 0 8px; } .shead .av { width:46px; height:46px; border-radius:50%; background:var(--mint-soft); color:#1c7a5a; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; }
+  .shead b { font-size:19px; } .shead small { display:block; color:var(--muted); font-size:13px; margin-top:2px; } .shead a { color:#185FA5; text-decoration:none; }
+  .wkbar { background:#fff; border-radius:10px; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:10px 12px; margin-bottom:8px; font-size:13px; }
+  .wkbar .lbl { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:4px; }
+  .wkline { display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding:3px 0; }
+  .qa { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; } .qa button { padding:7px 11px; border-radius:8px; border:1px solid var(--line); background:#fff; font-size:13px; font-weight:600; }
+  .qa .pri { background:var(--mint); color:#fff; border-color:var(--mint); } .qa .warn { background:#FFF4D6; color:#7A5B00; border-color:#F0D88C; } .qa .dang { color:var(--danger); }
+  .stabs { display:flex; gap:2px; border-bottom:1px solid var(--line); margin-bottom:10px; overflow-x:auto; } .stabs button { border:0; background:none; padding:9px 12px; font-size:14px; color:var(--muted); border-bottom:2px solid transparent; white-space:nowrap; }
+  .stabs button.on { color:#1c7a5a; border-bottom-color:var(--mint); font-weight:600; }
+  .stat { display:inline-block; background:#f3f5f7; border-radius:8px; padding:6px 10px; margin:0 6px 6px 0; font-size:12px; color:var(--muted); } .stat b { display:block; font-size:16px; color:var(--text); }
   .metrics { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:10px; }
   .metric { background:#fff; border-radius:10px; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:10px; text-align:center; }
   .metric small { display:block; font-size:11px; color:var(--muted); } .metric b { font-size:20px; }
@@ -213,8 +223,15 @@
 
   <!-- Edit student -->
   <section id="editView" class="hidden">
-    <div class="hdr"><span id="editTitle">Student</span></div>
-    <div class="card">
+    <button class="btn ghost" style="width:auto;padding:7px 12px;font-size:13px" onclick="show('studentsView')">← Students</button>
+    <div class="hdr hidden" id="newHdr"><span id="editTitle">New student</span></div>
+    <div id="sdTop"></div>
+    <div class="stabs" id="sdTabs">
+      <button data-t="profile" onclick="sdTab('profile')">Profile</button><button data-t="schedule" onclick="sdTab('schedule')">Schedule</button>
+      <button data-t="payments" onclick="sdTab('payments')">Payments</button><button data-t="attendance" onclick="sdTab('attendance')">Attendance</button>
+    </div>
+    <div id="sdPanel" class="hidden"></div>
+    <div class="card" id="sdProfile">
       <div class="row2">
         <div><label>First name</label><input id="f_first_name"></div>
         <div><label>Last name</label><input id="f_last_name"></div>
@@ -222,7 +239,7 @@
       <div class="row2">
         <div><label>Birthday</label><input id="f_dob" type="date"></div>
         <div><label>Skill level</label>
-          <select id="f_skill_level"><option value=""></option><option>L1</option><option>L2</option><option>L3</option><option>L4</option><option>L5</option><option>L6</option></select>
+          <select id="f_skill_level"></select>
         </div>
       </div>
       <label>Parent name</label><input id="f_parent_name">
@@ -234,12 +251,20 @@
         <div><label>Emergency contact</label><input id="f_emergency_name"></div>
         <div><label>Emergency phone</label><input id="f_emergency_phone" type="tel"></div>
       </div>
+      <div class="row2">
+        <div><label>School</label><input id="x_School"></div>
+        <div><label>Photo permission</label><select id="x_PhotoPermission"><option value=""></option><option>Yes</option><option>No</option></select></div>
+      </div>
+      <div class="row2">
+        <div><label>Preferred payment</label><select id="x_PreferredPayment"><option value=""></option><option>Cash</option><option>Venmo</option><option>Zelle</option></select></div>
+        <div><label>Waiver</label><input id="x_WaiverSigned" readonly style="background:#f9f8f5"></div>
+      </div>
       <label>Notes</label><textarea id="f_notes" rows="3"></textarea>
       <label>Status</label>
       <select id="f_status"><option>Active</option><option>Waitlist</option><option>Drop-In</option><option>Inactive</option><option>Dropped</option></select>
       <div class="chk"><input type="checkbox" id="f_unsubscribed"><label for="f_unsubscribed">Unsubscribed from emails/texts</label></div>
       <div class="row2">
-        <button class="btn ghost" onclick="show('studentsView')">Cancel</button>
+        <button class="btn ghost" onclick="show('studentsView')">Close</button>
         <button class="btn" onclick="saveStudent()">Save</button>
       </div>
       <div id="editMsg" class="msg"></div>
@@ -441,19 +466,28 @@ function render() {
     </div>`).join('') : '<div class="center">No students yet.</div>';
 }
 
+const XF = ['School','PhotoPermission','PreferredPayment','WaiverSigned'];
 function openEdit(id) {
   editingId = id;
-  const s = students.find(x => x.id === id) || { status: 'Active' };
+  const s = students.find(x => x.id === id) || { status: 'Active' }, x = s.extra || {};
+  // Level list = 2.0 levels; keep any older value (e.g. "Level Beginner 3") so saving never wipes it
+  const LV = ['L1-Foundations','L2-Rising','L3-Building','L4-Progressing','L5-Advanced','L6-Elite'];
+  $('f_skill_level').innerHTML = '<option value=""></option>' + LV.concat(s.skill_level && !LV.includes(s.skill_level) ? [s.skill_level] : []).map(v => `<option>${esc(v)}</option>`).join('');
   FIELDS.forEach(f => $('f_' + f).value = s[f] ?? '');
+  XF.forEach(f => $('x_' + f).value = x[f] ?? '');
   $('f_status').value = s.status || 'Active'; $('f_unsubscribed').checked = !!s.unsubscribed;
-  $('editTitle').textContent = id ? (s.first_name + ' ' + s.last_name) : 'New student';
   $('editMsg').textContent = '';
+  $('newHdr').classList.toggle('hidden', !!id); $('sdTabs').classList.toggle('hidden', !id); $('sdTop').innerHTML = '';
   show('editView'); window.scrollTo(0, 0);
+  sdTab('profile');
+  if (id) loadStudentDetail(s);
 }
 
 async function saveStudent() {
   const st = $('f_status').value;
-  const rec = { gym_id: gymId, status: st, active: !OFF.includes(st), unsubscribed: $('f_unsubscribed').checked };
+  const cur = students.find(x => x.id === editingId) || {}, extra = { ...(cur.extra || {}) };
+  XF.forEach(f => { if (f !== 'WaiverSigned') { const v = $('x_' + f).value.trim(); if (v) extra[f] = v; else delete extra[f]; } });
+  const rec = { gym_id: gymId, status: st, active: !OFF.includes(st), unsubscribed: $('f_unsubscribed').checked, extra };
   FIELDS.forEach(f => { const v = $('f_' + f).value.trim(); rec[f] = v === '' ? null : v; });
   if (!rec.first_name) { $('editMsg').className = 'msg err'; $('editMsg').textContent = 'First name is required.'; return; }
   $('editMsg').className = 'msg'; $('editMsg').textContent = 'Saving…';
@@ -461,7 +495,108 @@ async function saveStudent() {
     ? await sb.from('students').update(rec).eq('id', editingId)
     : await sb.from('students').insert(rec);
   if (res.error) { $('editMsg').className = 'msg err'; $('editMsg').textContent = res.error.message; return; }
-  await loadStudents(); show('studentsView');
+  await loadStudents();
+  if (editingId) { $('editMsg').className = 'msg'; $('editMsg').textContent = '✓ Saved'; const s = students.find(x => x.id === editingId); if (s) renderSdTop(s); }
+  else show('studentsView');
+}
+
+// ================= STUDENT DETAIL (port of 2.0 unified student modal) =================
+let sd = null;  // { s, lessons, pays, att, cls, clsAtt }
+function sdTab(t) {
+  document.querySelectorAll('#sdTabs button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
+  $('sdProfile').classList.toggle('hidden', t !== 'profile'); $('sdPanel').classList.toggle('hidden', t === 'profile');
+  if (t !== 'profile') renderSdPanel(t);
+}
+async function loadStudentDetail(s) {
+  sd = { s, loading: true }; renderSdTop(s);
+  const [L, P, A, E, CA] = await Promise.all([
+    sb.from('private_lessons').select('*').eq('student_id', s.id).order('start_date', { ascending: false }),
+    sb.from('payments').select('*').eq('student_id', s.id).order('date', { ascending: false }).limit(300),
+    sb.from('attendance').select('*').eq('student_id', s.id).order('week_start', { ascending: false }).limit(300),
+    sb.from('class_enrollments').select('*').eq('student_id', s.id),
+    sb.from('class_attendance').select('*').eq('student_id', s.id).order('week_start', { ascending: false }).limit(200)
+  ]);
+  if (editingId !== s.id) return;
+  const err = L.error || P.error || A.error || E.error || CA.error;
+  if (err) { $('sdTop').innerHTML += '<div class="msg err">' + esc(err.message) + '</div>'; return; }
+  // Make sure this week's marks + payments for this student are in memory (they're only loaded on some tabs)
+  const ws = weekStartStr(), have = new Set(weekAtt.map(a => a.id)), haveP = new Set(weekPay.map(x => x.id));
+  A.data.filter(a => a.week_start === ws && !have.has(a.id)).forEach(a => weekAtt.push(a));
+  P.data.filter(x => x.week_start === ws && !haveP.has(x.id)).forEach(x => weekPay.push(x));
+  sd = { s, lessons: L.data, pays: P.data, att: A.data, cls: E.data, clsAtt: CA.data };
+  renderSdTop(s);
+  const t = (document.querySelector('#sdTabs button.on') || {}).dataset; if (t && t.t !== 'profile') renderSdPanel(t.t);
+}
+const liveLesson = l => !(l.end_date && l.end_date <= ymd(new Date())) && !['Cancelled','Dropped'].includes(l.status);
+function renderSdTop(s) {
+  const age = ageOf(s.dob), x = s.extra || {};
+  const mine = weekRows.filter(p => p.student_id === s.id);
+  const wk = weekDates();
+  let week = mine.length ? mine.map(p => {
+    const a = attOf(p), pd = paidOf(p), st = a ? a.status : '';
+    return `<div class="wkline"><b>${esc(p.day)} ${esc(p.time)}</b><span style="color:#888">${esc(p.coach || '')}${p.status === 'Cancelled' ? '' : ' · ' + esc(p.lesson_type || 'Solo') + ' · $' + priceNum(p)}</span>
+      ${p.status === 'Cancelled' ? '<span class="tag t-away">Cancelled this week</span>' : st === 'Attended' ? '<span class="tag t-photo">✓ Here</span>' : st ? `<span class="tag t-nophoto">${esc(st)}</span>` : '<span class="tag t-ex">Upcoming</span>'}
+      ${p.status === 'Cancelled' ? '' : pd.amt > 0 ? `<span class="tag t-photo">Paid $${pd.amt.toFixed(0)}</span>` : '<span class="tag t-summer">Unpaid</span>'}</div>`;
+  }).join('') : `<div class="wkline" style="color:#888">No lesson ${weekOffset === 0 ? 'this week' : 'the week of ' + wk[0].label}</div>`;
+  const live = mine.filter(p => p.status !== 'Cancelled'), owing = live.filter(p => priceNum(p) - paidOf(p).amt > 0 && !paidOf(p).adj);
+  const qa = [];
+  if (['Inactive','Dropped','Waitlist'].includes(s.status)) qa.push(`<button class="pri" onclick="sdStatus('Active')">↺ Re-enroll (Active)</button>`);
+  else {
+    if (owing.length) qa.push(`<button class="pri" onclick="openPay('${esc(owing[0].id)}')">$ Record payment</button>`);
+    if (s.parent_phone && owing.length) qa.push(`<button onclick="location.href=smsHref('${esc(s.parent_phone)}', sdRemindText())">📱 Payment reminder</button>`);
+    if (live.length) qa.push(`<button class="warn" onclick="sdCancelWeek()">✕ Cancel ${weekOffset === 0 ? 'this week' : 'that week'}</button>`);
+    qa.push(`<button class="dang" onclick="sdStatus('Dropped')">Drop student</button>`);
+  }
+  $('sdTop').innerHTML = `<div class="shead"><div class="av">${esc((s.first_name || '?')[0])}${esc((s.last_name || '')[0] || '')}</div>
+    <div><b>${esc(s.first_name)} ${esc(s.last_name)}</b> <span class="pill ${isOn(s) ? '' : 'off'}">${esc(s.status || 'Active')}</span>${s.skill_level ? ` <span class="pill">${esc(s.skill_level)}</span>` : ''}${x.PhotoPermission === 'No' ? ' <span class="tag t-nophoto">No Photo</span>' : ''}
+    <small>${age !== '' ? 'Age ' + age + ' · ' : ''}${esc(s.parent_name || '')}${s.parent_phone ? ` · <a href="${smsHref(s.parent_phone)}">${esc(s.parent_phone)}</a>` : ''}</small></div></div>
+    <div class="wkbar"><div class="lbl">${weekOffset === 0 ? 'This week' : 'Week of ' + wk[0].label}</div>${week}</div>
+    <div class="qa">${qa.join('')}</div>`;
+}
+function sdRemindText() {
+  const s = sd.s, owed = weekRows.filter(p => p.student_id === s.id && p.status !== 'Cancelled').reduce((t, p) => t + Math.max(0, priceNum(p) - paidOf(p).amt), 0);
+  return 'Hi' + (s.parent_name ? ' ' + s.parent_name.split(' ')[0] : '') + '! Just a friendly reminder that ' + s.first_name + "'s lesson this week (" + money(owed) + ') is still open. Cash, Venmo or Zelle all work. Thank you!';
+}
+async function sdCancelWeek() {
+  const s = sd.s, ls = weekRows.filter(p => p.student_id === s.id && p.status !== 'Cancelled');
+  if (!ls.length || !confirm('Cancel ' + s.first_name + "'s " + ls.map(p => p.day + ' ' + p.time).join(', ') + ' for ' + (weekOffset === 0 ? 'this week' : 'the week of ' + weekDates()[0].label) + ' only?')) return;
+  for (const p of ls) {
+    const ex = addExId(p.id);
+    const res = ex ? await sb.from('schedule_exceptions').update({ status: 'Deleted' }).eq('id', ex) : await saveException(p, { type: 'Cancel', notes: 'Cancelled from student page' });
+    if (res.error) return alert(res.error.message);
+  }
+  await loadWeek(); renderSdTop(s);
+}
+async function sdStatus(st) {
+  const s = sd.s;
+  if (st === 'Dropped' && !confirm('Mark ' + s.first_name + ' as Dropped?\n\nTheir lessons stay on the schedule until you remove them (tap the lesson → Cancel → Permanent).')) return;
+  const res = await sb.from('students').update({ status: st, active: !OFF.includes(st) }).eq('id', s.id);
+  if (res.error) return alert(res.error.message);
+  s.status = st; $('f_status').value = st; renderSdTop(s);
+}
+function renderSdPanel(t) {
+  const el = $('sdPanel');
+  if (!sd || sd.loading) { el.innerHTML = '<div class="card center">Loading…</div>'; return; }
+  const row = (a, b, c) => `<div class="arow"><div class="who">${a}</div>${b || ''}${c || ''}</div>`;
+  if (t === 'schedule') {
+    const live = sd.lessons.filter(liveLesson), past = sd.lessons.filter(l => !liveLesson(l));
+    const cls = sd.cls.filter(e => !['Dropped'].includes(e.status));
+    el.innerHTML = `<div class="sec" style="margin-top:0">Weekly lessons</div><div class="card" style="padding:0;overflow:hidden">${live.length ? live.map(l => row(`<b>${esc(l.day)} ${esc(l.time)}</b><small>${esc(l.coach || 'TBD')} · ${esc(l.duration || '30 min')} · ${esc(l.lesson_type || 'Solo')}${l.matched_with ? ' with ' + esc(l.matched_with) : ''}${l.start_date ? ' · since ' + esc(l.start_date) : ''}</small>`, `<div class="bal ok">${(l.extra || {}).SpecialPrice === 'Yes' ? esc(l.price || '') + ' ★' : l.lesson_type === 'Shared' ? priceFor(l.duration || '30 min', 'Shared') : esc(l.price || priceFor(l.duration || '30 min', 'Solo'))}</div>`)).join('') : '<div class="center">No weekly lessons</div>'}</div>
+      <div class="sec">Classes</div><div class="card" style="padding:0;overflow:hidden">${cls.length ? cls.map(e => row(`<b>${esc(e.class_name || e.schedule_id)}</b><small>${esc(e.status || '')}${e.enroll_date ? ' · since ' + esc(e.enroll_date) : ''}</small>`)).join('') : '<div class="center">No classes</div>'}</div>
+      ${past.length ? `<div class="sec">Past lessons</div><div class="card" style="padding:0;overflow:hidden">${past.slice(0, 20).map(l => row(`<span style="color:#888">${esc(l.day)} ${esc(l.time)} · ${esc(l.coach || '')} · ${esc(l.lesson_type || '')}</span><small>${esc(l.start_date || '…')} → ${esc(l.end_date || '')}</small>`)).join('')}</div>` : ''}
+      <div style="font-size:12px;color:#888;margin-top:8px">To move, cancel or change a lesson, tap it on the Schedule tab.</div>`;
+  } else if (t === 'payments') {
+    const tot = sd.pays.reduce((a, x) => a + (+x.amount || 0), 0), yr = String(new Date().getFullYear());
+    const ytd = sd.pays.filter(x => (x.date || '').startsWith(yr)).reduce((a, x) => a + (+x.amount || 0), 0);
+    el.innerHTML = `<div><span class="stat">All time<b>${money(tot)}</b></span><span class="stat">${yr}<b>${money(ytd)}</b></span><span class="stat">Payments<b>${sd.pays.length}</b></span>${(sd.s.extra || {}).PreferredPayment ? `<span class="stat">Prefers<b>${esc(sd.s.extra.PreferredPayment)}</b></span>` : ''}</div>
+      <div class="card" style="padding:0;overflow:hidden">${sd.pays.length ? sd.pays.map(x => row(`<b>${money(+x.amount || 0)}</b> <span style="color:#888;font-size:12px">${esc(x.method || '')}</span><small>${esc(x.date || '')} · ${String(x.lesson_id || '').startsWith('CLS_') ? 'Class' : esc(x.lesson_type || 'Lesson')}${(x.extra || {}).Adjusted === 'Yes' ? ' · ★ special' : ''}</small>`)).join('') : '<div class="center">No payments</div>'}</div>`;
+  } else if (t === 'attendance') {
+    const all = sd.att.map(a => ({ wk: a.week_start, what: (a.extra || {}).Date || '', time: a.time || '', st: a.status }))
+      .concat(sd.clsAtt.map(a => ({ wk: a.week_start, what: '🤸 ' + (a.class_name || 'Class'), time: '', st: a.status }))).sort((a, b) => String(b.wk).localeCompare(String(a.wk)));
+    const c = k => all.filter(a => a.st === k).length, here = c('Attended'), out = all.length - here;
+    el.innerHTML = `<div><span class="stat">Here<b>${here}</b></span><span class="stat">Absent<b>${c('Absent')}</b></span><span class="stat">Cancelled<b>${c('Cancelled')}</b></span><span class="stat">Other<b>${out - c('Absent') - c('Cancelled')}</b></span>${all.length ? `<span class="stat">Show rate<b>${Math.round(here / all.length * 100)}%</b></span>` : ''}</div>
+      <div class="card" style="padding:0;overflow:hidden">${all.length ? all.map(a => row(`<b>Week of ${esc(a.wk || '')}</b><small>${esc(a.what)} ${esc(a.time)}</small>`, `<span class="tag ${a.st === 'Attended' ? 't-photo' : 't-nophoto'}">${a.st === 'Attended' ? '✓ Here' : esc(a.st)}</span>`)).join('') : '<div class="center">No attendance yet</div>'}</div>`;
+  }
 }
 
 // ================= SCHEDULE (port of 2.0 getPrivates + applyExceptionsToPrivates_ + renderDynScheduleList_) =================
@@ -836,6 +971,7 @@ async function markAtt(id, status) {
 }
 
 function afterPay(delta) {
+  if (!$('editView').classList.contains('hidden') && sd && sd.s) { renderSdTop(sd.s); return loadStudentDetail(sd.s); }
   if (curTab !== 'payments') return renderAtt();
   monthTotal += delta; renderPay();
 }
