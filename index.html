@@ -528,12 +528,12 @@ async function loadStudents() {
   // Group membership: live private lesson, active class enrollment, waitlist / drop-in list (or student status)
   const today = ymd(new Date());
   const [L, E, W] = await Promise.all([
-    sb.from('private_lessons').select('student_id,end_date,status').or('end_date.is.null,end_date.gt.' + today),
+    sb.from('private_lessons').select('student_id,start_date,end_date,status').or('end_date.is.null,end_date.gt.' + today),
     sb.from('class_enrollments').select('student_id,status,schedule_id'),
     sb.from('waitlist').select('student_id,status').in('status', ['Waiting','Waitlist','Drop-In'])
   ]);
   grp = { priv: new Set(), cls: new Set(), wl: new Set(), di: new Set() };
-  (L.data || []).filter(l => !['Cancelled','Dropped'].includes(l.status)).forEach(l => grp.priv.add(l.student_id));
+  (L.data || []).filter(l => !['Cancelled','Dropped'].includes(l.status) && runsBetween(l, today)).forEach(l => grp.priv.add(l.student_id));
   (E.data || []).filter(e => !['Dropped','Waitlisted'].includes(e.status)).forEach(e => grp.cls.add(e.student_id));
   (W.data || []).forEach(w => (w.status === 'Drop-In' ? grp.di : grp.wl).add(w.student_id));
   students.forEach(s => { if (s.status === 'Waitlist') grp.wl.add(s.id); if (s.status === 'Drop-In') grp.di.add(s.id); });
@@ -640,7 +640,7 @@ async function loadStudentDetail(s) {
   renderSdTop(s);
   const t = (document.querySelector('#sdTabs button.on') || {}).dataset; if (t && t.t !== 'profile') renderSdPanel(t.t);
 }
-const liveLesson = l => !(l.end_date && l.end_date <= ymd(new Date())) && !['Cancelled','Dropped'].includes(l.status);
+const liveLesson = l => runsBetween(l, ymd(new Date())) && !['Cancelled','Dropped'].includes(l.status);
 function renderSdTop(s) {
   const age = ageOf(s.dob), x = s.extra || {};
   const mine = weekRows.filter(p => p.student_id === s.id);
@@ -722,6 +722,8 @@ const seasonFor = dateStr => { const md = String(dateStr).slice(5, 10); return s
 const slotSeason = sl => sl.season_id || (sl.is_summer ? 'fliplab:summer' : 'fliplab:school');
 function slotsForWeek() { const se = seasonFor(weekStartStr()); return weekSlots.filter(sl => !se || slotSeason(sl) === se.id); }
 const isExtraSlot = sl => { const se = seasons.find(x => x.id === slotSeason(sl)); return !!se && /summer/i.test(se.name) && !(sl.extra || {}).copied_from_school_year; };
+// A weekly lesson actually runs between from and to (a lesson whose end isn't after its own start never runs)
+const runsBetween = (l, from, to) => { const st = l.start_date && l.start_date > from ? l.start_date : from; return (!l.end_date || l.end_date > st) && (!to || !l.start_date || l.start_date <= to); };
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 let attMode = 'privates', clsSched = [], clsRoster = [], clsAtt = [];
 let allLessons = [];
@@ -1444,7 +1446,7 @@ function renderSlots() {
   const se = seasons.find(x => x.id === curSeasonId); if (!se) { $('slotDays').innerHTML = '<div class="center">No seasons yet</div>'; return; }
   const win = seasonWindow(se);
   // Weekly lessons that run during this season's window fill its slots (one-week cancellations don't matter here)
-  const les = slotLessons.filter(l => (!l.end_date || l.end_date > win.from) && (!l.start_date || l.start_date <= win.to));
+  const les = slotLessons.filter(l => runsBetween(l, win.from, win.to));
   const mine = allSlots.filter(x => slotSeason(x) === se.id);
   const who = sl => les.filter(l => l.day === sl.day && l.time === sl.time);
   const open = mine.filter(x => x.active !== false && !who(x).length).length, booked = mine.filter(x => who(x).length).length;
@@ -1462,7 +1464,7 @@ function renderSlots() {
 function slotTap(id) {
   const x = allSlots.find(z => z.id === id); if (!x) return;
   const se = seasons.find(z => z.id === slotSeason(x)), win = seasonWindow(se);
-  const w = slotLessons.filter(l => l.day === x.day && l.time === x.time && (!l.end_date || l.end_date > win.from) && (!l.start_date || l.start_date <= win.to));
+  const w = slotLessons.filter(l => l.day === x.day && l.time === x.time && runsBetween(l, win.from, win.to));
   $('sm_title').textContent = x.day + ' ' + x.time + ' · ' + se.name; $('sm_msg').textContent = '';
   $('sm_body').innerHTML = `<div style="font-size:14px;margin-bottom:10px">${w.length ? 'Booked every week: <b>' + esc(w.map(l => l.student_name).join(', ')) + '</b>' : x.active === false ? 'Turned off — not offered to new families.' : '<span style="color:#3B6D11;font-weight:600">Open for signup</span>'}</div>
     <label>Coach</label><select id="sm_coach" onchange="slotSet('${esc(id)}',{coach:this.value})">${opts(slotCoaches.concat('TBD'), x.coach || 'TBD')}</select>
