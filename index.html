@@ -276,12 +276,12 @@
       </div>
       <label>Parent name</label><input id="f_parent_name">
       <div class="row2">
-        <div><label>Parent phone</label><input id="f_parent_phone" type="tel"></div>
+        <div><label>Parent phone</label><input id="f_parent_phone" type="tel" inputmode="numeric" placeholder="(513) 555-1234" oninput="this.value=typingPhone(this.value)"></div>
         <div><label>Parent email</label><input id="f_parent_email" type="email"></div>
       </div>
       <div class="row2">
         <div><label>Emergency contact</label><input id="f_emergency_name"></div>
-        <div><label>Emergency phone</label><input id="f_emergency_phone" type="tel"></div>
+        <div><label>Emergency phone</label><input id="f_emergency_phone" type="tel" inputmode="numeric" placeholder="(513) 555-1234" oninput="this.value=typingPhone(this.value)"></div>
       </div>
       <div class="row2">
         <div><label>School</label><input id="x_School"></div>
@@ -353,7 +353,7 @@
     <div id="pwMsg" class="msg"></div>
     <div style="border-top:1px solid #eee;margin-top:14px;padding-top:10px"><b>Coaches</b>
       <div id="coachList" style="margin:6px 0 8px"></div>
-      <div class="row2"><div><label>Name</label><input id="co_name" placeholder="Coach Emma"></div><div><label>Phone</label><input id="co_phone" type="tel"></div></div>
+      <div class="row2"><div><label>Name</label><input id="co_name" placeholder="Coach Emma"></div><div><label>Phone</label><input id="co_phone" type="tel" inputmode="numeric" placeholder="(513) 555-1234" oninput="this.value=typingPhone(this.value)"></div></div>
       <label>Specialty</label><input id="co_spec" placeholder="e.g. Cheer, jumps">
       <button class="btn" onclick="addCoach()">+ Add coach</button>
       <div id="coMsg" class="msg"></div>
@@ -467,6 +467,9 @@
 </div>
 <script>
 const sb = supabase.createClient('https://angmtyojkwlrefxpcgoa.supabase.co', 'sb_publishable_fPciNfnNHpHQikB8mqHNpw_hIVRIGo5');
+// Phone layout: (513) 555-1234. 10 digits (or 11 starting with 1) get formatted; anything else is left as typed.
+function fmtPhone(v) { v = String(v || '').trim(); let d = v.replace(/\D/g, ''); if (d.length === 11 && d[0] === '1') d = d.slice(1); return d.length === 10 ? '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6) : v; }
+function typingPhone(v) { let d = v.replace(/\D/g, ''); if (d.length > 10) return v; return !d ? '' : d.length < 4 ? '(' + d : d.length < 7 ? '(' + d.slice(0, 3) + ') ' + d.slice(3) : '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6); }
 const FIELDS = ['first_name','last_name','dob','skill_level','parent_name','parent_phone','parent_email','emergency_name','emergency_phone','notes'];
 const OFF = ['Inactive','Dropped'];
 const isOn = s => !OFF.includes(s.status);
@@ -525,7 +528,7 @@ async function addCoach() {
   const name = $('co_name').value.trim(), m = $('coMsg'); m.className = 'msg err';
   if (!name) return m.textContent = 'Enter a name.';
   if (coachRows.some(c => c.name.toLowerCase() === name.toLowerCase())) return m.textContent = 'That coach is already on the list.';
-  const r = await sb.from('coaches').insert({ id: 'C' + Date.now(), gym_id: gymId, name, phone: $('co_phone').value.trim() || null, specialties: $('co_spec').value.trim() || null, active: true });
+  const r = await sb.from('coaches').insert({ id: 'C' + Date.now(), gym_id: gymId, name, phone: fmtPhone($('co_phone').value) || null, specialties: $('co_spec').value.trim() || null, active: true });
   if (r.error) return m.textContent = r.error.message;
   await loadCoaches(); renderCoaches(); $('coMsg').className = 'msg'; $('coMsg').textContent = '✓ ' + name + ' added';
 }
@@ -642,7 +645,7 @@ async function saveStudent() {
   const cur = students.find(x => x.id === editingId) || {}, prevStatus = cur.status, extra = { ...(cur.extra || {}) };
   XF.forEach(f => { if (f !== 'WaiverSigned') { const v = $('x_' + f).value.trim(); if (v) extra[f] = v; else delete extra[f]; } });
   const rec = { gym_id: gymId, status: st, active: !OFF.includes(st), unsubscribed: $('f_unsubscribed').checked, extra };
-  FIELDS.forEach(f => { const v = $('f_' + f).value.trim(); rec[f] = v === '' ? null : v; });
+  FIELDS.forEach(f => { let v = $('f_' + f).value.trim(); if (f.endsWith('_phone')) v = fmtPhone(v); rec[f] = v === '' ? null : v; });
   if (!rec.first_name) { $('editMsg').className = 'msg err'; $('editMsg').textContent = 'First name is required.'; return; }
   $('editMsg').className = 'msg'; $('editMsg').textContent = 'Saving…';
   const res = editingId

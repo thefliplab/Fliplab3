@@ -74,4 +74,13 @@ delete from coaches where id = 'C1789822214285';
 -- 8. Old coaches (Steve, Nov 1): Coach Lexi and test coach — no lessons
 delete from coaches where id in ('C1773883432705', 'C1774599806937');
 
+-- 9. Phone numbers → (513) 555-1234 layout (Steve, Nov 1). Only 10-digit numbers (or 11 starting with 1); others left alone.
+create or replace function pg_temp.fmt_phone(p text) returns text language sql as $$
+  select case when d ~ '^1?[0-9]{10}$' then '(' || substr(right(d,10),1,3) || ') ' || substr(right(d,10),4,3) || '-' || substr(right(d,10),7,4) else p end
+  from (select regexp_replace(coalesce(p,''), '[^0-9]', '', 'g') d) x $$;
+update students set parent_phone = pg_temp.fmt_phone(parent_phone) where parent_phone is not null;
+update students set emergency_phone = pg_temp.fmt_phone(emergency_phone) where emergency_phone is not null;
+update coaches set phone = pg_temp.fmt_phone(phone) where phone is not null;
+update waitlist set parent_phone = pg_temp.fmt_phone(parent_phone) where parent_phone is not null;
+
 commit;
