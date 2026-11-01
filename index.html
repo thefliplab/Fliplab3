@@ -507,7 +507,7 @@ function openEdit(id) {
 
 async function saveStudent() {
   const st = $('f_status').value;
-  const cur = students.find(x => x.id === editingId) || {}, extra = { ...(cur.extra || {}) };
+  const cur = students.find(x => x.id === editingId) || {}, prevStatus = cur.status, extra = { ...(cur.extra || {}) };
   XF.forEach(f => { if (f !== 'WaiverSigned') { const v = $('x_' + f).value.trim(); if (v) extra[f] = v; else delete extra[f]; } });
   const rec = { gym_id: gymId, status: st, active: !OFF.includes(st), unsubscribed: $('f_unsubscribed').checked, extra };
   FIELDS.forEach(f => { const v = $('f_' + f).value.trim(); rec[f] = v === '' ? null : v; });
@@ -517,9 +517,25 @@ async function saveStudent() {
     ? await sb.from('students').update(rec).eq('id', editingId)
     : await sb.from('students').insert(rec);
   if (res.error) { $('editMsg').className = 'msg err'; $('editMsg').textContent = res.error.message; return; }
+  if (editingId && st !== prevStatus) { const e = await syncWaitlist({ ...cur, ...rec, id: editingId }, st); if (e) { $('editMsg').className = 'msg err'; $('editMsg').textContent = 'Saved, but the waitlist list did not update: ' + e; return; } }
   await loadStudents();
   if (editingId) { $('editMsg').className = 'msg'; $('editMsg').textContent = '✓ Saved'; const s = students.find(x => x.id === editingId); if (s) renderSdTop(s); }
   else show('studentsView');
+}
+
+// Keep the Waitlist / Drop-In list (Openings tab) in step with the student's Status:
+// Waitlist or Drop-In → their list entry gets that status (one is added if they have none);
+// Inactive / Dropped → their list entry is Removed; Active → list left alone (active kids can also be drop-ins).
+async function syncWaitlist(s, st) {
+  const live = await sb.from('waitlist').select('id,status').eq('student_id', s.id).in('status', ['Waiting','Waitlist','Drop-In']);
+  if (live.error) return live.error.message;
+  let r = { error: null };
+  if (st === 'Waitlist' || st === 'Drop-In') {
+    if (live.data.length) r = await sb.from('waitlist').update({ status: st }).in('id', live.data.map(x => x.id));
+    else r = await sb.from('waitlist').insert({ gym_id: gymId, student_id: s.id, student_name: (s.first_name || '') + ' ' + (s.last_name || ''), dob: s.dob, parent_name: s.parent_name,
+      parent_phone: s.parent_phone, parent_email: s.parent_email, skill_level: s.skill_level, status: st, open_to_anything: true, signup_date: ymd(new Date()) });
+  } else if ((st === 'Inactive' || st === 'Dropped') && live.data.length) r = await sb.from('waitlist').update({ status: 'Removed' }).in('id', live.data.map(x => x.id));
+  return r.error ? r.error.message : null;
 }
 
 // ================= STUDENT DETAIL (port of 2.0 unified student modal) =================
@@ -594,7 +610,8 @@ async function sdStatus(st) {
   if (st === 'Dropped' && !confirm('Mark ' + s.first_name + ' as Dropped?\n\nTheir lessons stay on the schedule until you remove them (tap the lesson → Cancel → Permanent).')) return;
   const res = await sb.from('students').update({ status: st, active: !OFF.includes(st) }).eq('id', s.id);
   if (res.error) return alert(res.error.message);
-  s.status = st; $('f_status').value = st; renderSdTop(s);
+  const e = await syncWaitlist(s, st); if (e) alert('Status saved, but the waitlist list did not update: ' + e);
+  s.status = st; $('f_status').value = st; renderSdTop(s); loadStudents();
 }
 function renderSdPanel(t) {
   const el = $('sdPanel');
