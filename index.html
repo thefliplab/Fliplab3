@@ -348,6 +348,15 @@
     <label>Type it again</label><input id="pw2" type="password" autocomplete="new-password">
     <button class="btn" onclick="changePw()">Change password</button>
     <div id="pwMsg" class="msg"></div>
+    <div style="border-top:1px solid #eee;margin-top:14px;padding-top:10px"><b>Google Calendar sync</b>
+      <label>Sync</label><select id="cs_mode"><option value="off">Off</option><option value="test">Test calendar</option><option value="live">Live — real Flip Lab calendar</option></select>
+      <label>Test calendar ID</label><input id="cs_test" placeholder="…@group.calendar.google.com">
+      <label>Live calendar ID (Flip Lab)</label><input id="cs_live" placeholder="…@group.calendar.google.com">
+      <div class="row2"><div><label>Other coaches' color</label><select id="cs_color"></select></div>
+        <div><label>&nbsp;</label><label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="cs_class" style="width:auto"> Classes on calendar</label></div></div>
+      <button class="btn" onclick="saveCal()">Save calendar settings</button>
+      <div id="cs_msg" class="msg"></div>
+    </div>
     <div style="border-top:1px solid #eee;margin-top:14px;padding-top:10px"><b>Coaches</b>
       <div id="coachList" style="margin:6px 0 8px"></div>
       <div class="row2"><div><label>Name</label><input id="co_name" placeholder="Coach Emma"></div><div><label>Phone</label><input id="co_phone" type="tel" inputmode="numeric" placeholder="(513) 555-1234" oninput="this.value=typingPhone(this.value)"></div></div>
@@ -512,6 +521,7 @@
     #pContent th, #pContent .ph { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   }
 </style>
+<script src="week.js"></script>
 <script>
 const sb = supabase.createClient('https://angmtyojkwlrefxpcgoa.supabase.co', 'sb_publishable_fPciNfnNHpHQikB8mqHNpw_hIVRIGo5');
 // Phone layout: (513) 555-1234. 10 digits (or 11 starting with 1) get formatted; anything else is left as typed.
@@ -558,7 +568,29 @@ async function openAcct() {
   const { data: { user } } = await sb.auth.getUser();
   $('acctEmail').textContent = user ? 'Signed in as ' + user.email : '';
   $('pw1').value = $('pw2').value = ''; $('pwMsg').textContent = '';
-  renderCoaches(); $('acctModal').classList.remove('hidden');
+  renderCoaches(); loadCal(); $('acctModal').classList.remove('hidden');
+}
+// ================= CALENDAR SYNC SETTINGS (edge function cal-sync does the work) =================
+const GCOLORS = [['1','Lavender'],['2','Sage'],['3','Grape'],['4','Flamingo (pink)'],['5','Banana'],['6','Tangerine'],['7','Peacock'],['8','Graphite'],['9','Blueberry'],['10','Basil'],['11','Tomato']];
+let calRow = null;
+async function loadCal() {
+  const r = await sb.from('cal_settings').select('*').maybeSingle(); calRow = r.data || null; const c = calRow || {};
+  $('cs_mode').value = c.mode || 'off'; $('cs_test').value = c.test_calendar_id || ''; $('cs_live').value = c.live_calendar_id || '';
+  $('cs_color').innerHTML = GCOLORS.map(([v, n]) => `<option value="${v}"${v === (c.other_color || '4') ? ' selected' : ''}>${n}</option>`).join('');
+  $('cs_class').checked = c.class_on !== false;
+  $('cs_msg').className = 'msg'; $('cs_msg').textContent = c.last_result ? 'Last sync ' + new Date(c.last_run_at).toLocaleString() + ': ' + c.last_result : (c.mode && c.mode !== 'off' ? 'Waiting for the first sync…' : '');
+}
+async function saveCal() {
+  const mode = $('cs_mode').value, m = $('cs_msg');
+  if (mode === 'live' && (calRow || {}).mode !== 'live' && !confirm('Turn on LIVE sync to your real Flip Lab calendar?\n\nOnly do this at switch-over, after turning off 2.0\'s Sunday calendar rebuild — otherwise lessons show twice.')) return;
+  if (mode === 'test' && !$('cs_test').value.trim()) { m.className = 'msg err'; m.textContent = 'Add the test calendar ID first.'; return; }
+  if (mode === 'live' && !$('cs_live').value.trim()) { m.className = 'msg err'; m.textContent = 'Add the Flip Lab calendar ID first.'; return; }
+  const rec = { gym_id: gymId, mode, test_calendar_id: $('cs_test').value.trim() || null, live_calendar_id: $('cs_live').value.trim() || null,
+    other_color: $('cs_color').value, class_on: $('cs_class').checked, main_coach: mainCoach() || null, updated_at: new Date().toISOString() };
+  const r = await sb.from('cal_settings').upsert(rec);
+  if (r.error) { m.className = 'msg err'; m.textContent = r.error.message; return; }
+  m.className = 'msg'; m.textContent = mode === 'off' ? '✓ Saved — sync is off' : '✓ Saved — the calendar updates within a minute or two';
+  calRow = { ...(calRow || {}), ...rec };
 }
 // ================= COACHES (replaces 2.0 Coaches tab) =================
 let coachRows = [], myEmail = '';
@@ -834,9 +866,7 @@ const slotSeason = sl => sl.season_id || (sl.is_summer ? 'fliplab:summer' : 'fli
 function slotsForWeek() { const se = seasonFor(weekStartStr()); return weekSlots.filter(sl => !se || slotSeason(sl) === se.id); }
 const isExtraSlot = sl => { const se = seasons.find(x => x.id === slotSeason(sl)); return !!se && /summer/i.test(se.name) && !(sl.extra || {}).copied_from_school_year; };
 // A weekly lesson actually runs between from and to (a lesson whose end isn't after its own start never runs)
-const runsBetween = (l, from, to) => { const st = l.start_date && l.start_date > from ? l.start_date : from; return (!l.end_date || l.end_date > st) && (!to || !l.start_date || l.start_date <= to); };
-const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-let attMode = 'privates', clsSched = [], clsRoster = [], clsAtt = [];
+let attMode = 'privates', clsSched = [], clsRoster = [], clsAtt = [], clsOff = new Set();
 let allLessons = [];
 let monthTotal = 0, waitlist = [], openSlots = [];
 let weekOffset = 0, weekRows = [], weekSlots = [], weekEx = [], weekAtt = [], weekPay = [], weekLoading = 0;
@@ -846,10 +876,6 @@ function weekDates() {
   const t = new Date(); t.setHours(0,0,0,0);
   const mon = new Date(t); mon.setDate(t.getDate() + (t.getDay() === 0 ? -6 : 1 - t.getDay()) + (curTab === 'dashboard' ? 0 : weekOffset) * 7);
   return DAYS.map((name, i) => { const d = new Date(mon); d.setDate(mon.getDate() + i); return { name, date: d, label: d.toLocaleDateString(undefined, { month:'short', day:'numeric' }) }; });
-}
-function timeVal(t) {
-  const m = String(t || '').trim().match(/^(\d{1,2}):?(\d{2})?\s*([AaPp])?/); if (!m) return 9999;
-  let h = +m[1] % 12; if (m[3] && /p/i.test(m[3])) h += 12; return h * 60 + (+m[2] || 0);
 }
 function shiftWeek(n) { weekOffset = n === 0 ? 0 : weekOffset + n; ss.set('week', weekOffset); loadWeek(); }
 
@@ -865,14 +891,14 @@ async function loadWeek(quiet) {
     att ? sb.from('attendance').select('*').eq('week_start', ws) : { data: [] },
     att ? sb.from('payments').select('*').eq('week_start', ws) : { data: [] },
     curTab === 'payments' ? sb.from('payments').select('amount').gte('date', mStart) : { data: [] },
-    (curTab === 'attendance' && attMode === 'classes') || curTab === 'payments' || curTab === 'dashboard' ? Promise.all([sb.from('class_schedule').select('*').eq('active', true), sb.from('class_enrollments').select('*').not('status', 'in', '("Dropped","Waitlisted")'), sb.from('class_attendance').select('*').eq('week_start', ws)]) : null,
+    (curTab === 'attendance' && attMode === 'classes') || curTab === 'payments' || curTab === 'dashboard' ? Promise.all([sb.from('class_schedule').select('*').eq('active', true), sb.from('class_enrollments').select('*').not('status', 'in', '("Dropped","Waitlisted")'), sb.from('class_attendance').select('*').eq('week_start', ws), sb.from('class_week_off').select('schedule_id').eq('week_start', ws)]) : null,
     curTab === 'openings' || curTab === 'dashboard' ? sb.from('waitlist').select('*').in('status', ['Waiting','Waitlist','Drop-In']).order('signup_date') : { data: [] }
   ]);
   if (my !== weekLoading) return;
   const err = L.error || X.error || S.error || A.error || P.error || M.error || W.error;
   if (err) { $('schedGrid').innerHTML = $('attList').innerHTML = '<div class="msg err">' + esc(err.message) + '</div>'; return; }
   weekAtt = A.data; weekPay = P.data; waitlist = W.data || [];
-  if (C) { const ce = C.find(r => r.error); if (ce) { $('attList').innerHTML = '<div class="msg err">' + esc(ce.error.message) + '</div>'; return; } [clsSched, clsRoster, clsAtt] = C.map(r => r.data); } monthTotal = (M.data || []).reduce((t, x) => t + (+x.amount || 0), 0);
+  if (C) { const ce = C.find(r => r.error); if (ce) { $('attList').innerHTML = '<div class="msg err">' + esc(ce.error.message) + '</div>'; return; } [clsSched, clsRoster, clsAtt] = C.map(r => r.data); clsOff = new Set((C[3].data || []).map(o => o.schedule_id)); } monthTotal = (M.data || []).reduce((t, x) => t + (+x.amount || 0), 0);
   allLessons = L.data; dashNextMon = null; dashHist = null;
   const base = L.data.filter(p => !(p.start_date && p.start_date > we) && !(p.end_date && p.end_date <= ws));
   weekEx = X.data;
@@ -884,38 +910,6 @@ async function loadWeek(quiet) {
   if (curTab === 'dashboard') renderDash(); else if (curTab === 'openings') renderOpen(); else if (curTab === 'payments') renderPay(); else if (att) renderAtt(); else renderWeek();
 }
 
-function applyExceptions(lessons, exs) {
-  const map = {}, addRows = [], attached = {}, out = [];
-  exs.forEach(e => { if (e.lesson_id) map[e.lesson_id] = e; if (e.type === 'Add') addRows.push(e); });
-  lessons.forEach(src => {
-    const p = { ...src, exType: '', bday: src.day, btime: src.time }, ex = map[p.id];
-    if (!ex) return out.push(p);
-    if (ex.type === 'Cancel') return out.push({ ...p, status: 'Cancelled', exType: 'Cancel' });
-    if (ex.type === 'Move') {
-      out.push({ ...p, status: 'Cancelled', exType: 'MoveOrigin' });
-      attached[ex.id] = true;
-      return out.push({ ...p, day: ex.new_day || p.day, time: ex.new_time || p.time, coach: ex.new_coach || p.coach, exType: 'Move' });
-    }
-    if (ex.type === 'PriceOverride') return out.push({ ...p, lesson_type: ex.lesson_type || 'Solo', price: priceFor(p.duration || '30 min', ex.lesson_type || 'Solo'), exType: 'PriceOverride' });
-    if (ex.type === 'Add') {
-      out.push(p); attached[ex.id] = true;
-      return out.push({ ...p, id: p.id + '_EX_' + ex.id, day: ex.new_day || p.day, time: ex.new_time || p.time, coach: ex.new_coach || p.coach, exType: 'Add' });
-    }
-    out.push(p);
-  });
-  addRows.forEach(e => {
-    if (attached[e.id]) return;
-    out.push({ id: 'EX_ONLY_' + e.id, student_id: e.student_id, student_name: e.student_name, coach: e.new_coach || e.coach,
-      day: e.new_day || '', time: e.new_time || '', bday: e.new_day || '', btime: e.new_time || '', duration: '30 min', status: 'Confirmed', lesson_type: e.lesson_type || 'Solo',
-      notes: e.notes, pair_id: '', exType: 'Add', ...((e.extra || {}).Price ? { price: e.extra.Price, extra: { SpecialPrice: 'Yes' } } : {}) });
-  });
-  // Auto "Shared" when 2+ active lessons share a day+time with the same coach (unless a PriceOverride kept it Solo)
-  const cnt = {};
-  out.forEach(p => { if (p.status !== 'Cancelled') { const k = p.day + '|' + p.time + '|' + (p.coach || ''); cnt[k] = (cnt[k] || 0) + 1; } });
-  // Same as 2.0 getPrivates: a shared slot always uses the Shared price (stored price is ignored)
-  out.forEach(p => { if (p.status !== 'Cancelled' && p.exType !== 'PriceOverride' && cnt[p.day + '|' + p.time + '|' + (p.coach || '')] >= 2) { p.lesson_type = 'Shared'; if (!isSpecial(p)) p.price = priceFor(p.duration || '30 min', 'Shared'); } });
-  return out;
-}
 
 function renderWeek() {
   const wd = weekDates(), ws = ymd(wd[0].date), md = ws.slice(5);
@@ -1083,8 +1077,6 @@ async function cancelLesson() {
 }
 
 // ================= ADD LESSON (port of 2.0 openAddLessonForSlot_ / addLessonForStudent) =================
-const PRICING = { Solo: { '30 min': '$40', '45 min': '$60', '60 min': '$80' }, Shared: { '30 min': '$30', '45 min': '$45', '60 min': '$60' } };
-const priceFor = (dur, type) => (PRICING[type] || PRICING.Solo)[dur] || (PRICING[type] || PRICING.Solo)['30 min'];
 let alPick = { student: null, partner: null };
 function alMsg(t, err) { $('al_msg').className = 'msg' + (err ? ' err' : ''); $('al_msg').textContent = t; }
 function closeAdd() { $('addModal').classList.add('hidden'); }
@@ -1164,7 +1156,6 @@ const NOT_HERE = ['Absent','Cancelled','Rescheduled','Late'];
 // Claimed spots use a stable attendance key (same as 2.0): ATT_<student>_<day>_<time>_<weekStart>
 const attKey = p => p.id.startsWith('EX_ONLY_') ? 'ATT_' + p.student_id + '_' + p.day + '_' + p.time + '_' + weekStartStr() : p.id;
 const attOf = p => weekAtt.find(a => a.lesson_id === attKey(p));
-const isSpecial = p => (p.extra || {}).SpecialPrice === 'Yes';
 const isAdj = x => (x.extra || {}).Adjusted === 'Yes';
 const paidOf = p => weekPay.filter(x => x.lesson_id === p.id).reduce((t, x) => ({ amt: t.amt + (+x.amount || 0), method: x.method || t.method, adj: t.adj || isAdj(x) }), { amt: 0, method: '', adj: false });
 const priceNum = p => parseFloat(String(p.price || '').replace(/[^0-9.]/g, '')) || priceFor(p.duration, p.lesson_type === 'Shared' ? 'Shared' : 'Solo').slice(1) * 1;
@@ -1400,6 +1391,15 @@ const clsPayId = (c, sid) => 'CLS_' + c.id + '_' + sid + '_' + weekStartStr();
 const clsPrice = c => +String(c.price || '').replace(/[^0-9.]/g, '') || 20;
 const clsAttOf = (c, sid) => clsAtt.find(a => a.schedule_id === c.id && a.student_id === sid);
 const clsObj = (c, r) => ({ id: clsPayId(c, r.student_id), student_id: r.student_id, student_name: r.student_name, day: c.day, time: c.time, price: '$' + clsPrice(c), lesson_type: null });
+async function toggleClassOff(id) {
+  const c = clsSched.find(x => x.id === id); if (!c) return;
+  const ws = weekStartStr(), off = clsOff.has(id);
+  if (!off && !confirm('No ' + (c.class_name || 'class') + ' the week of ' + weekDates()[0].label + '?\n\nIt comes off the calendar for that week only.')) return;
+  const r = off ? await sb.from('class_week_off').delete().eq('schedule_id', id).eq('week_start', ws)
+                : await sb.from('class_week_off').insert({ gym_id: gymId, schedule_id: id, week_start: ws });
+  if (r.error) return alert(r.error.message);
+  off ? clsOff.delete(id) : clsOff.add(id); renderClassAtt();
+}
 function renderClassAtt() {
   const cls = [...clsSched].sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || timeVal(a.time) - timeVal(b.time));
   let n = { att: 0, no: 0, paid: 0, unpaid: 0 }, html = '';
@@ -1407,7 +1407,10 @@ function renderClassAtt() {
   cls.forEach(c => {
     const roster = clsRoster.filter(r => r.schedule_id === c.id).sort((a, b) => (a.student_name || '').localeCompare(b.student_name || ''));
     const dd = weekDates().find(d => d.name === c.day);
-    html += `<div class="dayhd">${esc(c.day)} · ${esc(c.time)} · ${esc(c.class_name)}<span>${dd ? dd.label : ''} · ${roster.length} enrolled · $${clsPrice(c)}</span></div><div class="card" style="padding:0;margin-bottom:6px;border-radius:0 0 10px 10px;overflow:hidden">`;
+    const off = clsOff.has(c.id);
+    html += `<div class="dayhd" style="display:flex;align-items:center;flex-wrap:wrap">${esc(c.day)} · ${esc(c.time)} · ${esc(c.class_name)}<span>${dd ? dd.label : ''} · ${roster.length} enrolled · $${clsPrice(c)}</span>
+      <button class="paybtn" style="margin-left:auto;${off ? 'background:#FCEBEB;color:#A32D2D' : ''}" onclick="toggleClassOff('${esc(c.id)}')">${off ? '✕ No class this week — undo' : 'No class this week'}</button></div><div class="card" style="padding:0;margin-bottom:6px;border-radius:0 0 10px 10px;overflow:hidden">`;
+    if (off) { html += '<div class="center" style="color:#A32D2D">No class this week — off the calendar</div></div>'; return; }
     if (!roster.length) html += '<div class="center">No students enrolled</div>';
     roster.forEach(r => {
       const st = (clsAttOf(c, r.student_id) || {}).status || '', o = clsObj(c, r), pd = paidOf(o), k = esc(c.id) + "','" + esc(r.student_id);
