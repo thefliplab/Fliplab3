@@ -69,12 +69,15 @@
   .here { padding:5px 9px; border-radius:5px; border:0; font-size:12px; font-weight:600; background:#EAF3DE; color:#3B6D11; } .here.on { background:#1a5c2a; color:#fff; }
   .nothere { width:auto; margin:0; padding:4px 6px; font-size:12px; font-weight:600; border-radius:5px; color:#888; } .nothere.on { background:#8b1a1a; color:#fff; border-color:#8b1a1a; }
   .paybtn { padding:5px 10px; border-radius:5px; border:0; font-size:12px; font-weight:600; background:#FAEEDA; color:#854F0B; }
+  .bal { font-size:12px; color:#854F0B; font-weight:600; min-width:70px; text-align:right; } .bal.ok { color:#3B6D11; }
+  .sec { font-weight:600; font-size:14px; margin:14px 0 6px; display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .sec select { width:auto; margin:0; padding:5px 8px; font-size:13px; }
   .paid { font-size:11px; padding:3px 8px; border-radius:10px; background:#EAF3DE; color:#3B6D11; font-weight:600; } .btn.red { background:var(--danger); }
 </style>
 </head>
 <body>
 <nav><b>Flip<span>Lab</span> 3.0</b>
-  <div id="tabs" class="hidden"><button id="tabBtn_schedule" onclick="go('schedule')">Schedule</button><button id="tabBtn_attendance" onclick="go('attendance')">Attendance</button><button id="tabBtn_students" onclick="go('students')">Students</button></div>
+  <div id="tabs" class="hidden"><button id="tabBtn_schedule" onclick="go('schedule')">Schedule</button><button id="tabBtn_attendance" onclick="go('attendance')">Attendance</button><button id="tabBtn_payments" onclick="go('payments')">Payments</button><button id="tabBtn_students" onclick="go('students')">Students</button></div>
   <button id="outBtn" class="hidden" onclick="signOut()">Sign out</button></nav>
 <main>
 
@@ -140,6 +143,26 @@
       <div class="metric"><small>Unpaid</small><b id="m_unpaid">—</b></div>
     </div>
     <div id="attList"><div class="center">Loading…</div></div>
+  </section>
+
+  <!-- Payments (port of 2.0 v-payments / getOutstandingBalances) -->
+  <section id="paymentsView" class="hidden">
+    <div class="wk">
+      <button onclick="shiftWeek(-1)">← Prev</button>
+      <button onclick="shiftWeek(0)">This week</button>
+      <button onclick="shiftWeek(1)">Next →</button>
+      <div class="wklabel" id="payWkLabel"></div>
+    </div>
+    <div class="metrics">
+      <div class="metric"><small>Collected for week</small><b id="pm_week" style="color:#3B6D11">—</b></div>
+      <div class="metric"><small>Outstanding for week</small><b id="pm_out" style="color:#854F0B">—</b></div>
+      <div class="metric"><small>Collected this month</small><b id="pm_month">—</b></div>
+      <div class="metric"><small>Unpaid students</small><b id="pm_unpaid" style="color:#854F0B">—</b></div>
+    </div>
+    <div class="sec">Outstanding balances — this week</div>
+    <div class="card" style="padding:0;overflow:hidden" id="balList"><div class="center">Loading…</div></div>
+    <div class="sec">Payment history <select id="histFilter" onchange="loadHistory()"><option value="">This week</option></select></div>
+    <div class="card" style="padding:0;overflow:hidden" id="histList"></div>
   </section>
 
   <!-- Edit student -->
@@ -261,10 +284,10 @@ let mode = 'in', gymId = null, students = [], editingId = null;
 
 const $ = id => document.getElementById(id);
 function show(view) {
-  ['loginView','waitView','studentsView','editView','scheduleView','attendanceView'].forEach(v => $(v).classList.toggle('hidden', v !== view));
+  ['loginView','waitView','studentsView','editView','scheduleView','attendanceView','paymentsView'].forEach(v => $(v).classList.toggle('hidden', v !== view));
   $('outBtn').classList.toggle('hidden', view === 'loginView');
   $('tabs').classList.toggle('hidden', !gymId);
-  ['schedule','attendance','students'].forEach(t => $('tabBtn_' + t).classList.toggle('on', view === t + 'View'));
+  ['schedule','attendance','payments','students'].forEach(t => $('tabBtn_' + t).classList.toggle('on', view === t + 'View'));
 }
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
@@ -346,6 +369,7 @@ async function saveStudent() {
 
 // ================= SCHEDULE (port of 2.0 getPrivates + applyExceptionsToPrivates_ + renderDynScheduleList_) =================
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+let monthTotal = 0;
 let weekOffset = 0, weekRows = [], weekSlots = [], weekEx = [], weekAtt = [], weekPay = [], weekLoading = 0;
 
 const ymd = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
@@ -362,20 +386,21 @@ function shiftWeek(n) { weekOffset = n === 0 ? 0 : weekOffset + n; loadWeek(); }
 
 async function loadWeek() {
   const wd = weekDates(), ws = ymd(wd[0].date), we = ymd(wd[6].date), my = ++weekLoading;
-  $('wkLabel').textContent = $('attWkLabel').textContent = (weekOffset === 0 ? 'This week · ' : '') + wd[0].label + ' – ' + wd[6].label;
-  $('schedGrid').innerHTML = $('attList').innerHTML = '<div class="center">Loading…</div>';
-  const att = curTab === 'attendance';
-  const [L, X, S, A, P] = await Promise.all([
+  $('wkLabel').textContent = $('attWkLabel').textContent = $('payWkLabel').textContent = (weekOffset === 0 ? 'This week · ' : '') + wd[0].label + ' – ' + wd[6].label;
+  $('schedGrid').innerHTML = $('attList').innerHTML = $('balList').innerHTML = '<div class="center">Loading…</div>';
+  const att = curTab === 'attendance' || curTab === 'payments', mStart = ymd(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const [L, X, S, A, P, M] = await Promise.all([
     sb.from('private_lessons').select('*').not('status', 'in', '("Cancelled","Dropped")'),
     sb.from('schedule_exceptions').select('*').eq('week_start', ws).not('status', 'in', '("Deleted","Expired")'),
     sb.from('available_slots').select('*').eq('active', true),
     att ? sb.from('attendance').select('*').eq('week_start', ws) : { data: [] },
-    att ? sb.from('payments').select('*').eq('week_start', ws) : { data: [] }
+    att ? sb.from('payments').select('*').eq('week_start', ws) : { data: [] },
+    curTab === 'payments' ? sb.from('payments').select('amount').gte('date', mStart) : { data: [] }
   ]);
   if (my !== weekLoading) return;
   const err = L.error || X.error || S.error || A.error || P.error;
   if (err) { $('schedGrid').innerHTML = $('attList').innerHTML = '<div class="msg err">' + esc(err.message) + '</div>'; return; }
-  weekAtt = A.data; weekPay = P.data;
+  weekAtt = A.data; weekPay = P.data; monthTotal = (M.data || []).reduce((t, x) => t + (+x.amount || 0), 0);
   const base = L.data.filter(p => !(p.start_date && p.start_date > we) && !(p.end_date && p.end_date <= ws));
   weekEx = X.data;
   weekRows = applyExceptions(base, X.data);
@@ -383,7 +408,7 @@ async function loadWeek() {
   const coaches = [...new Set(weekRows.map(p => p.coach).concat(weekSlots.map(s => s.coach)).filter(Boolean))].sort();
   const cf = $('coachFilter'), cur = cf.value;
   cf.innerHTML = '<option value="">All coaches</option>' + coaches.map(c => `<option${c === cur ? ' selected' : ''}>${esc(c)}</option>`).join('');
-  if (att) renderAtt(); else renderWeek();
+  if (curTab === 'payments') renderPay(); else if (att) renderAtt(); else renderWeek();
 }
 
 function applyExceptions(lessons, exs) {
@@ -682,13 +707,58 @@ async function markAtt(id, status) {
   renderAtt();
 }
 
+function afterPay(delta) {
+  if (curTab !== 'payments') return renderAtt();
+  monthTotal += delta; renderPay();
+}
+
+// ================= PAYMENTS TAB =================
+const money = n => '$' + (Math.round(n * 100) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 });
+function renderPay() {
+  // Same rules as 2.0 getOutstandingBalances: skip lessons marked Cancelled/Absent in attendance
+  const skip = new Set(weekAtt.filter(a => a.status === 'Cancelled' || a.status === 'Absent').map(a => a.lesson_id));
+  const stu = {}; students.forEach(s => stu[s.id] = s);
+  const bals = weekRows.filter(p => p.status !== 'Cancelled' && !skip.has(attKey(p))).map(p => {
+    const owed = priceNum(p), paid = paidOf(p);
+    return { p, owed, paid: paid.amt, method: paid.method, bal: owed - paid.amt };
+  }).sort((a, b) => (b.bal > 0) - (a.bal > 0) || DAYS.indexOf(a.p.day) - DAYS.indexOf(b.p.day) || timeVal(a.p.time) - timeVal(b.p.time));
+  const weekTotal = weekPay.reduce((t, x) => t + (+x.amount || 0), 0), unpaid = bals.filter(b => b.bal > 0);
+  $('pm_week').textContent = money(weekTotal); $('pm_out').textContent = money(unpaid.reduce((t, b) => t + b.bal, 0));
+  $('pm_month').textContent = money(monthTotal); $('pm_unpaid').textContent = unpaid.length;
+  $('balList').innerHTML = bals.length ? bals.map(b => {
+    const p = b.p, k = esc(p.id), s = stu[p.student_id] || {};
+    const phone = s.parent_phone ? `<a href="sms:${esc(String(s.parent_phone).replace(/\D/g, ''))}">📱 ${esc(s.parent_phone)}</a>` : '';
+    return `<div class="arow"><div class="who"><b>${esc(p.student_name)}</b><small>${esc(p.day)} ${esc(p.time)} · owed ${money(b.owed)}${b.paid ? ' · paid ' + money(b.paid) : ''}</small>${b.bal > 0 ? phone : ''}</div>
+      ${b.bal > 0 ? `<div class="bal">${money(b.bal)} due</div><button class="paybtn" onclick="openPay('${k}')">$ Record Payment</button>`
+        : `<span class="paid" style="cursor:pointer" title="Tap to remove" onclick="undoPay('${k}')">✓ Paid ${money(b.paid)}${b.method ? ' · ' + esc(b.method) : ''}</span>`}</div>`;
+  }).join('') : '<div class="center">No lessons this week</div>';
+  // history filter: students with a lesson this week or a payment this week, plus everyone active
+  const f = $('histFilter'), cur = f.value;
+  f.innerHTML = '<option value="">This week</option>' + students.filter(isOn).map(s => `<option value="${esc(s.id)}"${s.id === cur ? ' selected' : ''}>${esc(s.first_name)} ${esc(s.last_name)}</option>`).join('');
+  loadHistory();
+}
+async function loadHistory() {
+  const sid = $('histFilter').value; let rows = weekPay;
+  if (sid) {
+    $('histList').innerHTML = '<div class="center">Loading…</div>';
+    const r = await sb.from('payments').select('*').eq('student_id', sid).order('date', { ascending: false }).limit(200);
+    if (r.error) { $('histList').innerHTML = '<div class="msg err">' + esc(r.error.message) + '</div>'; return; }
+    rows = r.data;
+  } else rows = [...rows].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const tot = rows.reduce((t, x) => t + (+x.amount || 0), 0);
+  $('histList').innerHTML = rows.length ? rows.map(x => `<div class="arow"><div class="who"><b>${esc(x.student_name)}</b><small>${esc(x.date || '')} · ${esc(x.day || '')}${x.lesson_type ? ' · ' + esc(x.lesson_type) : ''}</small></div>
+      <div class="tc">${esc(x.method || '')}</div><div class="bal ok">${money(+x.amount || 0)}</div></div>`).join('')
+      + `<div class="arow" style="justify-content:flex-end;font-weight:600">${rows.length} payment${rows.length === 1 ? '' : 's'} · ${money(tot)}</div>`
+    : '<div class="center">No payments</div>';
+}
+
 async function undoPay(id) {
   const p = weekRows.find(r => r.id === id && r.status !== 'Cancelled'); if (!p) return;
   const rows = weekPay.filter(x => x.lesson_id === p.id), total = rows.reduce((t, x) => t + (+x.amount || 0), 0);
   if (!rows.length || !confirm('Remove the $' + total.toFixed(0) + ' payment for ' + p.student_name + ' this week?')) return;
   const res = await sb.from('payments').delete().in('id', rows.map(x => x.id));
   if (res.error) return alert(res.error.message);
-  weekPay = weekPay.filter(x => !rows.includes(x)); renderAtt();
+  weekPay = weekPay.filter(x => !rows.includes(x)); afterPay(-total);
 }
 function openPay(id) {
   qpRow = weekRows.find(r => r.id === id && r.status !== 'Cancelled'); if (!qpRow) return;
@@ -703,7 +773,7 @@ async function savePay(method) {
   const res = await sb.from('payments').insert({ gym_id: gymId, student_id: p.student_id, student_name: p.student_name, lesson_id: p.id, day: p.day, amount, method,
     date: ymd(new Date()), week_start: weekStartStr(), lesson_type: p.lesson_type || 'Solo' }).select().single();
   if (res.error) { $('qp_msg').className = 'msg err'; $('qp_msg').textContent = res.error.message; return; }
-  weekPay.push(res.data); $('payModal').classList.add('hidden'); renderAtt();
+  weekPay.push(res.data); $('payModal').classList.add('hidden'); afterPay(amount);
 }
 
 // Tap an "Away" row → undo this week's cancel/move
