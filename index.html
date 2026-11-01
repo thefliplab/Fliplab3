@@ -1489,7 +1489,7 @@ async function savePay(method) {
   if (!(amount > 0)) { $('qp_msg').className = 'msg err'; $('qp_msg').textContent = 'Enter an amount.'; return; }
   $('qp_msg').className = 'msg'; $('qp_msg').textContent = 'Saving…';
   const res = await sb.from('payments').insert({ gym_id: gymId, student_id: p.student_id, student_name: p.student_name, lesson_id: p.id, day: p.day, amount, method,
-    date: ymd(new Date()), week_start: weekStartStr(), lesson_type: p.lesson_type || null, extra: $('qp_special').checked ? { Adjusted: 'Yes' } : {} }).select().single();
+    date: dateFor(p.day) || ymd(new Date()), week_start: weekStartStr(), lesson_type: p.lesson_type || null, extra: $('qp_special').checked ? { Adjusted: 'Yes' } : {} }).select().single();
   if (res.error) { $('qp_msg').className = 'msg err'; $('qp_msg').textContent = res.error.message; return; }
   weekPay.push(res.data); $('payModal').classList.add('hidden'); afterPay(amount);
 }
