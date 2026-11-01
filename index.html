@@ -292,6 +292,7 @@
       <label>Status</label>
       <select id="f_status"><option>Active</option><option>Waitlist</option><option>Drop-In</option><option>Inactive</option><option>Dropped</option></select>
       <div class="chk"><input type="checkbox" id="f_unsubscribed"><label for="f_unsubscribed">Unsubscribed from emails/texts</label></div>
+      <div class="chk"><input type="checkbox" id="f_trade"><label for="f_trade">🤝 Trade (no charge — lessons never show as owed or in money totals)</label></div>
       <div class="row2">
         <button class="btn ghost" onclick="go('students')">Close</button>
         <button class="btn" onclick="saveStudent()">Save</button>
@@ -623,6 +624,9 @@ const coachNames = () => [...new Set(coachRows.filter(c => c.active).map(c => c.
 const mainCoach = () => (coachRows.find(c => c.active && c.email && c.email.toLowerCase() === myEmail) || {}).name || '';
 // Another coach's lesson (e.g. Coach Emma): shown on the schedule, but paid to that coach directly → kept out of Flip Lab money
 const isOther = p => { const m = mainCoach(); return !!(p && p.coach && m && p.coach !== m); };
+// Trade students (lessons swapped for services): never owed, never in money totals
+const isTrade = p => { const s = p && students.find(x => x.id === p.student_id); return !!(s && (s.extra || {}).Trade === 'Yes'); };
+const noCharge = p => isOther(p) || isTrade(p);
 function renderCoaches() {
   $('co_name').value = $('co_phone').value = $('co_spec').value = ''; $('coMsg').textContent = '';
   $('coachList').innerHTML = coachRows.map(c => `<div class="arow" style="padding:6px 0"><div class="who"><b style="${c.active ? '' : 'color:#aaa'}">${esc(c.name)}</b><small>${esc([c.specialties, c.phone].filter(Boolean).join(' · '))}</small></div>
@@ -735,7 +739,7 @@ function openEdit(id) {
   $('f_skill_level').innerHTML = '<option value=""></option>' + LV.concat(s.skill_level && !LV.includes(s.skill_level) ? [s.skill_level] : []).map(v => `<option>${esc(v)}</option>`).join('');
   FIELDS.forEach(f => $('f_' + f).value = s[f] ?? '');
   XF.forEach(f => $('x_' + f).value = x[f] ?? '');
-  $('f_status').value = s.status || 'Active'; $('f_unsubscribed').checked = !!s.unsubscribed;
+  $('f_status').value = s.status || 'Active'; $('f_unsubscribed').checked = !!s.unsubscribed; $('f_trade').checked = (s.extra || {}).Trade === 'Yes';
   $('editMsg').textContent = '';
   $('newHdr').classList.toggle('hidden', !!id); $('sdTabs').classList.toggle('hidden', !id); $('sdTop').innerHTML = '';
   show('editView'); window.scrollTo(0, 0);
@@ -748,6 +752,7 @@ async function saveStudent() {
   const st = $('f_status').value;
   const cur = students.find(x => x.id === editingId) || {}, prevStatus = cur.status, extra = { ...(cur.extra || {}) };
   XF.forEach(f => { if (f !== 'WaiverSigned') { const v = $('x_' + f).value.trim(); if (v) extra[f] = v; else delete extra[f]; } });
+  if ($('f_trade').checked) extra.Trade = 'Yes'; else delete extra.Trade;
   const rec = { gym_id: gymId, status: st, active: !OFF.includes(st), unsubscribed: $('f_unsubscribed').checked, extra };
   FIELDS.forEach(f => { let v = $('f_' + f).value.trim(); if (f.endsWith('_phone')) v = fmtPhone(v); rec[f] = v === '' ? null : v; });
   if (!rec.first_name) { $('editMsg').className = 'msg err'; $('editMsg').textContent = 'First name is required.'; return; }
@@ -812,11 +817,11 @@ function renderSdTop(s) {
   const wk = weekDates();
   let week = mine.length ? mine.map(p => {
     const a = attOf(p), pd = paidOf(p), st = a ? a.status : '';
-    return `<div class="wkline"><b>${esc(p.day)} ${esc(p.time)}</b><span style="color:#888">${esc(p.coach || '')}${p.status === 'Cancelled' || isOther(p) ? '' : ' · ' + esc(p.lesson_type || 'Solo') + ' · $' + priceNum(p)}</span>
+    return `<div class="wkline"><b>${esc(p.day)} ${esc(p.time)}</b><span style="color:#888">${esc(p.coach || '')}${p.status === 'Cancelled' || noCharge(p) ? '' : ' · ' + esc(p.lesson_type || 'Solo') + ' · $' + priceNum(p)}</span>
       ${p.status === 'Cancelled' ? '<span class="tag t-away">Cancelled this week</span>' : st === 'Attended' ? '<span class="tag t-photo">✓ Here</span>' : st ? `<span class="tag t-nophoto">${esc(st)}</span>` : '<span class="tag t-ex">Upcoming</span>'}
-      ${p.status === 'Cancelled' || isOther(p) ? '' : pd.amt > 0 ? `<span class="tag t-photo">Paid $${pd.amt.toFixed(0)}</span>` : '<span class="tag t-summer">Unpaid</span>'}</div>`;
+      ${p.status === 'Cancelled' || noCharge(p) ? '' : pd.amt > 0 ? `<span class="tag t-photo">Paid $${pd.amt.toFixed(0)}</span>` : '<span class="tag t-summer">Unpaid</span>'}</div>`;
   }).join('') : `<div class="wkline" style="color:#888">No lesson ${weekOffset === 0 ? 'this week' : 'the week of ' + wk[0].label}</div>`;
-  const live = mine.filter(p => p.status !== 'Cancelled' && !isOther(p)), owing = live.filter(p => priceNum(p) - paidOf(p).amt > 0 && !paidOf(p).adj);
+  const live = mine.filter(p => p.status !== 'Cancelled' && !noCharge(p)), owing = live.filter(p => priceNum(p) - paidOf(p).amt > 0 && !paidOf(p).adj);
   const qa = [];
   if (['Inactive','Dropped','Waitlist'].includes(s.status)) qa.push(`<button class="pri" onclick="sdStatus('Active')">↺ Re-enroll (Active)</button>`);
   else {
@@ -832,7 +837,7 @@ function renderSdTop(s) {
     <div class="qa">${qa.join('')}</div>`;
 }
 function sdRemindText() {
-  const s = sd.s, owed = weekRows.filter(p => p.student_id === s.id && p.status !== 'Cancelled' && !isOther(p)).reduce((t, p) => t + Math.max(0, priceNum(p) - paidOf(p).amt), 0);
+  const s = sd.s, owed = weekRows.filter(p => p.student_id === s.id && p.status !== 'Cancelled' && !noCharge(p)).reduce((t, p) => t + Math.max(0, priceNum(p) - paidOf(p).amt), 0);
   return 'Hi' + (s.parent_name ? ' ' + s.parent_name.split(' ')[0] : '') + '! Just a friendly reminder that ' + s.first_name + "'s lesson this week (" + money(owed) + ') is still open. Cash, Venmo or Zelle all work. Thank you!';
 }
 async function sdCancelWeek() {
@@ -1213,7 +1218,7 @@ function renderAtt() {
         <div class="tc">${esc(p.time)}<br>${esc(p.coach || 'TBD')}</div>
         <button class="here${st === 'Attended' ? ' on' : ''}" onclick="markAtt('${k}','${st === 'Attended' ? '' : 'Attended'}')" title="${st === 'Attended' ? 'Tap again to clear' : ''}">${st === 'Attended' ? '✓ Here' : 'Here'}</button>
         <select class="nothere${NOT_HERE.includes(st) ? ' on' : ''}" onchange="markAtt('${k}',this.value)"><option value="">${st ? '— Clear' : '— Not Here'}</option>${NOT_HERE.map(o => `<option${o === st ? ' selected' : ''}>${o}</option>`).join('')}</select>
-        ${o ? '' : pd.amt > 0 ? `<span class="paid" style="cursor:pointer" title="Tap to edit" onclick="undoPay('${k}')">✓ Paid $${pd.amt.toFixed(0)}${pd.method ? ' · ' + esc(pd.method) : ''}${pd.adj ? ' · ★' : ''}</span>` : `<button class="paybtn" onclick="openPay('${k}')">$ Record Payment</button>`}</div>`;
+        ${o ? '' : isTrade(p) ? '<span class="paid" style="background:#EFE7FF;color:#3C3489">🤝 Trade</span>' : pd.amt > 0 ? `<span class="paid" style="cursor:pointer" title="Tap to edit" onclick="undoPay('${k}')">✓ Paid $${pd.amt.toFixed(0)}${pd.method ? ' · ' + esc(pd.method) : ''}${pd.adj ? ' · ★' : ''}</span>` : `<button class="paybtn" onclick="openPay('${k}')">$ Record Payment</button>`}</div>`;
     });
     html += '</div>';
   });
@@ -1251,7 +1256,7 @@ function renderPay() {
     const c = clsSched.find(x => x.id === a.schedule_id) || { id: a.schedule_id, class_name: a.class_name, day: a.day, time: '' };
     return { ...clsObj(c, { student_id: a.student_id, student_name: a.student_name }), cls: c.class_name || 'Class' };
   });
-  const bals = weekRows.filter(p => p.status !== 'Cancelled' && !isOther(p) && !skip.has(attKey(p))).concat(clsItems).map(p => {
+  const bals = weekRows.filter(p => p.status !== 'Cancelled' && !noCharge(p) && !skip.has(attKey(p))).concat(clsItems).map(p => {
     const paid = paidOf(p), owed = paid.adj ? paid.amt : priceNum(p);
     return { p, owed, paid: paid.amt, method: paid.method, adj: paid.adj, bal: owed - paid.amt };
   }).sort((a, b) => (b.bal > 0) - (a.bal > 0) || DAYS.indexOf(a.p.day) - DAYS.indexOf(b.p.day) || timeVal(a.p.time) - timeVal(b.p.time));
@@ -1502,7 +1507,7 @@ function renderDash() {
   const live = weekRows.filter(p => p.status !== 'Cancelled');
   const today = live.filter(p => p.day === todayName).sort((a, b) => timeVal(a.time) - timeVal(b.time));
   // Unpaid = marked Here this week with no payment (same as 2.0 unpaidAttended)
-  const unpaid = live.filter(p => !isOther(p) && (attOf(p) || {}).status === 'Attended' && !(paidOf(p).amt > 0));
+  const unpaid = live.filter(p => !noCharge(p) && (attOf(p) || {}).status === 'Attended' && !(paidOf(p).amt > 0));
   const wl = waitlist.filter(w => (w.extra || {}).Unsubscribed !== 'Yes');
   $('d_active').textContent = students.filter(x => x.status === 'Active').length;
   $('d_today').textContent = today.length; $('d_unpaid').textContent = unpaid.length; $('d_wl').textContent = waitlist.length;
@@ -1521,7 +1526,7 @@ function renderDash() {
     return `<div class="arow" style="${past ? 'opacity:.55;' : ''}${o && !isNow ? 'background:#FBEAF0;border-left:4px solid #D4537E;' : ''}${isNow ? 'background:#E8F7F1;border-left:4px solid #1c9a73;' : ''}"><span class="tag" style="background:${isNow ? '#1c9a73;color:#fff' : '#FAECE7;color:#712B13'};min-width:62px;text-align:center;font-size:11px">${isNow ? (t0 <= nowMin ? 'NOW' : 'NEXT') + '<br>' : ''}${esc(p.time)}</span>
       <div class="who"><b>${esc(p.student_name)}</b> ${p.lesson_type === 'Shared' ? '<span class="tag t-shared">Shared</span>' : ''}${photo(p.student_id)}<small>${esc(p.duration || '30 min')} · ${esc(p.coach || 'Coach')}</small></div>
       ${act ? `<button class="here${st === 'Attended' ? ' on' : ''}" onclick="markAtt('${k}','${st === 'Attended' ? '' : 'Attended'}')">${st === 'Attended' ? '✓ Here' : 'Here'}</button>
-        ${o ? '' : pd.amt > 0 ? `<span class="paid" style="cursor:pointer" onclick="undoPay('${k}')">✓ $${pd.amt.toFixed(0)}</span>` : `<button class="paybtn" onclick="openPay('${k}')">$ Pay</button>`}` : ''}</div>`;
+        ${o ? '' : isTrade(p) ? '<span class="paid" style="background:#EFE7FF;color:#3C3489">🤝 Trade</span>' : pd.amt > 0 ? `<span class="paid" style="cursor:pointer" onclick="undoPay('${k}')">✓ $${pd.amt.toFixed(0)}</span>` : `<button class="paybtn" onclick="openPay('${k}')">$ Pay</button>`}` : ''}</div>`;
   };
   const clsRow = c => { const n = clsRoster.filter(r => r.schedule_id === c.id).length;
     return `<div class="arow"><span class="tag" style="background:#E6F1FB;color:#185FA5;min-width:62px;text-align:center;font-size:11px">${esc(c.time)}</span><div class="who"><b>🤸 ${esc(c.class_name)}</b><small>Class · ${n} enrolled · $${clsPrice(c)}</small></div>${showTomorrow ? '' : `<button class="paybtn" onclick="attMode='classes';ss.set('attMode','classes');setAttModeButtons();go('attendance')">Roster →</button>`}</div>`; };
