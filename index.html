@@ -517,7 +517,8 @@ async function saveStudent() {
     ? await sb.from('students').update(rec).eq('id', editingId)
     : await sb.from('students').insert(rec);
   if (res.error) { $('editMsg').className = 'msg err'; $('editMsg').textContent = res.error.message; return; }
-  if (editingId && st !== prevStatus) { const e = await syncWaitlist({ ...cur, ...rec, id: editingId }, st); if (e) { $('editMsg').className = 'msg err'; $('editMsg').textContent = 'Saved, but the waitlist list did not update: ' + e; return; } }
+  // Always line the list entry up for Waitlist / Drop-In (fixes earlier saves); otherwise only when Status changed
+  if (editingId && (st !== prevStatus || st === 'Waitlist' || st === 'Drop-In')) { const e = await syncWaitlist({ ...cur, ...rec, id: editingId }, st); if (e) { $('editMsg').className = 'msg err'; $('editMsg').textContent = 'Saved, but the waitlist list did not update: ' + e; return; } }
   await loadStudents();
   if (editingId) { $('editMsg').className = 'msg'; $('editMsg').textContent = '✓ Saved'; const s = students.find(x => x.id === editingId); if (s) renderSdTop(s); }
   else show('studentsView');
