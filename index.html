@@ -86,7 +86,7 @@
 <body>
 <nav><b>Flip<span>Lab</span> 3.0</b>
   <div id="tabs" class="hidden"><button id="tabBtn_schedule" onclick="go('schedule')">Schedule</button><button id="tabBtn_attendance" onclick="go('attendance')">Attendance</button><button id="tabBtn_openings" onclick="go('openings')">Openings</button><button id="tabBtn_payments" onclick="go('payments')">Payments</button><button id="tabBtn_students" onclick="go('students')">Students</button></div>
-  <button id="outBtn" class="hidden" onclick="signOut()">Sign out</button></nav>
+  <button id="outBtn" class="hidden" onclick="openAcct()">⚙ Account</button></nav>
 <main>
 
   <!-- Login -->
@@ -271,6 +271,19 @@
     <div id="lm_msg" class="msg"></div>
   </div>
 </div>
+<!-- Account: change password + sign out -->
+<div class="ovl hidden" id="acctModal" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="mdl">
+    <div class="mh"><b>Account</b><button class="x" onclick="$('acctModal').classList.add('hidden')">✕</button></div>
+    <div id="acctEmail" style="font-size:13px;color:var(--muted);margin-bottom:10px"></div>
+    <label>New password</label><input id="pw1" type="password" autocomplete="new-password">
+    <label>Type it again</label><input id="pw2" type="password" autocomplete="new-password">
+    <button class="btn" onclick="changePw()">Change password</button>
+    <div id="pwMsg" class="msg"></div>
+    <button class="btn ghost" style="margin-top:14px" onclick="$('acctModal').classList.add('hidden');signOut()">Sign out</button>
+  </div>
+</div>
+
 <!-- Quick pay (port of 2.0 modal-quick-pay) -->
 <div class="ovl hidden" id="payModal" onclick="if(event.target===this)this.classList.add('hidden')">
   <div class="mdl">
@@ -345,6 +358,22 @@ async function doAuth() {
   boot();
 }
 
+async function openAcct() {
+  const { data: { user } } = await sb.auth.getUser();
+  $('acctEmail').textContent = user ? 'Signed in as ' + user.email : '';
+  $('pw1').value = $('pw2').value = ''; $('pwMsg').textContent = '';
+  $('acctModal').classList.remove('hidden');
+}
+async function changePw() {
+  const a = $('pw1').value, b = $('pw2').value, m = $('pwMsg');
+  m.className = 'msg err';
+  if (a.length < 8) return m.textContent = 'Use at least 8 characters.';
+  if (a !== b) return m.textContent = "The two passwords don't match.";
+  m.className = 'msg'; m.textContent = 'Saving…';
+  const { error } = await sb.auth.updateUser({ password: a });
+  if (error) { m.className = 'msg err'; m.textContent = error.message; return; }
+  m.textContent = '✓ Password changed. Use it next time you sign in.'; $('pw1').value = $('pw2').value = '';
+}
 async function signOut() { await sb.auth.signOut(); show('loginView'); }
 
 async function boot() {
@@ -735,7 +764,8 @@ function renderAtt() {
   DAYS.forEach(day => {
     const ls = lessons.filter(p => p.day === day); if (!ls.length) return;
     const dd = weekDates().find(d => d.name === day);
-    html += `<div class="dayhd">${day}<span>${dd.label}</span></div><div class="card" style="padding:0;margin-bottom:6px;border-radius:0 0 10px 10px;overflow:hidden">`;
+    const unmarked = ls.filter(p => !attOf(p)).length;
+    html += `<div class="dayhd" style="display:flex;align-items:center">${day}<span>${dd.label}</span>${unmarked ? `<button class="here" style="margin-left:auto;padding:3px 9px" onclick="allHere('${day}')">✓ All here (${unmarked})</button>` : ''}</div><div class="card" style="padding:0;margin-bottom:6px;border-radius:0 0 10px 10px;overflow:hidden">`;
     ls.forEach(p => {
       const st = (attOf(p) || {}).status || '', pd = paidOf(p), s = stu[p.student_id] || {}, k = esc(p.id);
       const phone = s.parent_phone ? `<a href="sms:${esc(String(s.parent_phone).replace(/\D/g, ''))}">📱 ${esc(s.parent_phone)}</a>` : '';
@@ -783,7 +813,8 @@ function renderPay() {
   $('pm_month').textContent = money(monthTotal); $('pm_unpaid').textContent = unpaid.length;
   $('balList').innerHTML = bals.length ? bals.map(b => {
     const p = b.p, k = esc(p.id), s = stu[p.student_id] || {};
-    const phone = s.parent_phone ? `<a href="sms:${esc(String(s.parent_phone).replace(/\D/g, ''))}">📱 ${esc(s.parent_phone)}</a>` : '';
+    const remind = 'Hi' + (s.parent_name ? ' ' + s.parent_name.split(' ')[0] : '') + '! Just a friendly reminder that ' + (p.student_name || '').split(' ')[0] + "'s " + p.day + ' lesson this week (' + money(b.bal) + ') is still open. Cash, Venmo or Zelle all work. Thank you!';
+    const phone = s.parent_phone ? `<a href="${smsHref(s.parent_phone, remind)}">📱 Remind</a> <span style="font-size:11px;color:#888">${esc(s.parent_phone)}</span>` : '';
     return `<div class="arow"><div class="who"><b>${esc(p.student_name)}</b><small>${esc(p.day)} ${esc(p.time)} · owed ${money(b.owed)}${b.paid ? ' · paid ' + money(b.paid) : ''}</small>${b.bal > 0 ? phone : ''}</div>
       ${b.bal > 0 ? `<div class="bal">${money(b.bal)} due</div><button class="paybtn" onclick="openPay('${k}')">$ Record Payment</button>${b.paid ? `<button class="paybtn" style="background:#EFE7FF;color:#3C3489" onclick="markSpecial('${k}')">★ Special price</button>` : ''}`
         : `<span class="paid" style="cursor:pointer" title="Tap to remove" onclick="undoPay('${k}')">✓ Paid ${money(b.paid)}${b.method ? ' · ' + esc(b.method) : ''}${b.adj ? ' · ★ special' : ''}</span>`}</div>`;
@@ -829,6 +860,15 @@ async function undoPay(id) {
   const res = await sb.from('payments').delete().in('id', rows.map(x => x.id));
   if (res.error) return alert(res.error.message);
   weekPay = weekPay.filter(x => !rows.includes(x)); afterPay(-total);
+}
+// Mark every unmarked lesson that day as Here (leaves Absent/Late/etc. alone)
+async function allHere(day) {
+  const ls = weekRows.filter(p => p.day === day && p.status !== 'Cancelled' && !attOf(p));
+  if (!ls.length || !confirm('Mark ' + ls.length + ' unmarked lesson' + (ls.length === 1 ? '' : 's') + ' on ' + day + ' as Here?')) return;
+  const res = await sb.from('attendance').insert(ls.map(p => ({ gym_id: gymId, student_id: p.student_id, student_name: p.student_name, lesson_id: attKey(p), coach: p.coach,
+    date: dateFor(p.day), time: p.time, week_start: weekStartStr(), status: 'Attended', extra: { Date: p.day } }))).select();
+  if (res.error) return alert(res.error.message);
+  weekAtt.push(...res.data); renderAtt();
 }
 function openPay(id) {
   qpRow = weekRows.find(r => r.id === id && r.status !== 'Cancelled'); if (!qpRow) return;
