@@ -243,6 +243,7 @@
     <div class="mh"><b>Record payment</b><button class="x" onclick="$('payModal').classList.add('hidden')">✕</button></div>
     <div id="qp_who" style="font-weight:600"></div>
     <label>Amount</label><input id="qp_amount" type="number" step="1" min="0">
+    <div class="chk"><input type="checkbox" id="qp_special"><label for="qp_special">Special price — counts as paid in full</label></div>
     <div class="row2" style="grid-template-columns:1fr 1fr 1fr">
       <button class="btn" onclick="savePay('Cash')">Cash</button><button class="btn" onclick="savePay('Venmo')">Venmo</button><button class="btn" onclick="savePay('Zelle')">Zelle</button>
     </div>
@@ -664,7 +665,8 @@ const NOT_HERE = ['Absent','Cancelled','Rescheduled','Late'];
 // Claimed spots use a stable attendance key (same as 2.0): ATT_<student>_<day>_<time>_<weekStart>
 const attKey = p => p.id.startsWith('EX_ONLY_') ? 'ATT_' + p.student_id + '_' + p.day + '_' + p.time + '_' + weekStartStr() : p.id;
 const attOf = p => weekAtt.find(a => a.lesson_id === attKey(p));
-const paidOf = p => weekPay.filter(x => x.lesson_id === p.id).reduce((t, x) => ({ amt: t.amt + (+x.amount || 0), method: x.method || t.method }), { amt: 0, method: '' });
+const isAdj = x => (x.extra || {}).Adjusted === 'Yes';
+const paidOf = p => weekPay.filter(x => x.lesson_id === p.id).reduce((t, x) => ({ amt: t.amt + (+x.amount || 0), method: x.method || t.method, adj: t.adj || isAdj(x) }), { amt: 0, method: '', adj: false });
 const priceNum = p => parseFloat(String(p.price || '').replace(/[^0-9.]/g, '')) || priceFor(p.duration, p.lesson_type === 'Shared' ? 'Shared' : 'Solo').slice(1) * 1;
 let qpRow = null;
 
@@ -688,7 +690,7 @@ function renderAtt() {
         <div class="tc">${esc(p.time)}<br>${esc(p.coach || 'TBD')}</div>
         <button class="here${st === 'Attended' ? ' on' : ''}" onclick="markAtt('${k}','${st === 'Attended' ? '' : 'Attended'}')" title="${st === 'Attended' ? 'Tap again to clear' : ''}">${st === 'Attended' ? '✓ Here' : 'Here'}</button>
         <select class="nothere${NOT_HERE.includes(st) ? ' on' : ''}" onchange="markAtt('${k}',this.value)"><option value="">${st ? '— Clear' : '— Not Here'}</option>${NOT_HERE.map(o => `<option${o === st ? ' selected' : ''}>${o}</option>`).join('')}</select>
-        ${pd.amt > 0 ? `<span class="paid" style="cursor:pointer" title="Tap to remove" onclick="undoPay('${k}')">✓ Paid $${pd.amt.toFixed(0)}${pd.method ? ' · ' + esc(pd.method) : ''}</span>` : `<button class="paybtn" onclick="openPay('${k}')">$ Record Payment</button>`}</div>`;
+        ${pd.amt > 0 ? `<span class="paid" style="cursor:pointer" title="Tap to remove" onclick="undoPay('${k}')">✓ Paid $${pd.amt.toFixed(0)}${pd.method ? ' · ' + esc(pd.method) : ''}${pd.adj ? ' · ★' : ''}</span>` : `<button class="paybtn" onclick="openPay('${k}')">$ Record Payment</button>`}</div>`;
     });
     html += '</div>';
   });
@@ -720,8 +722,8 @@ function renderPay() {
   const skip = new Set(weekAtt.filter(a => a.status === 'Cancelled' || a.status === 'Absent').map(a => a.lesson_id));
   const stu = {}; students.forEach(s => stu[s.id] = s);
   const bals = weekRows.filter(p => p.status !== 'Cancelled' && !skip.has(attKey(p))).map(p => {
-    const owed = priceNum(p), paid = paidOf(p);
-    return { p, owed, paid: paid.amt, method: paid.method, bal: owed - paid.amt };
+    const paid = paidOf(p), owed = paid.adj ? paid.amt : priceNum(p);
+    return { p, owed, paid: paid.amt, method: paid.method, adj: paid.adj, bal: owed - paid.amt };
   }).sort((a, b) => (b.bal > 0) - (a.bal > 0) || DAYS.indexOf(a.p.day) - DAYS.indexOf(b.p.day) || timeVal(a.p.time) - timeVal(b.p.time));
   const weekTotal = weekPay.reduce((t, x) => t + (+x.amount || 0), 0), unpaid = bals.filter(b => b.bal > 0);
   $('pm_week').textContent = money(weekTotal); $('pm_out').textContent = money(unpaid.reduce((t, b) => t + b.bal, 0));
@@ -730,8 +732,8 @@ function renderPay() {
     const p = b.p, k = esc(p.id), s = stu[p.student_id] || {};
     const phone = s.parent_phone ? `<a href="sms:${esc(String(s.parent_phone).replace(/\D/g, ''))}">📱 ${esc(s.parent_phone)}</a>` : '';
     return `<div class="arow"><div class="who"><b>${esc(p.student_name)}</b><small>${esc(p.day)} ${esc(p.time)} · owed ${money(b.owed)}${b.paid ? ' · paid ' + money(b.paid) : ''}</small>${b.bal > 0 ? phone : ''}</div>
-      ${b.bal > 0 ? `<div class="bal">${money(b.bal)} due</div><button class="paybtn" onclick="openPay('${k}')">$ Record Payment</button>`
-        : `<span class="paid" style="cursor:pointer" title="Tap to remove" onclick="undoPay('${k}')">✓ Paid ${money(b.paid)}${b.method ? ' · ' + esc(b.method) : ''}</span>`}</div>`;
+      ${b.bal > 0 ? `<div class="bal">${money(b.bal)} due</div><button class="paybtn" onclick="openPay('${k}')">$ Record Payment</button>${b.paid ? `<button class="paybtn" style="background:#EFE7FF;color:#3C3489" onclick="markSpecial('${k}')">★ Special price</button>` : ''}`
+        : `<span class="paid" style="cursor:pointer" title="Tap to remove" onclick="undoPay('${k}')">✓ Paid ${money(b.paid)}${b.method ? ' · ' + esc(b.method) : ''}${b.adj ? ' · ★ special' : ''}</span>`}</div>`;
   }).join('') : '<div class="center">No lessons this week</div>';
   // history filter: students with a lesson this week or a payment this week, plus everyone active
   const f = $('histFilter'), cur = f.value;
@@ -753,6 +755,20 @@ async function loadHistory() {
     : '<div class="center">No payments</div>';
 }
 
+// Mark this week's payments for a lesson as a special price (2.0 "Adjusted") → counts as paid in full
+async function markSpecial(id) {
+  const p = weekRows.find(r => r.id === id && r.status !== 'Cancelled'); if (!p) return;
+  const rows = weekPay.filter(x => x.lesson_id === p.id), total = rows.reduce((t, x) => t + (+x.amount || 0), 0);
+  if (!rows.length || !confirm('Special price for ' + p.student_name + ' this week?\n\nThe $' + total.toFixed(0) + ' they paid will count as paid in full.')) return;
+  for (const x of rows) {
+    const extra = { ...(x.extra || {}), Adjusted: 'Yes' };
+    const res = await sb.from('payments').update({ extra }).eq('id', x.id);
+    if (res.error) return alert(res.error.message);
+    x.extra = extra;
+  }
+  renderPay();
+}
+
 async function undoPay(id) {
   const p = weekRows.find(r => r.id === id && r.status !== 'Cancelled'); if (!p) return;
   const rows = weekPay.filter(x => x.lesson_id === p.id), total = rows.reduce((t, x) => t + (+x.amount || 0), 0);
@@ -764,7 +780,8 @@ async function undoPay(id) {
 function openPay(id) {
   qpRow = weekRows.find(r => r.id === id && r.status !== 'Cancelled'); if (!qpRow) return;
   $('qp_who').textContent = qpRow.student_name + ' — ' + qpRow.day + ' ' + qpRow.time;
-  $('qp_amount').value = priceNum(qpRow); $('qp_msg').textContent = '';
+  const pd = paidOf(qpRow), left = priceNum(qpRow) - pd.amt;
+  $('qp_amount').value = left > 0 ? left : priceNum(qpRow); $('qp_special').checked = false; $('qp_msg').textContent = '';
   $('payModal').classList.remove('hidden');
 }
 async function savePay(method) {
@@ -772,7 +789,7 @@ async function savePay(method) {
   if (!(amount > 0)) { $('qp_msg').className = 'msg err'; $('qp_msg').textContent = 'Enter an amount.'; return; }
   $('qp_msg').className = 'msg'; $('qp_msg').textContent = 'Saving…';
   const res = await sb.from('payments').insert({ gym_id: gymId, student_id: p.student_id, student_name: p.student_name, lesson_id: p.id, day: p.day, amount, method,
-    date: ymd(new Date()), week_start: weekStartStr(), lesson_type: p.lesson_type || 'Solo' }).select().single();
+    date: ymd(new Date()), week_start: weekStartStr(), lesson_type: p.lesson_type || 'Solo', extra: $('qp_special').checked ? { Adjusted: 'Yes' } : {} }).select().single();
   if (res.error) { $('qp_msg').className = 'msg err'; $('qp_msg').textContent = res.error.message; return; }
   weekPay.push(res.data); $('payModal').classList.add('hidden'); afterPay(amount);
 }
