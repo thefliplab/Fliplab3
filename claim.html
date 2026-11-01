@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claim a spot</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  body { margin:0; font-family:-apple-system, system-ui, Segoe UI, Roboto, Arial, sans-serif; background:#F4F7F6; color:#1f2a28; }
+  .card { max-width:380px; margin:40px auto; background:#fff; border-radius:16px; padding:28px 22px; text-align:center; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .gym { font-weight:700; font-size:18px; } .gym b { color:#1D9E75; }
+  .when { font-size:24px; font-weight:700; margin:6px 0 2px; } .sub { color:#667; font-size:14px; }
+  button { width:100%; margin-top:20px; padding:15px; font-size:17px; font-weight:700; border:0; border-radius:12px; background:#1D9E75; color:#fff; }
+  button:disabled { opacity:.6; }
+  .ok { background:#EAF3DE; color:#27500A; } .no { background:#FCEBEB; color:#791F1F; }
+  .box { margin-top:18px; padding:16px; border-radius:12px; font-size:15px; }
+</style>
+</head>
+<body>
+<div class="card" id="c"><div class="sub">Loading…</div></div>
+<script>
+// Public claim page for an opening texted by FlipLab. First family to tap gets the spot (claim_take in the database).
+const sb = supabase.createClient('https://angmtyojkwlrefxpcgoa.supabase.co', 'sb_publishable_fPciNfnNHpHQikB8mqHNpw_hIVRIGo5');
+const t = new URLSearchParams(location.search).get('t') || '';
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+function show(i) {
+  const head = `<div class="gym">${esc(i.gym || 'Flip Lab')}</div>`;
+  const when = `<div class="when">${esc((i.day || '').slice(0, 3))} ${esc(i.date || '')} · ${esc(i.time || '')}</div><div class="sub">${esc(i.coach || '')} · 30 min · ${esc(i.price || '')} · this week only</div>`;
+  let body;
+  if (i.state === 'open') body = `<div style="margin-top:14px">A spot opened for <b>${esc(i.first)}</b></div>${when}<button id="go" onclick="claim()">Claim this spot</button>`;
+  else if (i.state === 'won') body = `${when}<div class="box ok"><b>You got it!</b><br>${esc(i.first)} is booked. See you then.</div>`;
+  else if (i.state === 'taken') body = `${when}<div class="box no"><b>Sorry, just taken</b><br>Another family claimed it first. You're still on the list for the next one.</div>`;
+  else if (i.state === 'expired') body = `${when}<div class="box no">This opening has passed. You're still on the list for the next one.</div>`;
+  else body = `<div class="box no">This link isn't valid.</div>`;
+  document.getElementById('c').innerHTML = head + body;
+}
+async function load() { const r = await sb.rpc('claim_info', { t }); show(r.error ? { state: 'missing' } : r.data); }
+async function claim() {
+  const b = document.getElementById('go'); b.disabled = true; b.textContent = 'Claiming…';
+  const r = await sb.rpc('claim_take', { t });
+  if (r.error) { b.disabled = false; b.textContent = 'Try again'; return; }
+  show(r.data);
+}
+load();
+</script>
+</body>
+</html>

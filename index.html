@@ -489,6 +489,19 @@
     <div id="ep_msg" class="msg"></div>
   </div>
 </div>
+<!-- Send an opening: claim link per family, first tap wins -->
+<div class="ovl hidden" id="soModal" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="mdl">
+    <div class="mh"><b id="so_title">Send opening</b><button class="x" onclick="$('soModal').classList.add('hidden')">✕</button></div>
+    <div id="so_sub" style="font-size:12px;color:#888;margin:-4px 0 8px"></div>
+    <div id="so_list" style="max-height:38vh;overflow:auto"></div>
+    <div id="so_all" style="font-size:12px;color:#1c7a5a;cursor:pointer;margin:6px 0" onclick="soShowAll = true; soRender()">+ show all waitlist / drop-in</div>
+    <label>Message <span style="color:#aaa">({parent} {kid} {link} fill in per family)</span></label>
+    <textarea id="so_msg" rows="4"></textarea>
+    <button class="btn" id="so_send" onclick="sendOpening()">Send</button>
+    <div id="so_res" class="msg"></div>
+  </div>
+</div>
 <!-- Print schedule (port of 2.0 Print Schedule): portrait letter, one page, size A−/A+/Auto-fit -->
 <div class="ovl hidden" id="printModal">
   <div class="mdl" style="max-width:560px">
@@ -903,6 +916,7 @@ async function loadWeek(quiet) {
   const base = L.data.filter(p => !(p.start_date && p.start_date > we) && !(p.end_date && p.end_date <= ws));
   weekEx = X.data;
   weekRows = applyExceptions(base, X.data);
+  if (curTab === 'dashboard') { const C7 = await sb.from('claim_links').select('student_name,day,time,claimed_at').eq('status', 'won').gte('claimed_at', new Date(Date.now() - 7 * 864e5).toISOString()).order('claimed_at', { ascending: false }); recentClaims = C7.data || []; }
   weekSlots = S.data;
   const coaches = coachNames();
   const cf = $('coachFilter'), cur = cf.value;
@@ -1521,6 +1535,7 @@ function renderDash() {
   if (unpaid.length) alerts.push(['#BA7517', unpaid.length + ' unpaid lesson' + (unpaid.length === 1 ? '' : 's') + ' this week', 'Tap to open Payments', "go('payments')"]);
   opens.map(o => [o, wl.filter(w => matchesSlot(w, o.day, o.time)).length]).filter(x => x[1]).slice(0, 3)
     .forEach(([o, n]) => alerts.push(['#378ADD', o.day + ' ' + o.time + ' slot open', n + ' waitlist match' + (n === 1 ? '' : 'es') + ' · tap for Openings', "go('openings')"]));
+  if (recentClaims.length) alerts.push(['#1D9E75', recentClaims.length + ' spot' + (recentClaims.length === 1 ? '' : 's') + ' claimed from a text', recentClaims.slice(0, 4).map(c => (c.student_name || '').split(' ')[0] + ' ' + SHORT[c.day] + ' ' + c.time).join(' · '), "go('schedule')"]);
   const out = weekRows.filter(p => p.status === 'Cancelled' && p.exType !== 'MoveOrigin' && !slotPast(p.day, p.time));
   if (out.length) alerts.push(['#B45309', out.length + ' out this week — spot' + (out.length === 1 ? '' : 's') + ' to fill', out.map(p => p.student_name.split(' ')[0] + ' ' + SHORT[p.day] + ' ' + p.time).join(' · '), "go('openings')"]);
   if (dashHist) {
@@ -1719,13 +1734,14 @@ function renderOpen() {
   openSlots = computeOpenings();
   // Booked this week via a one-week lesson → hidden from the lists (same as 2.0 getWaitlist with weekStart)
   const booked = new Set(weekEx.filter(e => e.type === 'Add').map(e => e.student_id));
-  const live = waitlist.filter(w => !(w.student_id && booked.has(w.student_id)));
+  const live = waitlist.filter(w => !(w.student_id && booked.has(w.student_id))); openLive = live;
   $('openList').innerHTML = openSlots.length ? openSlots.map((o, i) => {
     const d = weekDates().find(x => x.name === o.day), m = live.filter(w => matchesSlot(w, o.day, o.time));
     return `<div class="arow"><div class="who"><b>${SHORT[o.day]} ${d.label} · ${esc(o.time)}</b><small>${esc(o.coach || '')}</small></div>
       ${isExtraSlot(o) ? '<span class="tag t-summer">☀️ Summer</span>' : ''}
       <button class="mbtn ${m.length ? 'on' : 'off'}" onclick="$('om${i}').classList.toggle('hidden')">${m.length ? '✓ ' + m.length + ' match' + (m.length === 1 ? '' : 'es') : 'No matches'}</button>
       <button class="paybtn" style="background:var(--mint-soft);color:#1c7a5a" onclick="openAdd('${o.day}','${esc(o.time)}','${esc(o.coach || '')}',{scope:'week'})">Book Student</button>
+      <button class="paybtn" onclick="openSendOpen(${i})">📣 Send</button>
       <div id="om${i}" class="mlist hidden">${m.length ? m.map(w => `<div>${esc(w.student_name)} <small style="color:#888">${esc(w.status)}</small> ·
         ${w.parent_phone ? `<a href="${smsHref(w.parent_phone, 'Hi' + (w.parent_name ? ' ' + w.parent_name.split(' ')[0] : '') + '! A spot opened up ' + o.day + ' ' + d.label + ' at ' + o.time + ' for ' + (w.student_name || '').split(' ')[0] + '. Want it?')}">📱 Text</a>` : '<i>no phone</i>'}</div>`).join('') : 'No waitlist or drop-in families match this slot.'}</div></div>`;
   }).join('') : '<div class="center">No openings this week</div>';
@@ -1814,6 +1830,50 @@ async function removeWl(id) {
 }
 
 // One-week fill sitting in a slot whose regular is Away → "covering for <name>"
+// ================= SEND OPENING (claim links, first tap wins) =================
+let openLive = [], soSlot = null, soShowAll = false, soPick = new Set(), recentClaims = [];
+function openSendOpen(i) {
+  const o = openSlots[i]; if (!o) return;
+  soSlot = o; soShowAll = false;
+  soPick = new Set(openLive.filter(w => w.parent_phone && matchesSlot(w, o.day, o.time)).map(w => w.id));
+  const d = weekDates().find(x => x.name === o.day);
+  $('so_title').textContent = 'Send opening · ' + SHORT[o.day] + ' ' + (d ? d.label : '') + ' · ' + o.time;
+  $('so_sub').textContent = (o.coach || '') + ' · this week only · first family to tap gets it';
+  $('so_msg').value = 'Hi {parent}! A spot opened ' + o.day + ' ' + (d ? d.label : '') + ' at ' + o.time + ' for {kid}. First to tap gets it: {link}';
+  $('so_res').textContent = ''; $('so_send').disabled = false; soRender(); $('soModal').classList.remove('hidden');
+}
+function soRender() {
+  const o = soSlot, rows = openLive.map(w => ({ w, m: matchesSlot(w, o.day, o.time) })).filter(x => soShowAll || x.m || soPick.has(x.w.id));
+  $('so_all').style.display = soShowAll ? 'none' : '';
+  $('so_list').innerHTML = rows.length ? rows.map(({ w, m }) => `<label class="arow" style="padding:6px 0;gap:8px;${w.parent_phone ? '' : 'opacity:.5'}">
+      <input type="checkbox" style="width:auto" ${soPick.has(w.id) ? 'checked' : ''} ${w.parent_phone ? '' : 'disabled'} onchange="this.checked ? soPick.add('${esc(w.id)}') : soPick.delete('${esc(w.id)}'); soCount()">
+      <span style="flex:1">${esc(w.student_name)} <small style="color:#888">${esc(w.status)}</small></span>
+      <span class="tag" style="${m ? 'background:#E1F5EE;color:#085041' : 'background:#eee;color:#888'}">${m ? 'match' : 'no match'}</span>
+      <small style="color:#888">${w.parent_phone ? 'Text' : 'no phone'}</small></label>`).join('') : '<div class="center">No matching families — tap "show all"</div>';
+  soCount();
+}
+function soCount() { $('so_send').textContent = 'Send to ' + soPick.size + ' famil' + (soPick.size === 1 ? 'y' : 'ies'); }
+const soToken = () => { const a = new Uint8Array(9); crypto.getRandomValues(a); return [...a].map(b => 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'[b % 57]).join(''); };
+async function sendOpening() {
+  const o = soSlot, picks = openLive.filter(w => soPick.has(w.id) && w.parent_phone), r = $('so_res');
+  if (!picks.length) { r.className = 'msg err'; r.textContent = 'Pick at least one family.'; return; }
+  const tpl = $('so_msg').value; if (!tpl.includes('{link}')) { r.className = 'msg err'; r.textContent = 'Keep {link} in the message so they can claim it.'; return; }
+  if (!confirm('Text this opening to ' + picks.length + ' famil' + (picks.length === 1 ? 'y' : 'ies') + '?')) return;
+  $('so_send').disabled = true; r.className = 'msg'; r.textContent = 'Sending…';
+  const batch = 'B' + Date.now(), date = dateFor(o.day), me = coachRows.find(c => c.name === mainCoach()) || {};
+  const links = picks.map(w => ({ token: soToken(), gym_id: gymId, batch_id: batch, waitlist_id: w.id, student_id: w.student_id, student_name: w.student_name, parent_phone: w.parent_phone,
+    day: o.day, time: o.time, coach: o.coach || mainCoach() || null, week_start: weekStartStr(), slot_date: date, price: priceFor('30 min', 'Solo'), alert_phone: me.phone || null }));
+  const ins = await sb.from('claim_links').insert(links);
+  if (ins.error) { $('so_send').disabled = false; r.className = 'msg err'; r.textContent = ins.error.message; return; }
+  const base = location.origin + location.pathname.replace(/[^/]*$/, '') + 'claim.html?t=';
+  const messages = links.map((l, k) => { const w = picks[k];
+    return { to: w.parent_phone, student_id: w.student_id, family: w.parent_name || w.student_name,
+      text: tpl.replace(/\{parent\}/g, (w.parent_name || '').split(' ')[0] || 'there').replace(/\{kid\}/g, (w.student_name || '').split(' ')[0]).replace(/\{link\}/g, base + l.token) }; });
+  const res = await sb.functions.invoke('sms-send', { body: { messages } });
+  if (res.error || (res.data && res.data.error)) { $('so_send').disabled = false; r.className = 'msg err'; r.textContent = 'Texts not sent: ' + ((res.data && res.data.error) || res.error.message); return; }
+  r.textContent = '✓ Sent ' + res.data.sent + (res.data.failed ? ' · ' + res.data.failed + ' failed' : '') + ' — you\'ll get a text when someone claims it';
+}
+
 // ================= PRINT SCHEDULE =================
 // This week as it really is (away kids off, fill-ins/moves on), own lessons only (other coaches left off), + class roster.
 let prFont = 12;
