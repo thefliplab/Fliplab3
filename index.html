@@ -301,7 +301,8 @@
 <div class="ovl hidden" id="diModal" onclick="if(event.target===this)this.classList.add('hidden')">
   <div class="mdl">
     <div class="mh"><b>Add to Drop-In list</b><button class="x" onclick="$('diModal').classList.add('hidden')">✕</button></div>
-    <label>Student</label><select id="di_student" onchange="diInfo()"></select>
+    <div class="ddwrap"><label>Student</label><input id="di_search" placeholder="Search student..." autocomplete="off" oninput="diDD()" onfocus="diDD()" onblur="setTimeout(()=>$('di_dd').classList.add('hidden'),150)">
+      <div class="dd hidden" id="di_dd"></div></div>
     <div id="di_info" style="font-size:12px;color:#888;margin:-6px 0 10px"></div>
     <div class="chk"><input type="checkbox" id="di_any" onchange="$('di_prefs').classList.toggle('hidden', this.checked)"><label for="di_any">Open to any day/time</label></div>
     <div id="di_prefs">
@@ -1056,15 +1057,23 @@ function convertWl(id) {
 }
 // ---- Add Drop-In ----
 function openDropIn() {
-  const list = students.filter(s => s.status === 'Active').sort((a, b) => (a.first_name || '').localeCompare(b.first_name || ''));
-  $('di_student').innerHTML = '<option value="">Select a student...</option>' + list.map(s => `<option value="${esc(s.id)}">${esc(s.first_name)} ${esc(s.last_name)}</option>`).join('');
+  diPick = null; $('di_search').value = '';
   $('di_any').checked = false; $('di_prefs').classList.remove('hidden'); $('di_notes').value = ''; $('di_info').textContent = ''; $('di_msg').textContent = '';
   $('di_days').innerHTML = DAYS.filter(d => weekSlots.some(x => x.day === d && !x.is_summer)).map(d => `<label><input type="checkbox" class="di-day" value="${d}" onchange="diTimes()">${SHORT[d]}</label>`).join('');
   $('di_times').innerHTML = '';
   $('diModal').classList.remove('hidden');
 }
+let diPick = null;
+function diDD() {
+  const q = $('di_search').value.trim().toLowerCase(); diPick = null; $('di_info').textContent = '';
+  const list = students.filter(s => s.status === 'Active' && (!q || (s.first_name + ' ' + s.last_name + ' ' + (s.parent_name || '')).toLowerCase().includes(q)))
+    .sort((a, b) => (a.first_name || '').localeCompare(b.first_name || '')).slice(0, 30);
+  $('di_dd').innerHTML = list.map(s => `<div onmousedown="diSet('${esc(s.id)}')">${esc(s.first_name)} ${esc(s.last_name)} <small>${esc(s.skill_level || '')}${s.parent_name ? ' · ' + esc(s.parent_name) : ''}</small></div>`).join('') || '<div><small>No match</small></div>';
+  $('di_dd').classList.remove('hidden');
+}
+function diSet(id) { diPick = students.find(x => x.id === id); $('di_search').value = diPick.first_name + ' ' + diPick.last_name; $('di_dd').classList.add('hidden'); diInfo(); }
 function diInfo() {
-  const s = students.find(x => x.id === $('di_student').value);
+  const s = diPick;
   $('di_info').textContent = s ? [s.parent_name && 'Parent: ' + s.parent_name, s.parent_phone, s.skill_level].filter(Boolean).join(' · ') : '';
 }
 function diTimes() {
@@ -1075,9 +1084,9 @@ function diTimes() {
   }).join('');
 }
 async function saveDropIn() {
-  const s = students.find(x => x.id === $('di_student').value), m = $('di_msg'), any = $('di_any').checked;
+  const s = diPick, m = $('di_msg'), any = $('di_any').checked;
   m.className = 'msg err';
-  if (!s) return m.textContent = 'Please select a student.';
+  if (!s) return m.textContent = 'Search and pick a student from the list.';
   const days = [...document.querySelectorAll('.di-day:checked')].map(x => x.value), times = [...document.querySelectorAll('.di-time:checked')].map(x => x.value);
   if (!any && !days.length) return m.textContent = 'Check at least one preferred day, or "Open to any day/time".';
   if (!any && !times.length) return m.textContent = 'Pick at least one time for the days you selected.';
