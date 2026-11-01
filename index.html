@@ -235,6 +235,8 @@
       <div class="metric"><small>Collected this month</small><b id="pm_month">—</b></div>
       <div class="metric"><small>Unpaid students</small><b id="pm_unpaid" style="color:#854F0B">—</b></div>
     </div>
+    <div class="sec">By day</div>
+    <div class="card" style="padding:0;overflow:hidden" id="payByDay"></div>
     <div class="sec">Outstanding balances — this week</div>
     <div class="card" style="padding:0;overflow:hidden" id="balList"><div class="center">Loading…</div></div>
     <div class="sec">Payment history <select id="histFilter" onchange="loadHistory()"><option value="">This week</option></select></div>
@@ -1259,18 +1261,28 @@ function renderPay() {
   const bals = weekRows.filter(p => p.status !== 'Cancelled' && !noCharge(p) && !skip.has(attKey(p))).concat(clsItems).map(p => {
     const paid = paidOf(p), owed = paid.adj ? paid.amt : priceNum(p);
     return { p, owed, paid: paid.amt, method: paid.method, adj: paid.adj, bal: owed - paid.amt };
-  }).sort((a, b) => (b.bal > 0) - (a.bal > 0) || DAYS.indexOf(a.p.day) - DAYS.indexOf(b.p.day) || timeVal(a.p.time) - timeVal(b.p.time));
+  }).sort((a, b) => DAYS.indexOf(a.p.day) - DAYS.indexOf(b.p.day) || (b.bal > 0) - (a.bal > 0) || timeVal(a.p.time) - timeVal(b.p.time));
   payItems = clsItems;
   const weekTotal = weekPay.reduce((t, x) => t + (+x.amount || 0), 0), unpaid = bals.filter(b => b.bal > 0);
   $('pm_week').textContent = money(weekTotal); $('pm_out').textContent = money(unpaid.reduce((t, b) => t + b.bal, 0));
   $('pm_month').textContent = money(monthTotal); $('pm_unpaid').textContent = unpaid.length;
+  // By day: collected = payments by their lesson day; owed/due from this week's balances
+  const dayT = {}; const dt = d => dayT[d] = dayT[d] || { got: 0, owed: 0, due: 0 };
+  weekPay.forEach(x => { if (x.day) dt(x.day).got += +x.amount || 0; });
+  bals.forEach(b => { if (!b.p.day) return; const t = dt(b.p.day); t.owed += b.owed; t.due += Math.max(0, b.bal); });
+  const dList = DAYS.filter(d => dayT[d]);
+  $('payByDay').innerHTML = dList.length ? dList.map(d => { const t = dayT[d];
+    return `<div class="arow" style="cursor:pointer" onclick="const e=document.getElementById('payDay_${d}');if(e)e.scrollIntoView({behavior:'smooth'})"><div class="who"><b>${d}</b></div>
+      <div style="font-size:13px;text-align:right"><span style="color:#3B6D11">Collected <b>${money(t.got)}</b></span> · Owed ${money(t.owed)} · <span style="color:${t.due > 0 ? '#854F0B' : '#888'}">Due <b>${money(t.due)}</b></span></div></div>`; }).join('') : '<div class="center">No lessons this week</div>';
+  let lastDay = null;
   $('balList').innerHTML = bals.length ? bals.map(b => {
+    const hdr = b.p.day !== lastDay ? (lastDay = b.p.day, `<div id="payDay_${esc(b.p.day)}" style="background:#f6f6f6;padding:6px 12px;font-weight:600;font-size:13px;display:flex;justify-content:space-between"><span>${esc(b.p.day)}</span><span style="color:#3B6D11">${money((dayT[b.p.day] || {}).got || 0)} collected${(dayT[b.p.day] || {}).due ? ' · <span style="color:#854F0B">' + money(dayT[b.p.day].due) + ' due</span>' : ''}</span></div>`) : '';
     const p = b.p, k = esc(p.id), s = stu[p.student_id] || {};
     const what = p.cls ? p.day + ' ' + p.cls + ' class' : p.day + ' lesson';
     const remind = 'Hi' + (s.parent_name ? ' ' + s.parent_name.split(' ')[0] : '') + '! Just a friendly reminder that ' + (p.student_name || '').split(' ')[0] + "'s " + what + ' this week (' + money(b.bal) + ') is still open. Cash, Venmo or Zelle all work. Thank you!';
     const pk = p.cls ? `clsObjFor('${k}')` : `'${k}'`;
     const phone = s.parent_phone ? `<a href="${smsHref(s.parent_phone, remind)}">📱 Remind</a> <span style="font-size:11px;color:#888">${esc(s.parent_phone)}</span>` : '';
-    return `<div class="arow"><div class="who"><b>${esc(p.student_name)}</b><small>${p.cls ? '🤸 ' + esc(p.cls) + ' · ' : ''}${esc(p.day)} ${esc(p.time)} · owed ${money(b.owed)}${b.paid ? ' · paid ' + money(b.paid) : ''}</small>${b.bal > 0 ? phone : ''}</div>
+    return hdr + `<div class="arow"><div class="who"><b>${esc(p.student_name)}</b><small>${p.cls ? '🤸 ' + esc(p.cls) + ' · ' : ''}${esc(p.day)} ${esc(p.time)} · owed ${money(b.owed)}${b.paid ? ' · paid ' + money(b.paid) : ''}</small>${b.bal > 0 ? phone : ''}</div>
       ${b.bal > 0 ? `<div class="bal">${money(b.bal)} due</div><button class="paybtn" onclick="openPay(${pk})">$ Record Payment</button>${b.paid && !p.cls ? `<button class="paybtn" style="background:#EFE7FF;color:#3C3489" onclick="markSpecial('${k}')">★ Special price</button>` : ''}`
         : `<span class="paid" style="cursor:pointer" title="Tap to edit" onclick="${p.cls ? `clsUndoPayId('${k}')` : `undoPay('${k}')`}">✓ Paid ${money(b.paid)}${b.method ? ' · ' + esc(b.method) : ''}${b.adj ? ' · ★ special' : ''}</span>`}</div>`;
   }).join('') : '<div class="center">No lessons this week</div>';
