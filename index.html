@@ -219,6 +219,8 @@
       <div><label>Duration</label><select id="lm_duration"><option>30 min</option><option>45 min</option><option>60 min</option></select></div>
       <div><label>Lesson type</label><select id="lm_type"><option>Solo</option><option>Shared</option><option>Group</option></select></div>
     </div>
+    <label>Price per lesson</label><input id="lm_price" type="number" min="0" step="1">
+    <div id="lm_priceHint" style="font-size:11px;color:#888;margin:-6px 0 10px"></div>
     <div id="lm_pair" class="pairbox hidden">🔗 Shared lesson with <b id="lm_partner"></b>
       <div class="chk" style="margin:6px 0 0"><input type="checkbox" id="lm_movePartner" checked><label for="lm_movePartner" style="color:#185FA5">Also apply to partner</label></div></div>
     <div id="lm_scopeWrap">
@@ -441,7 +443,7 @@ function applyExceptions(lessons, exs) {
   const cnt = {};
   out.forEach(p => { if (p.status !== 'Cancelled') { const k = p.day + '|' + p.time; cnt[k] = (cnt[k] || 0) + 1; } });
   // Same as 2.0 getPrivates: a shared slot always uses the Shared price (stored price is ignored)
-  out.forEach(p => { if (p.status !== 'Cancelled' && p.exType !== 'PriceOverride' && cnt[p.day + '|' + p.time] >= 2) { p.lesson_type = 'Shared'; p.price = priceFor(p.duration || '30 min', 'Shared'); } });
+  out.forEach(p => { if (p.status !== 'Cancelled' && p.exType !== 'PriceOverride' && cnt[p.day + '|' + p.time] >= 2) { p.lesson_type = 'Shared'; if (!isSpecial(p)) p.price = priceFor(p.duration || '30 min', 'Shared'); } });
   return out;
 }
 
@@ -520,6 +522,9 @@ function openLesson(id) {
   $('lm_duration').value = p.duration || '30 min';
   $('lm_type').value = ['Solo','Shared','Group'].includes(p.lesson_type) ? p.lesson_type : 'Solo';
   $('lm_notes').value = p.notes || '';
+  $('lm_price').value = priceNum(p);
+  $('lm_priceHint').textContent = isSpecial(p) ? '★ Special price — kept even in a shared slot. Set it to the regular price to remove it.'
+    : 'Regular price. Change it + choose Permanent to give this family a special price going forward.';
   const oneOff = !!addExId(p.id);
   $('lm_scopeWrap').classList.toggle('hidden', oneOff); $('lm_oneoff').classList.toggle('hidden', !oneOff);
   $('lm_scope').value = 'week'; $('lm_startWrap').classList.add('hidden'); $('lm_start').value = weekStartStr();
@@ -546,15 +551,23 @@ async function permanentChange(p, ch, startMonday) {
   const e1 = await sb.from('private_lessons').update({ end_date: startMonday }).eq('id', p.id);
   if (e1.error) return e1;
   const { id, created_at, ...copy } = src;
-  return sb.from('private_lessons').insert({ ...copy, ...ch, status: 'Confirmed', paid: 'Unpaid', start_date: startMonday, end_date: null });
+  return sb.from('private_lessons').insert({ ...copy, ...ch, extra: { ...(src.extra || {}), ...(ch.extra || {}) }, status: 'Confirmed', paid: 'Unpaid', start_date: startMonday, end_date: null });
 }
 
 async function saveLesson() {
   const p = lmRow; if (!p) return;
   const ch = { day: $('lm_day').value, time: $('lm_time').value, coach: $('lm_coach').value, duration: $('lm_duration').value, lesson_type: $('lm_type').value, notes: $('lm_notes').value.trim() || null };
   const moved = ch.day !== p.day || ch.time !== p.time || ch.coach !== (p.coach || 'TBD');
-  const other = ch.duration !== (p.duration || '30 min') || ch.lesson_type !== p.lesson_type;
   const exId = addExId(p.id);
+  const newPrice = +$('lm_price').value, regular = +priceFor(ch.duration, ch.lesson_type === 'Shared' ? 'Shared' : 'Solo').slice(1);
+  const priceChanged = newPrice > 0 && newPrice !== priceNum(p);
+  if (priceChanged && (exId || $('lm_scope').value !== 'permanent'))
+    return lmMsg(exId ? 'One-week lessons: use ★ Special price on the Payments tab.' : 'A price change needs "Permanent" (for just this week, use ★ Special price on the Payments tab).', true);
+  // Special = a price different from the regular one; regular price clears it
+  const special = priceChanged ? newPrice !== regular : isSpecial(p);
+  ch.price = '$' + (priceChanged ? newPrice : special ? priceNum(p) : regular);
+  ch.extra = { SpecialPrice: special ? 'Yes' : '' };
+  const other = ch.duration !== (p.duration || '30 min') || ch.lesson_type !== p.lesson_type || priceChanged;
   $('lm_save').disabled = true; lmMsg('Saving…');
   let res;
   if (exId) {
@@ -566,12 +579,13 @@ async function saveLesson() {
       if (res.error) break;
     }
   } else {
+    if (other) { $('lm_save').disabled = false; return lmMsg('Changing duration or lesson type needs "Permanent".', true); }
     if (moved) for (const r of [p, ...($('lm_movePartner').checked ? partnersOf(p) : [])]) {
       res = await saveException(r, { type: 'Move', new_day: ch.day, new_time: ch.time, new_coach: ch.coach, notes: ch.notes });
       if (res.error) break;
     }
-    if ((!res || !res.error) && (ch.notes !== (p.notes || null) || other))
-      res = await sb.from('private_lessons').update({ notes: ch.notes, duration: ch.duration, lesson_type: ch.lesson_type }).eq('id', p.id);
+    if ((!res || !res.error) && ch.notes !== (p.notes || null))
+      res = await sb.from('private_lessons').update({ notes: ch.notes }).eq('id', p.id);
   }
   $('lm_save').disabled = false;
   if (!res) return closeLesson();
@@ -665,6 +679,7 @@ const NOT_HERE = ['Absent','Cancelled','Rescheduled','Late'];
 // Claimed spots use a stable attendance key (same as 2.0): ATT_<student>_<day>_<time>_<weekStart>
 const attKey = p => p.id.startsWith('EX_ONLY_') ? 'ATT_' + p.student_id + '_' + p.day + '_' + p.time + '_' + weekStartStr() : p.id;
 const attOf = p => weekAtt.find(a => a.lesson_id === attKey(p));
+const isSpecial = p => (p.extra || {}).SpecialPrice === 'Yes';
 const isAdj = x => (x.extra || {}).Adjusted === 'Yes';
 const paidOf = p => weekPay.filter(x => x.lesson_id === p.id).reduce((t, x) => ({ amt: t.amt + (+x.amount || 0), method: x.method || t.method, adj: t.adj || isAdj(x) }), { amt: 0, method: '', adj: false });
 const priceNum = p => parseFloat(String(p.price || '').replace(/[^0-9.]/g, '')) || priceFor(p.duration, p.lesson_type === 'Shared' ? 'Shared' : 'Solo').slice(1) * 1;
