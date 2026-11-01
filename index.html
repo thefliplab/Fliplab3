@@ -668,6 +668,7 @@ function renderSdPanel(t) {
 // ================= SCHEDULE (port of 2.0 getPrivates + applyExceptionsToPrivates_ + renderDynScheduleList_) =================
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 let attMode = 'privates', clsSched = [], clsRoster = [], clsAtt = [];
+let allLessons = [];
 let monthTotal = 0, waitlist = [], openSlots = [];
 let weekOffset = 0, weekRows = [], weekSlots = [], weekEx = [], weekAtt = [], weekPay = [], weekLoading = 0;
 
@@ -695,7 +696,7 @@ async function loadWeek() {
     att ? sb.from('attendance').select('*').eq('week_start', ws) : { data: [] },
     att ? sb.from('payments').select('*').eq('week_start', ws) : { data: [] },
     curTab === 'payments' ? sb.from('payments').select('amount').gte('date', mStart) : { data: [] },
-    (curTab === 'attendance' && attMode === 'classes') || curTab === 'payments' ? Promise.all([sb.from('class_schedule').select('*').eq('active', true), sb.from('class_enrollments').select('*').not('status', 'in', '("Dropped","Waitlisted")'), sb.from('class_attendance').select('*').eq('week_start', ws)]) : null,
+    (curTab === 'attendance' && attMode === 'classes') || curTab === 'payments' || curTab === 'dashboard' ? Promise.all([sb.from('class_schedule').select('*').eq('active', true), sb.from('class_enrollments').select('*').not('status', 'in', '("Dropped","Waitlisted")'), sb.from('class_attendance').select('*').eq('week_start', ws)]) : null,
     curTab === 'openings' || curTab === 'dashboard' ? sb.from('waitlist').select('*').in('status', ['Waiting','Waitlist','Drop-In']).order('signup_date') : { data: [] }
   ]);
   if (my !== weekLoading) return;
@@ -703,6 +704,7 @@ async function loadWeek() {
   if (err) { $('schedGrid').innerHTML = $('attList').innerHTML = '<div class="msg err">' + esc(err.message) + '</div>'; return; }
   weekAtt = A.data; weekPay = P.data; waitlist = W.data || [];
   if (C) { const ce = C.find(r => r.error); if (ce) { $('attList').innerHTML = '<div class="msg err">' + esc(ce.error.message) + '</div>'; return; } [clsSched, clsRoster, clsAtt] = C.map(r => r.data); } monthTotal = (M.data || []).reduce((t, x) => t + (+x.amount || 0), 0);
+  allLessons = L.data; dashNextMon = null; dashHist = null;
   const base = L.data.filter(p => !(p.start_date && p.start_date > we) && !(p.end_date && p.end_date <= ws));
   weekEx = X.data;
   weekRows = applyExceptions(base, X.data);
@@ -1032,10 +1034,11 @@ async function markAtt(id, status) {
     date: dateFor(p.day), time: p.time, week_start: weekStartStr(), status, extra: { Date: p.day } }).select().single();
   if (res.error) return alert(res.error.message);
   weekAtt = weekAtt.filter(a => a !== cur); if (status) weekAtt.push(res.data);
-  renderAtt();
+  if (curTab === 'dashboard') renderDash(); else renderAtt();
 }
 
 function afterPay(delta) {
+  if (curTab === 'dashboard') return renderDash();
   if (!$('editView').classList.contains('hidden') && sd && sd.s) { renderSdTop(sd.s); return loadStudentDetail(sd.s); }
   if (curTab !== 'payments') return renderAtt();
   monthTotal += delta; renderPay();
@@ -1269,17 +1272,50 @@ function renderDash() {
   const wl = waitlist.filter(w => (w.extra || {}).Unsubscribed !== 'Yes');
   $('d_active').textContent = students.filter(x => x.status === 'Active').length;
   $('d_today').textContent = today.length; $('d_unpaid').textContent = unpaid.length; $('d_wl').textContent = waitlist.length;
-  $('d_todayHead').textContent = "Today's schedule · " + todayName;
+  // Today's lessons with Here / Paid right on the dashboard; after the last one ends, preview tomorrow instead
+  const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes(), durMin = p => parseInt(p.duration) || 30;
+  const todaysCls = clsSched.filter(c => c.day === todayName);
+  const lastEnd = Math.max(-1, ...today.map(p => timeVal(p.time) + durMin(p)), ...todaysCls.map(c => timeVal(c.time) + 60));
+  const showTomorrow = lastEnd < nowMin;  // nothing left today (or nothing today at all and the day is over)
+  $('d_todayHead').textContent = showTomorrow ? 'Tomorrow · ' + DAYS[(DAYS.indexOf(todayName) + 1) % 7] : "Today's schedule · " + todayName;
   const photo = id => { const v = ((stu[id] || {}).extra || {}).PhotoPermission; return v === 'No' ? '<span class="tag t-nophoto">No Photo</span>' : v === 'Yes' ? '<span class="tag t-photo">Photo OK</span>' : ''; };
-  $('d_sched').innerHTML = (today.length ? today.map(p => `<div class="arow"><span class="tag" style="background:#FAECE7;color:#712B13;min-width:62px;text-align:center;font-size:11px">${esc(p.time)}</span>
-      <div class="who"><b>${esc(p.student_name)}</b> ${p.lesson_type === 'Shared' ? '<span class="tag t-shared">Shared</span>' : ''}${photo(p.student_id)}<small>${esc(p.duration || '30 min')} · ${esc(p.coach || 'Coach')}</small></div></div>`).join('')
-    : `<div class="center">No lessons scheduled for ${todayName}</div>`)
+ const nextT = Math.min(...today.filter(p => timeVal(p.time) + durMin(p) > nowMin).map(p => timeVal(p.time)));
+  const lessonRow = (p, act) => {
+    const st = (attOf(p) || {}).status || '', pd = paidOf(p), k = esc(p.id), t0 = timeVal(p.time), past = act && t0 + durMin(p) <= nowMin;
+    const isNow = act && !past && t0 === nextT;
+    return `<div class="arow" style="${past ? 'opacity:.55;' : ''}${isNow ? 'background:#E8F7F1;border-left:4px solid #1c9a73;' : ''}"><span class="tag" style="background:${isNow ? '#1c9a73;color:#fff' : '#FAECE7;color:#712B13'};min-width:62px;text-align:center;font-size:11px">${isNow ? (t0 <= nowMin ? 'NOW' : 'NEXT') + '<br>' : ''}${esc(p.time)}</span>
+      <div class="who"><b>${esc(p.student_name)}</b> ${p.lesson_type === 'Shared' ? '<span class="tag t-shared">Shared</span>' : ''}${photo(p.student_id)}<small>${esc(p.duration || '30 min')} · ${esc(p.coach || 'Coach')}</small></div>
+      ${act ? `<button class="here${st === 'Attended' ? ' on' : ''}" onclick="markAtt('${k}','${st === 'Attended' ? '' : 'Attended'}')">${st === 'Attended' ? '✓ Here' : 'Here'}</button>
+        ${pd.amt > 0 ? `<span class="paid" style="cursor:pointer" onclick="undoPay('${k}')">✓ $${pd.amt.toFixed(0)}</span>` : `<button class="paybtn" onclick="openPay('${k}')">$ Pay</button>`}` : ''}</div>`;
+  };
+  const clsRow = c => { const n = clsRoster.filter(r => r.schedule_id === c.id).length;
+    return `<div class="arow"><span class="tag" style="background:#E6F1FB;color:#185FA5;min-width:62px;text-align:center;font-size:11px">${esc(c.time)}</span><div class="who"><b>🤸 ${esc(c.class_name)}</b><small>Class · ${n} enrolled · $${clsPrice(c)}</small></div>${showTomorrow ? '' : `<button class="paybtn" onclick="attMode='classes';ss.set('attMode','classes');setAttModeButtons();go('attendance')">Roster →</button>`}</div>`; };
+  let schedHtml;
+  if (!showTomorrow) {
+    const items = today.map(p => ({ t: timeVal(p.time), h: () => lessonRow(p, true) })).concat(todaysCls.map(c => ({ t: timeVal(c.time), h: () => clsRow(c) }))).sort((a, b) => a.t - b.t);
+    schedHtml = items.length ? items.map(x => x.h()).join('') : `<div class="center">No lessons scheduled for ${todayName}</div>`;
+  } else {
+    const tName = DAYS[(DAYS.indexOf(todayName) + 1) % 7];
+    let tl = tName === 'Monday' ? (dashNextMon || []) : live.filter(p => p.day === tName);
+    if (tName === 'Monday' && !dashNextMon) { loadNextMonday(); tl = null; }
+    const tc = clsSched.filter(c => c.day === tName);
+    const items = (tl || []).sort((a, b) => timeVal(a.time) - timeVal(b.time)).map(p => ({ t: timeVal(p.time), h: () => lessonRow(p, false) })).concat(tc.map(c => ({ t: timeVal(c.time), h: () => clsRow(c) }))).sort((a, b) => a.t - b.t);
+    schedHtml = tl === null ? '<div class="center">Loading…</div>' : items.length ? `<div style="font-size:12px;color:#888;padding:8px 12px 0">${today.length ? "Today's lessons are done — here's tomorrow." : ''}</div>` + items.map(x => x.h()).join('') : `<div class="center">Nothing scheduled for ${tName}</div>`;
+  }
+  $('d_sched').innerHTML = schedHtml
     + (unpaid.length ? `<div style="margin:8px 10px 10px;padding:8px 10px;background:#FEF0EB;border-radius:8px;font-size:13px;color:#712B13"><b>${unpaid.length} unpaid</b> — ${unpaid.map(p => esc(p.student_name) + (p.day !== todayName ? ' (' + esc(p.day) + ')' : '')).join(', ')}</div>` : '');
   // Needs attention
   const opens = computeOpenings(), alerts = [];
   if (unpaid.length) alerts.push(['#BA7517', unpaid.length + ' unpaid lesson' + (unpaid.length === 1 ? '' : 's') + ' this week', 'Tap to open Payments', "go('payments')"]);
   opens.map(o => [o, wl.filter(w => matchesSlot(w, o.day, o.time)).length]).filter(x => x[1]).slice(0, 3)
     .forEach(([o, n]) => alerts.push(['#378ADD', o.day + ' ' + o.time + ' slot open', n + ' waitlist match' + (n === 1 ? '' : 'es') + ' · tap for Openings', "go('openings')"]));
+  const out = weekRows.filter(p => p.status === 'Cancelled' && p.exType !== 'MoveOrigin' && !slotPast(p.day, p.time));
+  if (out.length) alerts.push(['#B45309', out.length + ' out this week — spot' + (out.length === 1 ? '' : 's') + ' to fill', out.map(p => p.student_name.split(' ')[0] + ' ' + SHORT[p.day] + ' ' + p.time).join(' · '), "go('openings')"]);
+  if (dashHist) {
+    const { absent, unpaid2 } = dashHist;
+    if (absent.length) alerts.push(['#A32D2D', absent.length + ' kid' + (absent.length === 1 ? '' : 's') + ' missed the last 2 weeks', absent.join(' · '), "go('students')"]);
+    if (unpaid2.length) alerts.push(['#854F0B', unpaid2.length + ' unpaid 2+ weeks running', unpaid2.join(' · '), "go('payments')"]);
+  } else loadDashHist();
   const newStu = students.filter(x => x.join_date && x.join_date >= ymd(wk[0].date));
   if (newStu.length) alerts.push(['#1D9E75', newStu.length + ' new registration' + (newStu.length === 1 ? '' : 's') + ' this week', newStu.map(x => x.first_name + ' ' + x.last_name).join(' · '), "go('students')"]);
   $('d_attn').innerHTML = alerts.length ? alerts.map(([c, t, sub, fn]) => `<div class="arow" style="cursor:pointer" onclick="${fn}"><span style="width:9px;height:9px;border-radius:50%;background:${c};flex-shrink:0"></span><div class="who"><b>${esc(t)}</b><small>${esc(sub)}</small></div></div>`).join('')
@@ -1298,6 +1334,33 @@ function renderDash() {
   // Birthdays this week (Mon–Sun)
   const b = students.filter(x => isOn(x) && x.dob).map(x => { const d = wk.find(d => d.date.getMonth() + 1 === +x.dob.slice(5, 7) && d.date.getDate() === +x.dob.slice(8, 10)); return d ? { x, d } : null; }).filter(Boolean);
   $('d_bday').innerHTML = b.length ? b.map(({ x, d }) => `<div class="arow"><div class="who"><b>${esc(x.first_name)} ${esc(x.last_name)}</b><small>${d.name}, ${d.label} · turns ${d.date.getFullYear() - +x.dob.slice(0, 4)}</small></div></div>`).join('') : '<div class="center">No birthdays this week</div>';
+}
+
+// Tomorrow = next Monday (when today is Sunday): build next week's Monday from the lessons + next week's exceptions
+let dashNextMon = null, dashHist = null;
+async function loadNextMonday() {
+  const nm = new Date(weekDates()[0].date); nm.setDate(nm.getDate() + 7); const ws = ymd(nm), we = ymd(new Date(nm.getTime() + 6 * 864e5));
+  const X = await sb.from('schedule_exceptions').select('*').eq('week_start', ws).not('status', 'in', '("Deleted","Expired")');
+  const base = allLessons.filter(p => !(p.start_date && p.start_date > we) && !(p.end_date && p.end_date <= ws));
+  dashNextMon = applyExceptions(base, X.data || []).filter(p => p.status !== 'Cancelled' && p.day === 'Monday');
+  if (curTab === 'dashboard') renderDash();
+}
+// Last 2 finished weeks: kids absent both weeks, and kids who came but didn't pay both weeks
+async function loadDashHist() {
+  dashHist = { absent: [], unpaid2: [] };
+  const w0 = weekDates()[0].date, w1 = ymd(new Date(w0.getTime() - 7 * 864e5)), w2 = ymd(new Date(w0.getTime() - 14 * 864e5));
+  const [A, P] = await Promise.all([sb.from('attendance').select('student_id,student_name,lesson_id,week_start,status').in('week_start', [w1, w2]),
+    sb.from('payments').select('student_id,lesson_id,week_start,amount').in('week_start', [w1, w2])]);
+  if (A.error || P.error) return;
+  const liveIds = new Set(weekRows.map(p => p.student_id)), by = {};
+  A.data.forEach(a => { if (!a.student_id || !liveIds.has(a.student_id)) return; (by[a.student_id] = by[a.student_id] || { n: a.student_name, w: {} }).w[a.week_start] = (by[a.student_id].w[a.week_start] || []).concat(a); });
+  const paid = new Set(P.data.filter(x => +x.amount > 0).map(x => x.student_id + '|' + x.week_start));
+  Object.entries(by).forEach(([sid, r]) => {
+    const wk = [w1, w2].map(w => r.w[w] || []);
+    if (wk.every(l => l.length && l.every(a => a.status !== 'Attended'))) dashHist.absent.push(r.n);
+    if ([w1, w2].every((w, i) => wk[i].some(a => a.status === 'Attended') && !paid.has(sid + '|' + w))) dashHist.unpaid2.push(r.n);
+  });
+  if (curTab === 'dashboard') renderDash();
 }
 
 // ================= OPENINGS (port of 2.0 renderOpenings_ / renderWaitlistPanel_ / makeup text) =================
