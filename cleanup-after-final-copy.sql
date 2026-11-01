@@ -64,4 +64,11 @@ with m(o, n) as (values ('Level Beginner 3','L3-Building'), ('Level Advanced 3',
                         ('Level 4','L4-Progressing'), ('Level 5','L5-Advanced'), ('Level 6','L6-Elite'))
 update waitlist t set skill_level = m.n from m where t.skill_level = m.o;
 
+-- 7. Old "Emma Jackson" coach setup (Steve, Nov 1 — he re-adds Emma as a new coach in 3.0)
+--    Removes the old coach entry and the Sunday 12:00 PM lesson (+ its week changes).
+--    Keeps Emma the student (STU006), her other lessons, payments and attendance.
+delete from schedule_exceptions where lesson_id = 'PL-1788970282640';
+delete from private_lessons where id = 'PL-1788970282640';
+delete from coaches where id = 'C1789822214285';
+
 commit;
