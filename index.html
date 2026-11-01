@@ -494,7 +494,7 @@ async function loadWeek() {
     att ? sb.from('attendance').select('*').eq('week_start', ws) : { data: [] },
     att ? sb.from('payments').select('*').eq('week_start', ws) : { data: [] },
     curTab === 'payments' ? sb.from('payments').select('amount').gte('date', mStart) : { data: [] },
-    curTab === 'attendance' && attMode === 'classes' ? Promise.all([sb.from('class_schedule').select('*').eq('active', true), sb.from('class_enrollments').select('*').not('status', 'in', '("Dropped","Waitlisted")'), sb.from('class_attendance').select('*').eq('week_start', ws)]) : null,
+    (curTab === 'attendance' && attMode === 'classes') || curTab === 'payments' ? Promise.all([sb.from('class_schedule').select('*').eq('active', true), sb.from('class_enrollments').select('*').not('status', 'in', '("Dropped","Waitlisted")'), sb.from('class_attendance').select('*').eq('week_start', ws)]) : null,
     curTab === 'openings' ? sb.from('waitlist').select('*').in('status', ['Waiting','Waitlist','Drop-In']).order('signup_date') : { data: [] }
   ]);
   if (my !== weekLoading) return;
@@ -846,20 +846,28 @@ function renderPay() {
   // Same rules as 2.0 getOutstandingBalances: skip lessons marked Cancelled/Absent in attendance
   const skip = new Set(weekAtt.filter(a => a.status === 'Cancelled' || a.status === 'Absent').map(a => a.lesson_id));
   const stu = {}; students.forEach(s => stu[s.id] = s);
-  const bals = weekRows.filter(p => p.status !== 'Cancelled' && !skip.has(attKey(p))).map(p => {
+  // Class fees: kids marked Here in a class this week (same as 2.0 class balances)
+  const clsItems = clsAtt.filter(a => a.status === 'Attended').map(a => {
+    const c = clsSched.find(x => x.id === a.schedule_id) || { id: a.schedule_id, class_name: a.class_name, day: a.day, time: '' };
+    return { ...clsObj(c, { student_id: a.student_id, student_name: a.student_name }), cls: c.class_name || 'Class' };
+  });
+  const bals = weekRows.filter(p => p.status !== 'Cancelled' && !skip.has(attKey(p))).concat(clsItems).map(p => {
     const paid = paidOf(p), owed = paid.adj ? paid.amt : priceNum(p);
     return { p, owed, paid: paid.amt, method: paid.method, adj: paid.adj, bal: owed - paid.amt };
   }).sort((a, b) => (b.bal > 0) - (a.bal > 0) || DAYS.indexOf(a.p.day) - DAYS.indexOf(b.p.day) || timeVal(a.p.time) - timeVal(b.p.time));
+  payItems = clsItems;
   const weekTotal = weekPay.reduce((t, x) => t + (+x.amount || 0), 0), unpaid = bals.filter(b => b.bal > 0);
   $('pm_week').textContent = money(weekTotal); $('pm_out').textContent = money(unpaid.reduce((t, b) => t + b.bal, 0));
   $('pm_month').textContent = money(monthTotal); $('pm_unpaid').textContent = unpaid.length;
   $('balList').innerHTML = bals.length ? bals.map(b => {
     const p = b.p, k = esc(p.id), s = stu[p.student_id] || {};
-    const remind = 'Hi' + (s.parent_name ? ' ' + s.parent_name.split(' ')[0] : '') + '! Just a friendly reminder that ' + (p.student_name || '').split(' ')[0] + "'s " + p.day + ' lesson this week (' + money(b.bal) + ') is still open. Cash, Venmo or Zelle all work. Thank you!';
+    const what = p.cls ? p.day + ' ' + p.cls + ' class' : p.day + ' lesson';
+    const remind = 'Hi' + (s.parent_name ? ' ' + s.parent_name.split(' ')[0] : '') + '! Just a friendly reminder that ' + (p.student_name || '').split(' ')[0] + "'s " + what + ' this week (' + money(b.bal) + ') is still open. Cash, Venmo or Zelle all work. Thank you!';
+    const pk = p.cls ? `clsObjFor('${k}')` : `'${k}'`;
     const phone = s.parent_phone ? `<a href="${smsHref(s.parent_phone, remind)}">📱 Remind</a> <span style="font-size:11px;color:#888">${esc(s.parent_phone)}</span>` : '';
-    return `<div class="arow"><div class="who"><b>${esc(p.student_name)}</b><small>${esc(p.day)} ${esc(p.time)} · owed ${money(b.owed)}${b.paid ? ' · paid ' + money(b.paid) : ''}</small>${b.bal > 0 ? phone : ''}</div>
-      ${b.bal > 0 ? `<div class="bal">${money(b.bal)} due</div><button class="paybtn" onclick="openPay('${k}')">$ Record Payment</button>${b.paid ? `<button class="paybtn" style="background:#EFE7FF;color:#3C3489" onclick="markSpecial('${k}')">★ Special price</button>` : ''}`
-        : `<span class="paid" style="cursor:pointer" title="Tap to remove" onclick="undoPay('${k}')">✓ Paid ${money(b.paid)}${b.method ? ' · ' + esc(b.method) : ''}${b.adj ? ' · ★ special' : ''}</span>`}</div>`;
+    return `<div class="arow"><div class="who"><b>${esc(p.student_name)}</b><small>${p.cls ? '🤸 ' + esc(p.cls) + ' · ' : ''}${esc(p.day)} ${esc(p.time)} · owed ${money(b.owed)}${b.paid ? ' · paid ' + money(b.paid) : ''}</small>${b.bal > 0 ? phone : ''}</div>
+      ${b.bal > 0 ? `<div class="bal">${money(b.bal)} due</div><button class="paybtn" onclick="openPay(${pk})">$ Record Payment</button>${b.paid && !p.cls ? `<button class="paybtn" style="background:#EFE7FF;color:#3C3489" onclick="markSpecial('${k}')">★ Special price</button>` : ''}`
+        : `<span class="paid" style="cursor:pointer" title="Tap to remove" onclick="${p.cls ? `clsUndoPayId('${k}')` : `undoPay('${k}')`}">✓ Paid ${money(b.paid)}${b.method ? ' · ' + esc(b.method) : ''}${b.adj ? ' · ★ special' : ''}</span>`}</div>`;
   }).join('') : '<div class="center">No lessons this week</div>';
   // history filter: students with a lesson this week or a payment this week, plus everyone active
   const f = $('histFilter'), cur = f.value;
@@ -969,7 +977,7 @@ async function markSpecial(id) {
 }
 
 async function undoPay(id) {
-  const p = weekRows.find(r => r.id === id && r.status !== 'Cancelled'); if (!p) return;
+  const p = typeof id === 'object' ? id : weekRows.find(r => r.id === id && r.status !== 'Cancelled'); if (!p) return;
   const rows = weekPay.filter(x => x.lesson_id === p.id), total = rows.reduce((t, x) => t + (+x.amount || 0), 0);
   if (!rows.length || !confirm('Remove the $' + total.toFixed(0) + ' payment for ' + p.student_name + ' this week?')) return;
   const res = await sb.from('payments').delete().in('id', rows.map(x => x.id));
@@ -1018,8 +1026,11 @@ async function clsMark(cid, sid, status) {
   // Same as 2.0: marking Here opens Record Payment if not paid yet
   if (status === 'Attended' && !(paidOf(clsObj(f.c, f.r)).amt > 0)) openPay(clsObj(f.c, f.r));
 }
+let payItems = [];
+function clsObjFor(id) { return payItems.find(x => x.id === id); }
+function clsUndoPayId(id) { const o = clsObjFor(id); if (o) undoPay(o); }
 function clsPay(cid, sid) { const f = clsFind(cid, sid); if (f) openPay(clsObj(f.c, f.r)); }
-function clsUndoPay(cid, sid) { const f = clsFind(cid, sid); if (!f) return; const o = clsObj(f.c, f.r); weekRows.push(o); undoPay(o.id).finally(() => { weekRows = weekRows.filter(x => x !== o); }); }
+function clsUndoPay(cid, sid) { const f = clsFind(cid, sid); if (f) undoPay(clsObj(f.c, f.r)); }
 
 // Mark every unmarked lesson that day as Here (leaves Absent/Late/etc. alone)
 async function allHere(day) {
