@@ -515,6 +515,8 @@ async function loadCoaches() { const r = await sb.from('coaches').select('*').or
 const coachNames = () => [...new Set(coachRows.filter(c => c.active).map(c => c.name).concat(weekRows.map(r => r.coach), weekSlots.map(s => s.coach)).filter(Boolean))].sort();
 // "Main" coach = the coach whose email is the signed-in account; other coaches get a tag on the Schedule
 const mainCoach = () => (coachRows.find(c => c.active && c.email && c.email.toLowerCase() === myEmail) || {}).name || '';
+// Another coach's lesson (e.g. Coach Emma): shown on the schedule, but paid to that coach directly → kept out of Flip Lab money
+const isOther = p => { const m = mainCoach(); return !!(p && p.coach && m && p.coach !== m); };
 function renderCoaches() {
   $('co_name').value = $('co_phone').value = $('co_spec').value = ''; $('coMsg').textContent = '';
   $('coachList').innerHTML = coachRows.map(c => `<div class="arow" style="padding:6px 0"><div class="who"><b style="${c.active ? '' : 'color:#aaa'}">${esc(c.name)}</b><small>${esc([c.specialties, c.phone].filter(Boolean).join(' · '))}</small></div>
@@ -704,11 +706,11 @@ function renderSdTop(s) {
   const wk = weekDates();
   let week = mine.length ? mine.map(p => {
     const a = attOf(p), pd = paidOf(p), st = a ? a.status : '';
-    return `<div class="wkline"><b>${esc(p.day)} ${esc(p.time)}</b><span style="color:#888">${esc(p.coach || '')}${p.status === 'Cancelled' ? '' : ' · ' + esc(p.lesson_type || 'Solo') + ' · $' + priceNum(p)}</span>
+    return `<div class="wkline"><b>${esc(p.day)} ${esc(p.time)}</b><span style="color:#888">${esc(p.coach || '')}${p.status === 'Cancelled' || isOther(p) ? '' : ' · ' + esc(p.lesson_type || 'Solo') + ' · $' + priceNum(p)}</span>
       ${p.status === 'Cancelled' ? '<span class="tag t-away">Cancelled this week</span>' : st === 'Attended' ? '<span class="tag t-photo">✓ Here</span>' : st ? `<span class="tag t-nophoto">${esc(st)}</span>` : '<span class="tag t-ex">Upcoming</span>'}
-      ${p.status === 'Cancelled' ? '' : pd.amt > 0 ? `<span class="tag t-photo">Paid $${pd.amt.toFixed(0)}</span>` : '<span class="tag t-summer">Unpaid</span>'}</div>`;
+      ${p.status === 'Cancelled' || isOther(p) ? '' : pd.amt > 0 ? `<span class="tag t-photo">Paid $${pd.amt.toFixed(0)}</span>` : '<span class="tag t-summer">Unpaid</span>'}</div>`;
   }).join('') : `<div class="wkline" style="color:#888">No lesson ${weekOffset === 0 ? 'this week' : 'the week of ' + wk[0].label}</div>`;
-  const live = mine.filter(p => p.status !== 'Cancelled'), owing = live.filter(p => priceNum(p) - paidOf(p).amt > 0 && !paidOf(p).adj);
+  const live = mine.filter(p => p.status !== 'Cancelled' && !isOther(p)), owing = live.filter(p => priceNum(p) - paidOf(p).amt > 0 && !paidOf(p).adj);
   const qa = [];
   if (['Inactive','Dropped','Waitlist'].includes(s.status)) qa.push(`<button class="pri" onclick="sdStatus('Active')">↺ Re-enroll (Active)</button>`);
   else {
@@ -724,7 +726,7 @@ function renderSdTop(s) {
     <div class="qa">${qa.join('')}</div>`;
 }
 function sdRemindText() {
-  const s = sd.s, owed = weekRows.filter(p => p.student_id === s.id && p.status !== 'Cancelled').reduce((t, p) => t + Math.max(0, priceNum(p) - paidOf(p).amt), 0);
+  const s = sd.s, owed = weekRows.filter(p => p.student_id === s.id && p.status !== 'Cancelled' && !isOther(p)).reduce((t, p) => t + Math.max(0, priceNum(p) - paidOf(p).amt), 0);
   return 'Hi' + (s.parent_name ? ' ' + s.parent_name.split(' ')[0] : '') + '! Just a friendly reminder that ' + s.first_name + "'s lesson this week (" + money(owed) + ') is still open. Cash, Venmo or Zelle all work. Thank you!';
 }
 async function sdCancelWeek() {
@@ -878,7 +880,7 @@ function renderWeek() {
   const oc = p => p.coach && mc && p.coach !== mc ? ' oc' : '';  // another coach's lesson → pink row
   const row = (p, showTime) => `<div class="srow tap${oc(p)}" onclick="openLesson('${esc(p.id)}')"><div class="tm">${showTime ? esc(p.time) : ''}</div><div class="nm"><b>${esc(p.student_name)}</b>${pills(p)}${covering(p)}</div><div class="co">${esc(p.coach || 'TBD')}</div></div>`;
   // One-week fill sitting in a slot whose regular is Away → "covering for <name>"
-  const covering = p => { if (!addExId(p.id)) return ''; const a = weekRows.find(r => r.status === 'Cancelled' && r.day === p.day && r.time === p.time); return a ? `<i style="font-size:11px;color:#999">covering for ${esc(a.student_name)}</i>` : ''; };
+  const covering = coverNote;
 
   let html = '';
   wd.forEach(d => {
@@ -1114,27 +1116,30 @@ function setAttModeButtons() {
 function setAttMode(m) { attMode = m; ss.set('attMode', m); setAttModeButtons(); loadWeek(); }
 function renderAtt() {
   if (attMode === 'classes') return renderClassAtt();
-  const lessons = weekRows.filter(p => p.status !== 'Cancelled').sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || timeVal(a.time) - timeVal(b.time));
+  const allLs = weekRows.filter(p => p.status !== 'Cancelled').sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || timeVal(a.time) - timeVal(b.time));
+  const lessons = allLs.filter(p => !isOther(p)), others = allLs.filter(isOther);
   let n = { att: 0, no: 0, paid: 0, unpaid: 0 };
   lessons.forEach(p => { const st = (attOf(p) || {}).status || '';
     if (st === 'Attended') { n.att++; paidOf(p).amt > 0 ? n.paid++ : n.unpaid++; } else if (NOT_HERE.includes(st)) n.no++; });
   $('m_att').textContent = n.att; $('m_no').textContent = n.no; $('m_paid').textContent = n.paid; $('m_unpaid').textContent = n.unpaid;
-  if (!lessons.length) { $('attList').innerHTML = '<div class="card center">No lessons scheduled this week</div>'; return; }
+  if (!allLs.length) { $('attList').innerHTML = '<div class="card center">No lessons scheduled this week</div>'; return; }
   const stu = {}; students.forEach(s => stu[s.id] = s);
   let html = '';
   DAYS.forEach(day => {
-    const ls = lessons.filter(p => p.day === day); if (!ls.length) return;
+    const ls = lessons.filter(p => p.day === day), os = others.filter(p => p.day === day); if (!ls.length && !os.length) return;
     const dd = weekDates().find(d => d.name === day);
     const unmarked = ls.filter(p => !attOf(p)).length;
     html += `<div class="dayhd" style="display:flex;align-items:center">${day}<span>${dd.label}</span>${unmarked ? `<button class="here" style="margin-left:auto;padding:3px 9px" onclick="allHere('${day}')">✓ All here (${unmarked})</button>` : ''}</div><div class="card" style="padding:0;margin-bottom:6px;border-radius:0 0 10px 10px;overflow:hidden">`;
-    ls.forEach(p => {
+    ls.concat(os).forEach((p, i) => {
+      const o = isOther(p);
+      if (o && i === ls.length) html += `<div style="padding:6px 12px;font-size:12px;color:#993556;background:#FBEAF0;border-top:1px solid #F4C0D1">Other coaches · paid directly · not in your money</div>`;
       const st = (attOf(p) || {}).status || '', pd = paidOf(p), s = stu[p.student_id] || {}, k = esc(p.id);
       const phone = s.parent_phone ? `<a href="sms:${esc(String(s.parent_phone).replace(/\D/g, ''))}">📱 ${esc(s.parent_phone)}</a>` : '';
-      html += `<div class="arow"><div class="who"><b>${esc(p.student_name)}</b><small>${esc(p.duration || '')}${p.focus ? ' · ' + esc(p.focus) : ''}</small>${phone}</div>
+      html += `<div class="arow"${o ? ' style="background:#FBEAF0;border-left:4px solid #D4537E"' : ''}><div class="who"><b>${esc(p.student_name)}</b>${coverNote(p) ? '<br>' + coverNote(p) : ''}<small>${esc(p.duration || '')}${p.focus ? ' · ' + esc(p.focus) : ''}</small>${phone}</div>
         <div class="tc">${esc(p.time)}<br>${esc(p.coach || 'TBD')}</div>
         <button class="here${st === 'Attended' ? ' on' : ''}" onclick="markAtt('${k}','${st === 'Attended' ? '' : 'Attended'}')" title="${st === 'Attended' ? 'Tap again to clear' : ''}">${st === 'Attended' ? '✓ Here' : 'Here'}</button>
         <select class="nothere${NOT_HERE.includes(st) ? ' on' : ''}" onchange="markAtt('${k}',this.value)"><option value="">${st ? '— Clear' : '— Not Here'}</option>${NOT_HERE.map(o => `<option${o === st ? ' selected' : ''}>${o}</option>`).join('')}</select>
-        ${pd.amt > 0 ? `<span class="paid" style="cursor:pointer" title="Tap to remove" onclick="undoPay('${k}')">✓ Paid $${pd.amt.toFixed(0)}${pd.method ? ' · ' + esc(pd.method) : ''}${pd.adj ? ' · ★' : ''}</span>` : `<button class="paybtn" onclick="openPay('${k}')">$ Record Payment</button>`}</div>`;
+        ${o ? '' : pd.amt > 0 ? `<span class="paid" style="cursor:pointer" title="Tap to remove" onclick="undoPay('${k}')">✓ Paid $${pd.amt.toFixed(0)}${pd.method ? ' · ' + esc(pd.method) : ''}${pd.adj ? ' · ★' : ''}</span>` : `<button class="paybtn" onclick="openPay('${k}')">$ Record Payment</button>`}</div>`;
     });
     html += '</div>';
   });
@@ -1172,7 +1177,7 @@ function renderPay() {
     const c = clsSched.find(x => x.id === a.schedule_id) || { id: a.schedule_id, class_name: a.class_name, day: a.day, time: '' };
     return { ...clsObj(c, { student_id: a.student_id, student_name: a.student_name }), cls: c.class_name || 'Class' };
   });
-  const bals = weekRows.filter(p => p.status !== 'Cancelled' && !skip.has(attKey(p))).concat(clsItems).map(p => {
+  const bals = weekRows.filter(p => p.status !== 'Cancelled' && !isOther(p) && !skip.has(attKey(p))).concat(clsItems).map(p => {
     const paid = paidOf(p), owed = paid.adj ? paid.amt : priceNum(p);
     return { p, owed, paid: paid.amt, method: paid.method, adj: paid.adj, bal: owed - paid.amt };
   }).sort((a, b) => (b.bal > 0) - (a.bal > 0) || DAYS.indexOf(a.p.day) - DAYS.indexOf(b.p.day) || timeVal(a.p.time) - timeVal(b.p.time));
@@ -1355,7 +1360,7 @@ function clsUndoPay(cid, sid) { const f = clsFind(cid, sid); if (f) undoPay(clsO
 
 // Mark every unmarked lesson that day as Here (leaves Absent/Late/etc. alone)
 async function allHere(day) {
-  const ls = weekRows.filter(p => p.day === day && p.status !== 'Cancelled' && !attOf(p));
+  const ls = weekRows.filter(p => p.day === day && p.status !== 'Cancelled' && !isOther(p) && !attOf(p));
   if (!ls.length || !confirm('Mark ' + ls.length + ' unmarked lesson' + (ls.length === 1 ? '' : 's') + ' on ' + day + ' as Here?')) return;
   const res = await sb.from('attendance').insert(ls.map(p => ({ gym_id: gymId, student_id: p.student_id, student_name: p.student_name, lesson_id: attKey(p), coach: p.coach,
     date: dateFor(p.day), time: p.time, week_start: weekStartStr(), status: 'Attended', extra: { Date: p.day } }))).select();
@@ -1387,7 +1392,7 @@ function renderDash() {
   const live = weekRows.filter(p => p.status !== 'Cancelled');
   const today = live.filter(p => p.day === todayName).sort((a, b) => timeVal(a.time) - timeVal(b.time));
   // Unpaid = marked Here this week with no payment (same as 2.0 unpaidAttended)
-  const unpaid = live.filter(p => (attOf(p) || {}).status === 'Attended' && !(paidOf(p).amt > 0));
+  const unpaid = live.filter(p => !isOther(p) && (attOf(p) || {}).status === 'Attended' && !(paidOf(p).amt > 0));
   const wl = waitlist.filter(w => (w.extra || {}).Unsubscribed !== 'Yes');
   $('d_active').textContent = students.filter(x => x.status === 'Active').length;
   $('d_today').textContent = today.length; $('d_unpaid').textContent = unpaid.length; $('d_wl').textContent = waitlist.length;
@@ -1402,10 +1407,11 @@ function renderDash() {
   const lessonRow = (p, act) => {
     const st = (attOf(p) || {}).status || '', pd = paidOf(p), k = esc(p.id), t0 = timeVal(p.time), past = act && t0 + durMin(p) <= nowMin;
     const isNow = act && !past && t0 === nextT;
-    return `<div class="arow" style="${past ? 'opacity:.55;' : ''}${isNow ? 'background:#E8F7F1;border-left:4px solid #1c9a73;' : ''}"><span class="tag" style="background:${isNow ? '#1c9a73;color:#fff' : '#FAECE7;color:#712B13'};min-width:62px;text-align:center;font-size:11px">${isNow ? (t0 <= nowMin ? 'NOW' : 'NEXT') + '<br>' : ''}${esc(p.time)}</span>
+    const o = isOther(p);
+    return `<div class="arow" style="${past ? 'opacity:.55;' : ''}${o && !isNow ? 'background:#FBEAF0;border-left:4px solid #D4537E;' : ''}${isNow ? 'background:#E8F7F1;border-left:4px solid #1c9a73;' : ''}"><span class="tag" style="background:${isNow ? '#1c9a73;color:#fff' : '#FAECE7;color:#712B13'};min-width:62px;text-align:center;font-size:11px">${isNow ? (t0 <= nowMin ? 'NOW' : 'NEXT') + '<br>' : ''}${esc(p.time)}</span>
       <div class="who"><b>${esc(p.student_name)}</b> ${p.lesson_type === 'Shared' ? '<span class="tag t-shared">Shared</span>' : ''}${photo(p.student_id)}<small>${esc(p.duration || '30 min')} · ${esc(p.coach || 'Coach')}</small></div>
       ${act ? `<button class="here${st === 'Attended' ? ' on' : ''}" onclick="markAtt('${k}','${st === 'Attended' ? '' : 'Attended'}')">${st === 'Attended' ? '✓ Here' : 'Here'}</button>
-        ${pd.amt > 0 ? `<span class="paid" style="cursor:pointer" onclick="undoPay('${k}')">✓ $${pd.amt.toFixed(0)}</span>` : `<button class="paybtn" onclick="openPay('${k}')">$ Pay</button>`}` : ''}</div>`;
+        ${o ? '' : pd.amt > 0 ? `<span class="paid" style="cursor:pointer" onclick="undoPay('${k}')">✓ $${pd.amt.toFixed(0)}</span>` : `<button class="paybtn" onclick="openPay('${k}')">$ Pay</button>`}` : ''}</div>`;
   };
   const clsRow = c => { const n = clsRoster.filter(r => r.schedule_id === c.id).length;
     return `<div class="arow"><span class="tag" style="background:#E6F1FB;color:#185FA5;min-width:62px;text-align:center;font-size:11px">${esc(c.time)}</span><div class="who"><b>🤸 ${esc(c.class_name)}</b><small>Class · ${n} enrolled · $${clsPrice(c)}</small></div>${showTomorrow ? '' : `<button class="paybtn" onclick="attMode='classes';ss.set('attMode','classes');setAttModeButtons();go('attendance')">Roster →</button>`}</div>`; };
@@ -1472,8 +1478,8 @@ async function loadDashHist() {
   const [A, P] = await Promise.all([sb.from('attendance').select('student_id,student_name,lesson_id,week_start,status').in('week_start', [w1, w2]),
     sb.from('payments').select('student_id,lesson_id,week_start,amount').in('week_start', [w1, w2])]);
   if (A.error || P.error) return;
-  const liveIds = new Set(weekRows.map(p => p.student_id)), by = {};
-  A.data.forEach(a => { if (!a.student_id || !liveIds.has(a.student_id)) return; (by[a.student_id] = by[a.student_id] || { n: a.student_name, w: {} }).w[a.week_start] = (by[a.student_id].w[a.week_start] || []).concat(a); });
+  const liveIds = new Set(weekRows.map(p => p.student_id)), by = {}, otherIds = new Set(allLessons.filter(isOther).map(l => l.id));
+  A.data.forEach(a => { if (!a.student_id || !liveIds.has(a.student_id) || otherIds.has(a.lesson_id)) return; (by[a.student_id] = by[a.student_id] || { n: a.student_name, w: {} }).w[a.week_start] = (by[a.student_id].w[a.week_start] || []).concat(a); });
   const paid = new Set(P.data.filter(x => +x.amount > 0).map(x => x.student_id + '|' + x.week_start));
   Object.entries(by).forEach(([sid, r]) => {
     const wk = [w1, w2].map(w => r.w[w] || []);
@@ -1720,6 +1726,8 @@ async function removeWl(id) {
   waitlist = waitlist.filter(x => x !== w); renderOpen();
 }
 
+// One-week fill sitting in a slot whose regular is Away → "covering for <name>"
+function coverNote(p) { if (!addExId(p.id)) return ''; const a = weekRows.find(r => r.status === 'Cancelled' && r.day === p.day && r.time === p.time); return a ? `<i style="font-size:11px;color:#999">covering for ${esc(a.student_name)}</i>` : ''; }
 // Tap an "Away" row → fill the slot for this week, or put the regular student back
 function openAway(id) {
   const p = weekRows.find(r => r.id === id); if (!p) return;
