@@ -161,6 +161,7 @@
       <button onclick="shiftWeek(1)">Next →</button>
       <div class="wklabel" id="wkLabel"></div>
       <button onclick="openAdd()" style="background:var(--mint);color:#fff;border:0;font-weight:600">+ Add lesson</button>
+      <button onclick="openPrint()">🖨 Print</button>
     </div>
     <div class="wk">
       <select id="coachFilter" onchange="renderWeek()"><option value="">All coaches</option></select>
@@ -461,6 +462,38 @@
     <button class="btn" id="aw_back" style="background:#fff;color:#92400E;border:1px solid #F59E0B;margin-top:8px"></button>
   </div>
 </div>
+<!-- Print schedule (port of 2.0 Print Schedule): portrait letter, one page, size A−/A+/Auto-fit -->
+<div class="ovl hidden" id="printModal">
+  <div class="mdl" style="max-width:560px">
+    <div class="mh"><b>Print schedule</b><button class="x" onclick="$('printModal').classList.add('hidden')">✕</button></div>
+    <div id="prCtl" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+      <button class="paybtn" onclick="prSize(-0.5)">A−</button><span id="prPct" style="min-width:44px;text-align:center;font-size:13px"></span><button class="paybtn" onclick="prSize(0.5)">A+</button>
+      <button class="paybtn" onclick="prAuto(true)">Auto-fit</button><span id="prFit" class="tag"></span>
+      <button class="paybtn" style="margin-left:auto;background:var(--mint);color:#fff" onclick="window.print()">🖨 Print</button>
+    </div>
+    <div id="psWrap" style="overflow:hidden"><div id="pSheet"><div id="pContent"></div></div></div>
+  </div>
+</div>
+<style>
+  #pSheet { width:7.9in; height:10.4in; background:#fff; color:#2c2c2a; border:1px solid #bbb; overflow:hidden; position:relative; transform-origin:top left; box-sizing:border-box; }
+  #pSheet.over { border-bottom:3px solid #E24B4A; }
+  #pContent { font-family:Arial, sans-serif; }
+  #pContent table { width:100%; border-collapse:collapse; table-layout:fixed; }
+  #pContent td, #pContent th { border:1px solid #ccc; padding:.25em .45em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #pContent th { background:#f5f4f0; color:#888; font-weight:500; font-size:.85em; text-align:left; }
+  #pContent .ph { background:#FFE800; text-align:center; font-weight:600; }
+  #pContent .pb { display:inline-block; border:1px solid #999; width:5.5em; height:1.7em; vertical-align:middle; margin:0 .9em 0 .35em; }
+  @page { size: letter portrait; margin: 0.3in; }
+  @media print {
+    body > *:not(#printModal) { display:none !important; }
+    #printModal { position:static !important; background:none !important; padding:0 !important; display:block !important; }
+    #printModal .mdl { max-width:none !important; padding:0 !important; margin:0 !important; box-shadow:none !important; border:0 !important; background:none !important; }
+    #printModal .mh, #prCtl { display:none !important; }
+    #psWrap { height:auto !important; overflow:visible !important; }
+    #pSheet { transform:none !important; border:0 !important; }
+    #pContent th, #pContent .ph { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  }
+</style>
 <script>
 const sb = supabase.createClient('https://angmtyojkwlrefxpcgoa.supabase.co', 'sb_publishable_fPciNfnNHpHQikB8mqHNpw_hIVRIGo5');
 // Phone layout: (513) 555-1234. 10 digits (or 11 starting with 1) get formatted; anything else is left as typed.
@@ -469,6 +502,7 @@ function typingPhone(v) { let d = v.replace(/\D/g, ''); if (d.length > 10) retur
 const FIELDS = ['first_name','last_name','dob','skill_level','parent_name','parent_phone','parent_email','notes'];
 const OFF = ['Inactive','Dropped'];
 const isOn = s => !OFF.includes(s.status);
+let gymTitle = '';
 let mode = 'in', gymId = null, students = [], editingId = null;
 
 const $ = id => document.getElementById(id);
@@ -566,7 +600,7 @@ async function boot() {
   if (!session) { show('loginView'); return; }
   const { data: gyms, error } = await sb.from('gyms').select('id,name').limit(1);
   if (error || !gyms || !gyms.length) { show('waitView'); return; }
-  gymId = gyms[0].id; $('gymName').textContent = gyms[0].name + ' — Students';
+  gymId = gyms[0].id; gymTitle = gyms[0].name; $('gymName').textContent = gyms[0].name + ' — Students';
   const SE = await sb.from('seasons').select('*').order('sort'); seasons = SE.data || [];
   myEmail = (session.user.email || '').toLowerCase(); await loadCoaches();
   await loadStudents();
@@ -1727,6 +1761,47 @@ async function removeWl(id) {
 }
 
 // One-week fill sitting in a slot whose regular is Away → "covering for <name>"
+// ================= PRINT SCHEDULE =================
+// This week as it really is (away kids off, fill-ins/moves on), own lessons only (other coaches left off), + class roster.
+let prFont = 12;
+const PR_BOXES = ['Coach Steve', 'SA', 'TA', 'Riana', 'Total', 'Tithe'];
+async function openPrint() {
+  $('printModal').classList.remove('hidden'); $('pContent').innerHTML = '<div style="padding:20px">Loading…</div>'; prScale();
+  const CS = await sb.from('class_schedule').select('*').eq('active', true);
+  const cls = (CS.data || []).sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || timeVal(a.time) - timeVal(b.time));
+  const CE = cls.length ? await sb.from('class_enrollments').select('*').in('schedule_id', cls.map(c => c.id)) : { data: [] };
+  const seen = new Set(), byDay = {};
+  weekRows.filter(p => p.status !== 'Cancelled' && !isOther(p)).forEach(p => {
+    const k = (p.student_id || p.student_name) + '|' + p.day + '|' + p.time; if (seen.has(k) || !p.day) return; seen.add(k);
+    (byDay[p.day] = byDay[p.day] || []).push(p);
+  });
+  const blocks = DAYS.filter(d => byDay[d]).map(d => ({ label: d, rows: byDay[d].sort((a, b) => timeVal(a.time) - timeVal(b.time)).map(p => [p.time, p.student_name]) }));
+  cls.forEach(c => {
+    const r = (CE.data || []).filter(e => e.schedule_id === c.id && !['Dropped','Waitlisted'].includes(e.status)).map(e => ['', e.student_name || '']).sort((a, b) => a[1].localeCompare(b[1]));
+    if (r.length) blocks.push({ label: (c.class_name || 'Group Class') + ' — ' + (c.day ? SHORT[c.day] + ' ' : '') + (c.time || ''), rows: r });
+  });
+  // Balance blocks over 3 columns (same as 2.0) so no column runs long
+  const cols = [[], [], []], tot = [0, 0, 0];
+  blocks.forEach(b => { const i = tot.indexOf(Math.min(...tot)); cols[i].push(b); tot[i] += b.rows.length + 1; });
+  const tbl = bs => `<table><thead><tr><th style="width:27%">Time</th><th>Student</th><th style="width:25%">Payment</th></tr></thead><tbody>${bs.map(b => `<tr><td colspan="3" class="ph">${esc(b.label)}</td></tr>` + b.rows.map(r => `<tr><td style="color:#555">${esc(r[0])}</td><td style="font-weight:600">${esc(r[1])}</td><td></td></tr>`).join('')).join('')}</tbody></table>`;
+  $('pContent').innerHTML = `<div style="font-weight:600;font-size:1.25em">${esc(gymTitle || 'Flip Lab')} · Week of ${esc(weekDates()[0].label)}</div>
+    <div style="margin:.5em 0 .7em;white-space:nowrap">${PR_BOXES.map(b => `${esc(b)}<span class="pb"></span>`).join('')}</div>
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.6em">${cols.map(c => '<div>' + tbl(c) + '</div>').join('')}</div>`;
+  let saved = 'auto'; try { saved = localStorage.getItem('fl3_printSize') || 'auto'; } catch (e) {}
+  if (saved === 'auto' || isNaN(+saved)) prAuto(false); else { prFont = +saved; prShow(); }
+}
+// Scale the real-size sheet down to fit the screen (printing uses it at full size)
+function prScale() { const w = $('psWrap').clientWidth || 300, k = Math.min(1, w / $('pSheet').offsetWidth); $('pSheet').style.transform = 'scale(' + k + ')'; $('psWrap').style.height = ($('pSheet').offsetHeight * k) + 'px'; }
+const prFits = () => $('pContent').scrollHeight <= $('pSheet').clientHeight;
+function prShow() {
+  $('pContent').style.fontSize = prFont + 'px'; $('prPct').textContent = Math.round(prFont / 12 * 100) + '%';
+  const ok = prFits(); $('pSheet').classList.toggle('over', !ok);
+  $('prFit').textContent = ok ? 'Fits on 1 page' : "Won't fit on 1 page"; $('prFit').style.cssText = ok ? 'background:#EAF3DE;color:#3B6D11' : 'background:#FCEBEB;color:#A32D2D';
+  prScale();
+}
+function prAuto(remember) { prFont = 20; prShow(); while (!prFits() && prFont > 5) { prFont -= 0.25; prShow(); } if (remember) try { localStorage.setItem('fl3_printSize', 'auto'); } catch (e) {} }
+function prSize(d) { prFont = Math.max(5, Math.min(24, prFont + d)); prShow(); try { localStorage.setItem('fl3_printSize', String(prFont)); } catch (e) {} }
+
 function coverNote(p) { if (!addExId(p.id)) return ''; const a = weekRows.find(r => r.status === 'Cancelled' && r.day === p.day && r.time === p.time); return a ? `<i style="font-size:11px;color:#999">covering for ${esc(a.student_name)}</i>` : ''; }
 // Tap an "Away" row → fill the slot for this week, or put the regular student back
 function openAway(id) {
