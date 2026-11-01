@@ -464,6 +464,22 @@
     <button class="btn" id="aw_back" style="background:#fff;color:#92400E;border:1px solid #F59E0B;margin-top:8px"></button>
   </div>
 </div>
+<!-- Edit payment: tap ✓ Paid → change amount / method / date, or remove -->
+<div class="ovl hidden" id="epModal" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="mdl">
+    <div class="mh"><b id="ep_title">Edit payment</b><button class="x" onclick="$('epModal').classList.add('hidden')">✕</button></div>
+    <div id="ep_sub" style="font-size:12px;color:#888;margin:-4px 0 10px"></div>
+    <div class="row2">
+      <div><label>Amount</label><input id="ep_amount" inputmode="decimal"></div>
+      <div><label>Method</label><select id="ep_method"><option>Cash</option><option>Venmo</option><option>Zelle</option><option>Check</option><option>Other</option></select></div>
+    </div>
+    <label>Date paid</label><input type="date" id="ep_date">
+    <label style="display:flex;align-items:center;gap:6px;margin:4px 0 10px"><input type="checkbox" id="ep_special" style="width:auto"> ★ Special price this week (counts as paid in full)</label>
+    <button class="btn" onclick="saveEditPay()">Save</button>
+    <button class="btn ghost" style="margin-top:8px;color:#A32D2D" onclick="removeEditPay()">Remove payment</button>
+    <div id="ep_msg" class="msg"></div>
+  </div>
+</div>
 <!-- Print schedule (port of 2.0 Print Schedule): portrait letter, one page, size A−/A+/Auto-fit -->
 <div class="ovl hidden" id="printModal">
   <div class="mdl" style="max-width:560px">
@@ -1183,7 +1199,7 @@ function renderAtt() {
         <div class="tc">${esc(p.time)}<br>${esc(p.coach || 'TBD')}</div>
         <button class="here${st === 'Attended' ? ' on' : ''}" onclick="markAtt('${k}','${st === 'Attended' ? '' : 'Attended'}')" title="${st === 'Attended' ? 'Tap again to clear' : ''}">${st === 'Attended' ? '✓ Here' : 'Here'}</button>
         <select class="nothere${NOT_HERE.includes(st) ? ' on' : ''}" onchange="markAtt('${k}',this.value)"><option value="">${st ? '— Clear' : '— Not Here'}</option>${NOT_HERE.map(o => `<option${o === st ? ' selected' : ''}>${o}</option>`).join('')}</select>
-        ${o ? '' : pd.amt > 0 ? `<span class="paid" style="cursor:pointer" title="Tap to remove" onclick="undoPay('${k}')">✓ Paid $${pd.amt.toFixed(0)}${pd.method ? ' · ' + esc(pd.method) : ''}${pd.adj ? ' · ★' : ''}</span>` : `<button class="paybtn" onclick="openPay('${k}')">$ Record Payment</button>`}</div>`;
+        ${o ? '' : pd.amt > 0 ? `<span class="paid" style="cursor:pointer" title="Tap to edit" onclick="undoPay('${k}')">✓ Paid $${pd.amt.toFixed(0)}${pd.method ? ' · ' + esc(pd.method) : ''}${pd.adj ? ' · ★' : ''}</span>` : `<button class="paybtn" onclick="openPay('${k}')">$ Record Payment</button>`}</div>`;
     });
     html += '</div>';
   });
@@ -1237,7 +1253,7 @@ function renderPay() {
     const phone = s.parent_phone ? `<a href="${smsHref(s.parent_phone, remind)}">📱 Remind</a> <span style="font-size:11px;color:#888">${esc(s.parent_phone)}</span>` : '';
     return `<div class="arow"><div class="who"><b>${esc(p.student_name)}</b><small>${p.cls ? '🤸 ' + esc(p.cls) + ' · ' : ''}${esc(p.day)} ${esc(p.time)} · owed ${money(b.owed)}${b.paid ? ' · paid ' + money(b.paid) : ''}</small>${b.bal > 0 ? phone : ''}</div>
       ${b.bal > 0 ? `<div class="bal">${money(b.bal)} due</div><button class="paybtn" onclick="openPay(${pk})">$ Record Payment</button>${b.paid && !p.cls ? `<button class="paybtn" style="background:#EFE7FF;color:#3C3489" onclick="markSpecial('${k}')">★ Special price</button>` : ''}`
-        : `<span class="paid" style="cursor:pointer" title="Tap to remove" onclick="${p.cls ? `clsUndoPayId('${k}')` : `undoPay('${k}')`}">✓ Paid ${money(b.paid)}${b.method ? ' · ' + esc(b.method) : ''}${b.adj ? ' · ★ special' : ''}</span>`}</div>`;
+        : `<span class="paid" style="cursor:pointer" title="Tap to edit" onclick="${p.cls ? `clsUndoPayId('${k}')` : `undoPay('${k}')`}">✓ Paid ${money(b.paid)}${b.method ? ' · ' + esc(b.method) : ''}${b.adj ? ' · ★ special' : ''}</span>`}</div>`;
   }).join('') : '<div class="center">No lessons this week</div>';
   // history filter: students with a lesson this week or a payment this week, plus everyone active
   const f = $('histFilter'), cur = f.value;
@@ -1346,8 +1362,32 @@ async function markSpecial(id) {
   renderPay();
 }
 
-async function undoPay(id) {
+// Tap ✓ Paid → edit box (one payment). Several payments on one lesson → keep the old remove-all confirm.
+let epRow = null, epPay = null;
+function undoPay(id) {
   const p = typeof id === 'object' ? id : weekRows.find(r => r.id === id && r.status !== 'Cancelled'); if (!p) return;
+  const rows = weekPay.filter(x => x.lesson_id === p.id); if (!rows.length) return;
+  if (rows.length > 1) return removePays(p);
+  epRow = p; epPay = rows[0];
+  $('ep_title').textContent = 'Edit payment · ' + p.student_name;
+  $('ep_sub').textContent = (p.day || '') + ' ' + (p.time || '') + ' · lesson $' + priceNum(p);
+  $('ep_amount').value = +epPay.amount || 0;
+  const m = epPay.method || 'Cash'; if (![...$('ep_method').options].some(o => o.value === m)) $('ep_method').insertAdjacentHTML('beforeend', `<option>${esc(m)}</option>`); $('ep_method').value = m;
+  $('ep_date').value = epPay.date || ymd(new Date()); $('ep_special').checked = isAdj(epPay); $('ep_msg').textContent = '';
+  $('epModal').classList.remove('hidden');
+}
+async function saveEditPay() {
+  const amount = +String($('ep_amount').value).replace(/[^0-9.]/g, ''), m = $('ep_msg');
+  if (!(amount > 0)) { m.className = 'msg err'; m.textContent = 'Enter an amount (or use Remove payment).'; return; }
+  const ch = { amount, method: $('ep_method').value, date: $('ep_date').value || epPay.date, extra: { ...(epPay.extra || {}), Adjusted: $('ep_special').checked ? 'Yes' : '' } };
+  m.className = 'msg'; m.textContent = 'Saving…';
+  const res = await sb.from('payments').update(ch).eq('id', epPay.id);
+  if (res.error) { m.className = 'msg err'; m.textContent = res.error.message; return; }
+  const delta = amount - (+epPay.amount || 0); Object.assign(epPay, ch);
+  $('epModal').classList.add('hidden'); afterPay(delta);
+}
+async function removeEditPay() { $('epModal').classList.add('hidden'); await removePays(epRow); }
+async function removePays(p) {
   const rows = weekPay.filter(x => x.lesson_id === p.id), total = rows.reduce((t, x) => t + (+x.amount || 0), 0);
   if (!rows.length || !confirm('Remove the $' + total.toFixed(0) + ' payment for ' + p.student_name + ' this week?')) return;
   const res = await sb.from('payments').delete().in('id', rows.map(x => x.id));
@@ -1375,7 +1415,7 @@ function renderClassAtt() {
       html += `<div class="arow"><div class="who"><b>${esc(r.student_name)}</b><small>${esc(r.parent_name || '')}${r.status && r.status !== 'Enrolled' ? ' · ' + esc(r.status) : ''}</small></div>
         <button class="here${st === 'Attended' ? ' on' : ''}" onclick="clsMark('${k}','${st === 'Attended' ? '' : 'Attended'}')">${st === 'Attended' ? '✓ Here' : 'Here'}</button>
         <select class="nothere${NOT_HERE.includes(st) ? ' on' : ''}" onchange="clsMark('${k}',this.value)"><option value="">${st ? '— Clear' : '— Not Here'}</option>${NOT_HERE.map(x => `<option${x === st ? ' selected' : ''}>${x}</option>`).join('')}</select>
-        ${pd.amt > 0 ? `<span class="paid" style="cursor:pointer" title="Tap to remove" onclick="clsUndoPay('${k}')">✓ Paid $${pd.amt.toFixed(0)}${pd.method ? ' · ' + esc(pd.method) : ''}</span>` : `<button class="paybtn" onclick="clsPay('${k}')">$ Record Payment</button>`}</div>`;
+        ${pd.amt > 0 ? `<span class="paid" style="cursor:pointer" title="Tap to edit" onclick="clsUndoPay('${k}')">✓ Paid $${pd.amt.toFixed(0)}${pd.method ? ' · ' + esc(pd.method) : ''}</span>` : `<button class="paybtn" onclick="clsPay('${k}')">$ Record Payment</button>`}</div>`;
     });
     html += '</div>';
   });
