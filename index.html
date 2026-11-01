@@ -662,7 +662,7 @@ function renderAtt() {
         <div class="tc">${esc(p.time)}<br>${esc(p.coach || 'TBD')}</div>
         <button class="here${st === 'Attended' ? ' on' : ''}" onclick="markAtt('${k}','${st === 'Attended' ? '' : 'Attended'}')" title="${st === 'Attended' ? 'Tap again to clear' : ''}">${st === 'Attended' ? '✓ Here' : 'Here'}</button>
         <select class="nothere${NOT_HERE.includes(st) ? ' on' : ''}" onchange="markAtt('${k}',this.value)"><option value="">${st ? '— Clear' : '— Not Here'}</option>${NOT_HERE.map(o => `<option${o === st ? ' selected' : ''}>${o}</option>`).join('')}</select>
-        ${pd.amt > 0 ? `<span class="paid">✓ Paid $${pd.amt.toFixed(0)}${pd.method ? ' · ' + esc(pd.method) : ''}</span>` : `<button class="paybtn" onclick="openPay('${k}')">$ Record Payment</button>`}</div>`;
+        ${pd.amt > 0 ? `<span class="paid" style="cursor:pointer" title="Tap to remove" onclick="undoPay('${k}')">✓ Paid $${pd.amt.toFixed(0)}${pd.method ? ' · ' + esc(pd.method) : ''}</span>` : `<button class="paybtn" onclick="openPay('${k}')">$ Record Payment</button>`}</div>`;
     });
     html += '</div>';
   });
@@ -682,6 +682,14 @@ async function markAtt(id, status) {
   renderAtt();
 }
 
+async function undoPay(id) {
+  const p = weekRows.find(r => r.id === id && r.status !== 'Cancelled'); if (!p) return;
+  const rows = weekPay.filter(x => x.lesson_id === p.id), total = rows.reduce((t, x) => t + (+x.amount || 0), 0);
+  if (!rows.length || !confirm('Remove the $' + total.toFixed(0) + ' payment for ' + p.student_name + ' this week?')) return;
+  const res = await sb.from('payments').delete().in('id', rows.map(x => x.id));
+  if (res.error) return alert(res.error.message);
+  weekPay = weekPay.filter(x => !rows.includes(x)); renderAtt();
+}
 function openPay(id) {
   qpRow = weekRows.find(r => r.id === id && r.status !== 'Cancelled'); if (!qpRow) return;
   $('qp_who').textContent = qpRow.student_name + ' — ' + qpRow.day + ' ' + qpRow.time;
