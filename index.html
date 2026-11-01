@@ -124,7 +124,8 @@
       <input id="q" placeholder="Search students or parents" oninput="render()">
       <button class="btn" onclick="openEdit(null)">+ Add</button>
     </div>
-    <div class="chk" style="margin-top:10px"><input type="checkbox" id="showInactive" onchange="render()"><label for="showInactive">Show inactive &amp; dropped</label></div>
+    <div class="stabs" id="grpTabs" style="margin-top:10px"></div>
+    <div class="chk"><input type="checkbox" id="showInactive" onchange="render()"><label for="showInactive">Show inactive &amp; dropped</label></div>
     <div class="hdr"><span id="gymName">Students</span><span id="count"></span></div>
     <div class="card" id="list"></div>
   </section>
@@ -450,20 +451,41 @@ async function loadStudents() {
   $('list').innerHTML = '<div class="center">Loading…</div>';
   const { data, error } = await sb.from('students').select('*').order('last_name').order('first_name');
   if (error) { $('list').innerHTML = '<div class="msg err">' + esc(error.message) + '</div>'; return; }
-  students = data; render();
+  students = data;
+  // Group membership: live private lesson, active class enrollment, waitlist / drop-in list (or student status)
+  const today = ymd(new Date());
+  const [L, E, W] = await Promise.all([
+    sb.from('private_lessons').select('student_id,end_date,status').or('end_date.is.null,end_date.gt.' + today),
+    sb.from('class_enrollments').select('student_id,status,schedule_id'),
+    sb.from('waitlist').select('student_id,status').in('status', ['Waiting','Waitlist','Drop-In'])
+  ]);
+  grp = { priv: new Set(), cls: new Set(), wl: new Set(), di: new Set() };
+  (L.data || []).filter(l => !['Cancelled','Dropped'].includes(l.status)).forEach(l => grp.priv.add(l.student_id));
+  (E.data || []).filter(e => !['Dropped','Waitlisted'].includes(e.status)).forEach(e => grp.cls.add(e.student_id));
+  (W.data || []).forEach(w => (w.status === 'Drop-In' ? grp.di : grp.wl).add(w.student_id));
+  students.forEach(s => { if (s.status === 'Waitlist') grp.wl.add(s.id); if (s.status === 'Drop-In') grp.di.add(s.id); });
+  render();
 }
+let grp = { priv: new Set(), cls: new Set(), wl: new Set(), di: new Set() }, stuGroup = 'priv';
+const GROUPS = [['priv','Private'],['cls','Class'],['wl','Waitlist'],['di','Drop-In'],['all','All']];
+function setGroup(g) { stuGroup = g; render(); }
 
 function render() {
   const q = $('q').value.trim().toLowerCase(), all = $('showInactive').checked;
-  const rows = students.filter(s => (all || isOn(s)) &&
-    (!q || [s.first_name, s.last_name, s.parent_name, s.parent_phone, s.parent_email].join(' ').toLowerCase().includes(q)));
+  const inG = (s, g) => g === 'all' || grp[g].has(s.id);
+  const base = students.filter(s => (all || isOn(s)) && (!q || [s.first_name, s.last_name, s.parent_name, s.parent_phone, s.parent_email].join(' ').toLowerCase().includes(q)));
+  $('grpTabs').innerHTML = GROUPS.map(([g, l]) => `<button class="${g === stuGroup ? 'on' : ''}" onclick="setGroup('${g}')">${l} <span style="font-size:11px;opacity:.7">${base.filter(s => inG(s, g)).length}</span></button>`).join('');
+  const rows = base.filter(s => inG(s, stuGroup));
+  const tags = s => [grp.priv.has(s.id) && 'Private', grp.cls.has(s.id) && 'Class', grp.wl.has(s.id) && 'Waitlist', grp.di.has(s.id) && 'Drop-In'].filter(Boolean);
   $('count').textContent = rows.length;
+  $('gymName').textContent = (GROUPS.find(x => x[0] === stuGroup) || [, 'Students'])[1] + (stuGroup === 'all' ? ' students' : '');
   $('list').innerHTML = rows.length ? rows.map(s => `
     <div class="stu" onclick="openEdit('${esc(s.id)}')">
       <div><b>${esc(s.first_name)} ${esc(s.last_name)}</b>
         <small>${esc(s.parent_name || '')}${s.parent_phone ? ' · ' + esc(s.parent_phone) : ''}</small></div>
-      <span class="pill ${isOn(s) ? '' : 'off'}">${esc(s.status || 'Active')}${s.skill_level ? ' · ' + esc(s.skill_level) : ''}</span>
-    </div>`).join('') : '<div class="center">No students yet.</div>';
+      <span style="text-align:right"><span class="pill ${isOn(s) ? '' : 'off'}">${esc(s.status || 'Active')}${s.skill_level ? ' · ' + esc(s.skill_level.split('-')[0]) : ''}</span>
+        ${tags(s).length ? `<small style="display:block;margin-top:3px;color:#888;font-size:11px">${tags(s).join(' · ')}</small>` : ''}</span>
+    </div>`).join('') : '<div class="center">No students in this group.</div>';
 }
 
 const XF = ['School','PhotoPermission','PreferredPayment','WaiverSigned'];
