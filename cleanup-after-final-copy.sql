@@ -49,4 +49,11 @@ update waitlist set status = 'Waitlist' where status = 'Waiting';
 --    (Lilah Grace, Emma Ohmer, Riley Stahl stay Active with no lesson booked)
 update students set status = 'Inactive', active = false where id in ('STU019', 'STU1775432882917_4') and status = 'Active';
 
+-- 5. Moved from Drop-In to Waitlist (Steve, Oct 31): Lucy Curington, Josie Vaccari, Sabol Thompson, Aurora Pendergraft, Kinley DeVore
+update students set status = 'Waitlist'
+  where id in ('STU1784582401244', 'STU1781180024360', 'STU1786384060445', 'STU1786477195830', 'STU1780344777406');
+update waitlist set status = 'Waitlist'
+  where student_id in ('STU1784582401244', 'STU1781180024360', 'STU1786384060445', 'STU1786477195830', 'STU1780344777406')
+    and status in ('Drop-In', 'Waiting');
+
 commit;
