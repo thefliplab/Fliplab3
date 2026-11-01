@@ -143,7 +143,7 @@
     <div class="card" style="padding:0;overflow:hidden" id="d_sched"></div>
     <div class="sec">Needs attention</div>
     <div class="card" style="padding:0;overflow:hidden" id="d_attn"></div>
-    <div class="sec">Waitlist <span id="d_wlSub" style="font-weight:400;font-size:12px;color:#888"></span></div>
+    <div class="sec" style="cursor:pointer;user-select:none" onclick="toggleDashWl()"><span><span id="d_wlArrow">▸</span> Waitlist</span> <span id="d_wlSub" style="font-weight:400;font-size:12px;color:#888"></span></div>
     <div class="card" style="padding:0;overflow:hidden" id="d_wlist"></div>
     <div class="sec">🎂 Birthdays this week</div>
     <div class="card" style="padding:0;overflow:hidden" id="d_bday"></div>
@@ -1263,6 +1263,8 @@ async function savePay(method) {
 }
 
 // ================= DASHBOARD (port of 2.0 dashboard: metrics, today, needs attention, waitlist, birthdays) =================
+function toggleDashWl() { ss.set('dashWlOpen', !ss.get('dashWlOpen', false)); setDashWl(); }
+function setDashWl() { const open = ss.get('dashWlOpen', false); $('d_wlist').classList.toggle('hidden', !open); $('d_wlArrow').textContent = open ? '▾' : '▸'; }
 function renderDash() {
   const todayName = DAYS[(new Date().getDay() + 6) % 7], wk = weekDates(), stu = {}; students.forEach(x => stu[x.id] = x);
   const live = weekRows.filter(p => p.status !== 'Cancelled');
@@ -1324,6 +1326,7 @@ function renderDash() {
   const ago = d => { if (!d) return ''; const days = Math.floor((Date.now() - new Date(d)) / 864e5); return days < 1 ? 'notified today' : days < 7 ? 'notified ' + days + 'd ago' : 'notified ' + Math.floor(days / 7) + 'w ago'; };
   const rows = wl.map(w => ({ w, m: opens.filter(o => matchesSlot(w, o.day, o.time)) })).sort((a, b) => (b.m.length > 0) - (a.m.length > 0) || String(a.w.signup_date || '').localeCompare(String(b.w.signup_date || '')));
   $('d_wlSub').textContent = rows.length ? rows.filter(r => r.m.length).length + ' of ' + rows.length + ' have matches this week' : '';
+  setDashWl();
   $('d_wlist').innerHTML = rows.length ? rows.map((r, i) => {
     const w = r.w, age = ageOf(w.dob), first = (w.student_name || '').split(' ')[0];
     const txt = 'Hi' + (w.parent_name ? ' ' + w.parent_name.split(' ')[0] : '') + '! Spots open this week for ' + first + ':\n' + r.m.slice(0, 6).map(o => '• ' + SHORT[o.day] + ' ' + o.time).join('\n') + '\nWant one?';
