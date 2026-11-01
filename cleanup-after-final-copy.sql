@@ -83,4 +83,8 @@ update students set emergency_phone = pg_temp.fmt_phone(emergency_phone) where e
 update coaches set phone = pg_temp.fmt_phone(phone) where phone is not null;
 update waitlist set parent_phone = pg_temp.fmt_phone(parent_phone) where parent_phone is not null;
 
+-- 10. Penny Taylor Sunday 12:30 PM with Coach Steve is Solo (Steve, Nov 1) — 2.0 had it as Shared with no partner.
+--     Runs after step 2, so its $40 → $30 shared change is undone here.
+update private_lessons set lesson_type = 'Solo', share_type = 'No', price = '$40' where id = 'PL-1788970306229';
+
 commit;
