@@ -224,7 +224,7 @@
 
   <!-- Edit student -->
   <section id="editView" class="hidden">
-    <button class="btn ghost" style="width:auto;padding:7px 12px;font-size:13px" onclick="show('studentsView')">← Students</button>
+    <button class="btn ghost" style="width:auto;padding:7px 12px;font-size:13px" onclick="go('students')">← Students</button>
     <div class="hdr hidden" id="newHdr"><span id="editTitle">New student</span></div>
     <div id="sdTop"></div>
     <div class="stabs" id="sdTabs">
@@ -265,7 +265,7 @@
       <select id="f_status"><option>Active</option><option>Waitlist</option><option>Drop-In</option><option>Inactive</option><option>Dropped</option></select>
       <div class="chk"><input type="checkbox" id="f_unsubscribed"><label for="f_unsubscribed">Unsubscribed from emails/texts</label></div>
       <div class="row2">
-        <button class="btn ghost" onclick="show('studentsView')">Close</button>
+        <button class="btn ghost" onclick="go('students')">Close</button>
         <button class="btn" onclick="saveStudent()">Save</button>
       </div>
       <div id="editMsg" class="msg"></div>
@@ -390,6 +390,9 @@ const isOn = s => !OFF.includes(s.status);
 let mode = 'in', gymId = null, students = [], editingId = null;
 
 const $ = id => document.getElementById(id);
+// Remember where Steve is so a refresh brings him back (tab, open student, group, class mode, week)
+const ss = { get(k, d) { try { const v = sessionStorage.getItem('fl3_' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+             set(k, v) { try { sessionStorage.setItem('fl3_' + k, JSON.stringify(v)); } catch (e) {} } };
 function show(view) {
   ['loginView','waitView','studentsView','editView','scheduleView','attendanceView','paymentsView','openingsView'].forEach(v => $(v).classList.toggle('hidden', v !== view));
   $('outBtn').classList.toggle('hidden', view === 'loginView');
@@ -442,10 +445,14 @@ async function boot() {
   if (error || !gyms || !gyms.length) { show('waitView'); return; }
   gymId = gyms[0].id; $('gymName').textContent = gyms[0].name + ' — Students';
   await loadStudents();
-  go('schedule');
+  weekOffset = ss.get('week', 0); stuGroup = ss.get('group', 'priv'); attMode = ss.get('attMode', 'privates');
+  if (attMode === 'classes') setAttModeButtons();
+  const tab = ss.get('tab', 'schedule'), sid = ss.get('student', null);
+  if (tab === 'student' && sid && students.find(x => x.id === sid)) { curTab = 'students'; openEdit(sid); if (!weekRows.length) loadWeek(); }
+  else go(['schedule','attendance','openings','payments','students'].includes(tab) ? tab : 'schedule');
 }
 let curTab = 'schedule';
-function go(tab) { curTab = tab; if (tab === 'students') return show('studentsView'); show(tab + 'View'); loadWeek(); }
+function go(tab) { curTab = tab; ss.set('tab', tab); if (tab === 'students') { show('studentsView'); render(); if (!weekRows.length) loadWeek(); return; } show(tab + 'View'); loadWeek(); }
 
 async function loadStudents() {
   $('list').innerHTML = '<div class="center">Loading…</div>';
@@ -468,7 +475,7 @@ async function loadStudents() {
 }
 let grp = { priv: new Set(), cls: new Set(), wl: new Set(), di: new Set() }, stuGroup = 'priv';
 const GROUPS = [['priv','Private'],['cls','Class'],['wl','Waitlist'],['di','Drop-In'],['all','All']];
-function setGroup(g) { stuGroup = g; render(); }
+function setGroup(g) { stuGroup = g; ss.set('group', g); render(); }
 
 function render() {
   const q = $('q').value.trim().toLowerCase(), all = $('showInactive').checked;
@@ -501,6 +508,7 @@ function openEdit(id) {
   $('editMsg').textContent = '';
   $('newHdr').classList.toggle('hidden', !!id); $('sdTabs').classList.toggle('hidden', !id); $('sdTop').innerHTML = '';
   show('editView'); window.scrollTo(0, 0);
+  if (id) { ss.set('tab', 'student'); ss.set('student', id); }
   sdTab('profile');
   if (id) loadStudentDetail(s);
 }
@@ -521,7 +529,7 @@ async function saveStudent() {
   if (editingId && (st !== prevStatus || st === 'Waitlist' || st === 'Drop-In')) { const e = await syncWaitlist({ ...cur, ...rec, id: editingId }, st); if (e) { $('editMsg').className = 'msg err'; $('editMsg').textContent = 'Saved, but the waitlist list did not update: ' + e; return; } }
   await loadStudents();
   if (editingId) { $('editMsg').className = 'msg'; $('editMsg').textContent = '✓ Saved'; const s = students.find(x => x.id === editingId); if (s) renderSdTop(s); }
-  else show('studentsView');
+  else go('students');
 }
 
 // Keep the Waitlist / Drop-In list (Openings tab) in step with the student's Status:
@@ -655,7 +663,7 @@ function timeVal(t) {
   const m = String(t || '').trim().match(/^(\d{1,2}):?(\d{2})?\s*([AaPp])?/); if (!m) return 9999;
   let h = +m[1] % 12; if (m[3] && /p/i.test(m[3])) h += 12; return h * 60 + (+m[2] || 0);
 }
-function shiftWeek(n) { weekOffset = n === 0 ? 0 : weekOffset + n; loadWeek(); }
+function shiftWeek(n) { weekOffset = n === 0 ? 0 : weekOffset + n; ss.set('week', weekOffset); loadWeek(); }
 
 async function loadWeek() {
   const wd = weekDates(), ws = ymd(wd[0].date), we = ymd(wd[6].date), my = ++weekLoading;
@@ -963,11 +971,10 @@ const paidOf = p => weekPay.filter(x => x.lesson_id === p.id).reduce((t, x) => (
 const priceNum = p => parseFloat(String(p.price || '').replace(/[^0-9.]/g, '')) || priceFor(p.duration, p.lesson_type === 'Shared' ? 'Shared' : 'Solo').slice(1) * 1;
 let qpRow = null;
 
-function setAttMode(m) {
-  attMode = m;
-  [['am_priv','privates'],['am_cls','classes']].forEach(([id, v]) => { const on = v === m; $(id).style.background = on ? 'var(--mint)' : '#fff'; $(id).style.color = on ? '#fff' : ''; $(id).style.borderColor = on ? 'var(--mint)' : ''; });
-  loadWeek();
+function setAttModeButtons() {
+  [['am_priv','privates'],['am_cls','classes']].forEach(([id, v]) => { const on = v === attMode; $(id).style.background = on ? 'var(--mint)' : '#fff'; $(id).style.color = on ? '#fff' : ''; $(id).style.borderColor = on ? 'var(--mint)' : ''; });
 }
+function setAttMode(m) { attMode = m; ss.set('attMode', m); setAttModeButtons(); loadWeek(); }
 function renderAtt() {
   if (attMode === 'classes') return renderClassAtt();
   const lessons = weekRows.filter(p => p.status !== 'Cancelled').sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || timeVal(a.time) - timeVal(b.time));
