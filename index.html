@@ -89,13 +89,13 @@
   .slotpick { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0; } .slotpick label { display:flex; align-items:center; gap:5px; background:#f3f5f7; border-radius:16px; padding:5px 10px; font-size:13px; color:var(--text); }
   .slotpick input { width:auto; margin:0; }
   #tabs { overflow-x:auto; }
-  @media (max-width:640px) { nav { flex-wrap:wrap; row-gap:8px; } #tabs { order:3; width:100%; } #tabs button { flex:1; padding:6px 4px; } }
+  @media (max-width:640px) { nav { flex-wrap:wrap; row-gap:8px; } #tabs { order:3; width:100%; flex-wrap:wrap; gap:4px; } #tabs button { flex:1 0 30%; padding:7px 4px; } }
   .paid { font-size:11px; padding:3px 8px; border-radius:10px; background:#EAF3DE; color:#3B6D11; font-weight:600; } .btn.red { background:var(--danger); }
 </style>
 </head>
 <body>
 <nav><b>Flip<span>Lab</span> 3.0</b>
-  <div id="tabs" class="hidden"><button id="tabBtn_schedule" onclick="go('schedule')">Schedule</button><button id="tabBtn_attendance" onclick="go('attendance')">Attendance</button><button id="tabBtn_openings" onclick="go('openings')">Openings</button><button id="tabBtn_payments" onclick="go('payments')">Payments</button><button id="tabBtn_students" onclick="go('students')">Students</button></div>
+  <div id="tabs" class="hidden"><button id="tabBtn_dashboard" onclick="go('dashboard')">Dashboard</button><button id="tabBtn_schedule" onclick="go('schedule')">Schedule</button><button id="tabBtn_attendance" onclick="go('attendance')">Attendance</button><button id="tabBtn_openings" onclick="go('openings')">Openings</button><button id="tabBtn_payments" onclick="go('payments')">Payments</button><button id="tabBtn_students" onclick="go('students')">Students</button></div>
   <button id="outBtn" class="hidden" onclick="openAcct()">⚙ Account</button></nav>
 <main>
 
@@ -130,6 +130,24 @@
     <div class="card" id="list"></div>
   </section>
 
+
+  <!-- Dashboard (port of 2.0 v-dashboard) -->
+  <section id="dashboardView" class="hidden">
+    <div class="metrics" style="margin-top:4px">
+      <div class="metric"><small>Active students</small><b id="d_active">—</b></div>
+      <div class="metric"><small>Today's lessons</small><b id="d_today">—</b></div>
+      <div class="metric"><small>Unpaid this week</small><b id="d_unpaid" style="color:#854F0B">—</b></div>
+      <div class="metric"><small>Waitlist</small><b id="d_wl">—</b></div>
+    </div>
+    <div class="sec" id="d_todayHead">Today's schedule</div>
+    <div class="card" style="padding:0;overflow:hidden" id="d_sched"></div>
+    <div class="sec">Needs attention</div>
+    <div class="card" style="padding:0;overflow:hidden" id="d_attn"></div>
+    <div class="sec">Waitlist <span id="d_wlSub" style="font-weight:400;font-size:12px;color:#888"></span></div>
+    <div class="card" style="padding:0;overflow:hidden" id="d_wlist"></div>
+    <div class="sec">🎂 Birthdays this week</div>
+    <div class="card" style="padding:0;overflow:hidden" id="d_bday"></div>
+  </section>
 
   <!-- Schedule -->
   <section id="scheduleView" class="hidden">
@@ -394,10 +412,10 @@ const $ = id => document.getElementById(id);
 const ss = { get(k, d) { try { const v = sessionStorage.getItem('fl3_' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
              set(k, v) { try { sessionStorage.setItem('fl3_' + k, JSON.stringify(v)); } catch (e) {} } };
 function show(view) {
-  ['loginView','waitView','studentsView','editView','scheduleView','attendanceView','paymentsView','openingsView'].forEach(v => $(v).classList.toggle('hidden', v !== view));
+  ['loginView','waitView','studentsView','editView','scheduleView','attendanceView','paymentsView','openingsView','dashboardView'].forEach(v => $(v).classList.toggle('hidden', v !== view));
   $('outBtn').classList.toggle('hidden', view === 'loginView');
   $('tabs').classList.toggle('hidden', !gymId);
-  ['schedule','attendance','openings','payments','students'].forEach(t => $('tabBtn_' + t).classList.toggle('on', view === t + 'View'));
+  ['dashboard','schedule','attendance','openings','payments','students'].forEach(t => $('tabBtn_' + t).classList.toggle('on', view === t + 'View'));
 }
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
@@ -447,9 +465,9 @@ async function boot() {
   await loadStudents();
   weekOffset = ss.get('week', 0); stuGroup = ss.get('group', 'priv'); attMode = ss.get('attMode', 'privates');
   if (attMode === 'classes') setAttModeButtons();
-  const tab = ss.get('tab', 'schedule'), sid = ss.get('student', null);
+  const tab = ss.get('tab', 'dashboard'), sid = ss.get('student', null);
   if (tab === 'student' && sid && students.find(x => x.id === sid)) { curTab = 'students'; openEdit(sid); if (!weekRows.length) loadWeek(); }
-  else go(['schedule','attendance','openings','payments','students'].includes(tab) ? tab : 'schedule');
+  else go(['dashboard','schedule','attendance','openings','payments','students'].includes(tab) ? tab : 'dashboard');
 }
 let curTab = 'schedule';
 function go(tab) { curTab = tab; ss.set('tab', tab); if (tab === 'students') { show('studentsView'); render(); if (!weekRows.length) loadWeek(); return; } show(tab + 'View'); loadWeek(); }
@@ -656,7 +674,7 @@ let weekOffset = 0, weekRows = [], weekSlots = [], weekEx = [], weekAtt = [], we
 const ymd = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 function weekDates() {
   const t = new Date(); t.setHours(0,0,0,0);
-  const mon = new Date(t); mon.setDate(t.getDate() + (t.getDay() === 0 ? -6 : 1 - t.getDay()) + weekOffset * 7);
+  const mon = new Date(t); mon.setDate(t.getDate() + (t.getDay() === 0 ? -6 : 1 - t.getDay()) + (curTab === 'dashboard' ? 0 : weekOffset) * 7);
   return DAYS.map((name, i) => { const d = new Date(mon); d.setDate(mon.getDate() + i); return { name, date: d, label: d.toLocaleDateString(undefined, { month:'short', day:'numeric' }) }; });
 }
 function timeVal(t) {
@@ -669,7 +687,7 @@ async function loadWeek() {
   const wd = weekDates(), ws = ymd(wd[0].date), we = ymd(wd[6].date), my = ++weekLoading;
   $('wkLabel').textContent = $('attWkLabel').textContent = $('payWkLabel').textContent = $('openWkLabel').textContent = (weekOffset === 0 ? 'This week · ' : '') + wd[0].label + ' – ' + wd[6].label;
   $('schedGrid').innerHTML = $('attList').innerHTML = $('balList').innerHTML = $('openList').innerHTML = '<div class="center">Loading…</div>';
-  const att = curTab === 'attendance' || curTab === 'payments', mStart = ymd(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const att = curTab === 'attendance' || curTab === 'payments' || curTab === 'dashboard', mStart = ymd(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [L, X, S, A, P, M, C, W] = await Promise.all([
     sb.from('private_lessons').select('*').not('status', 'in', '("Cancelled","Dropped")'),
     sb.from('schedule_exceptions').select('*').eq('week_start', ws).not('status', 'in', '("Deleted","Expired")'),
@@ -678,7 +696,7 @@ async function loadWeek() {
     att ? sb.from('payments').select('*').eq('week_start', ws) : { data: [] },
     curTab === 'payments' ? sb.from('payments').select('amount').gte('date', mStart) : { data: [] },
     (curTab === 'attendance' && attMode === 'classes') || curTab === 'payments' ? Promise.all([sb.from('class_schedule').select('*').eq('active', true), sb.from('class_enrollments').select('*').not('status', 'in', '("Dropped","Waitlisted")'), sb.from('class_attendance').select('*').eq('week_start', ws)]) : null,
-    curTab === 'openings' ? sb.from('waitlist').select('*').in('status', ['Waiting','Waitlist','Drop-In']).order('signup_date') : { data: [] }
+    curTab === 'openings' || curTab === 'dashboard' ? sb.from('waitlist').select('*').in('status', ['Waiting','Waitlist','Drop-In']).order('signup_date') : { data: [] }
   ]);
   if (my !== weekLoading) return;
   const err = L.error || X.error || S.error || A.error || P.error || M.error || W.error;
@@ -692,7 +710,7 @@ async function loadWeek() {
   const coaches = [...new Set(weekRows.map(p => p.coach).concat(weekSlots.map(s => s.coach)).filter(Boolean))].sort();
   const cf = $('coachFilter'), cur = cf.value;
   cf.innerHTML = '<option value="">All coaches</option>' + coaches.map(c => `<option${c === cur ? ' selected' : ''}>${esc(c)}</option>`).join('');
-  if (curTab === 'openings') renderOpen(); else if (curTab === 'payments') renderPay(); else if (att) renderAtt(); else renderWeek();
+  if (curTab === 'dashboard') renderDash(); else if (curTab === 'openings') renderOpen(); else if (curTab === 'payments') renderPay(); else if (att) renderAtt(); else renderWeek();
 }
 
 function applyExceptions(lessons, exs) {
@@ -1239,6 +1257,47 @@ async function savePay(method) {
     date: ymd(new Date()), week_start: weekStartStr(), lesson_type: p.lesson_type || null, extra: $('qp_special').checked ? { Adjusted: 'Yes' } : {} }).select().single();
   if (res.error) { $('qp_msg').className = 'msg err'; $('qp_msg').textContent = res.error.message; return; }
   weekPay.push(res.data); $('payModal').classList.add('hidden'); afterPay(amount);
+}
+
+// ================= DASHBOARD (port of 2.0 dashboard: metrics, today, needs attention, waitlist, birthdays) =================
+function renderDash() {
+  const todayName = DAYS[(new Date().getDay() + 6) % 7], wk = weekDates(), stu = {}; students.forEach(x => stu[x.id] = x);
+  const live = weekRows.filter(p => p.status !== 'Cancelled');
+  const today = live.filter(p => p.day === todayName).sort((a, b) => timeVal(a.time) - timeVal(b.time));
+  // Unpaid = marked Here this week with no payment (same as 2.0 unpaidAttended)
+  const unpaid = live.filter(p => (attOf(p) || {}).status === 'Attended' && !(paidOf(p).amt > 0));
+  const wl = waitlist.filter(w => (w.extra || {}).Unsubscribed !== 'Yes');
+  $('d_active').textContent = students.filter(x => x.status === 'Active').length;
+  $('d_today').textContent = today.length; $('d_unpaid').textContent = unpaid.length; $('d_wl').textContent = waitlist.length;
+  $('d_todayHead').textContent = "Today's schedule · " + todayName;
+  const photo = id => { const v = ((stu[id] || {}).extra || {}).PhotoPermission; return v === 'No' ? '<span class="tag t-nophoto">No Photo</span>' : v === 'Yes' ? '<span class="tag t-photo">Photo OK</span>' : ''; };
+  $('d_sched').innerHTML = (today.length ? today.map(p => `<div class="arow"><span class="tag" style="background:#FAECE7;color:#712B13;min-width:62px;text-align:center;font-size:11px">${esc(p.time)}</span>
+      <div class="who"><b>${esc(p.student_name)}</b> ${p.lesson_type === 'Shared' ? '<span class="tag t-shared">Shared</span>' : ''}${photo(p.student_id)}<small>${esc(p.duration || '30 min')} · ${esc(p.coach || 'Coach')}</small></div></div>`).join('')
+    : `<div class="center">No lessons scheduled for ${todayName}</div>`)
+    + (unpaid.length ? `<div style="margin:8px 10px 10px;padding:8px 10px;background:#FEF0EB;border-radius:8px;font-size:13px;color:#712B13"><b>${unpaid.length} unpaid</b> — ${unpaid.map(p => esc(p.student_name) + (p.day !== todayName ? ' (' + esc(p.day) + ')' : '')).join(', ')}</div>` : '');
+  // Needs attention
+  const opens = computeOpenings(), alerts = [];
+  if (unpaid.length) alerts.push(['#BA7517', unpaid.length + ' unpaid lesson' + (unpaid.length === 1 ? '' : 's') + ' this week', 'Tap to open Payments', "go('payments')"]);
+  opens.map(o => [o, wl.filter(w => matchesSlot(w, o.day, o.time)).length]).filter(x => x[1]).slice(0, 3)
+    .forEach(([o, n]) => alerts.push(['#378ADD', o.day + ' ' + o.time + ' slot open', n + ' waitlist match' + (n === 1 ? '' : 'es') + ' · tap for Openings', "go('openings')"]));
+  const newStu = students.filter(x => x.join_date && x.join_date >= ymd(wk[0].date));
+  if (newStu.length) alerts.push(['#1D9E75', newStu.length + ' new registration' + (newStu.length === 1 ? '' : 's') + ' this week', newStu.map(x => x.first_name + ' ' + x.last_name).join(' · '), "go('students')"]);
+  $('d_attn').innerHTML = alerts.length ? alerts.map(([c, t, sub, fn]) => `<div class="arow" style="cursor:pointer" onclick="${fn}"><span style="width:9px;height:9px;border-radius:50%;background:${c};flex-shrink:0"></span><div class="who"><b>${esc(t)}</b><small>${esc(sub)}</small></div></div>`).join('')
+    : '<div class="center">Nothing needs attention right now</div>';
+  // Waitlist with this week's matching open slots + last notified
+  const ago = d => { if (!d) return ''; const days = Math.floor((Date.now() - new Date(d)) / 864e5); return days < 1 ? 'notified today' : days < 7 ? 'notified ' + days + 'd ago' : 'notified ' + Math.floor(days / 7) + 'w ago'; };
+  const rows = wl.map(w => ({ w, m: opens.filter(o => matchesSlot(w, o.day, o.time)) })).sort((a, b) => (b.m.length > 0) - (a.m.length > 0) || String(a.w.signup_date || '').localeCompare(String(b.w.signup_date || '')));
+  $('d_wlSub').textContent = rows.length ? rows.filter(r => r.m.length).length + ' of ' + rows.length + ' have matches this week' : '';
+  $('d_wlist').innerHTML = rows.length ? rows.map((r, i) => {
+    const w = r.w, age = ageOf(w.dob), first = (w.student_name || '').split(' ')[0];
+    const txt = 'Hi' + (w.parent_name ? ' ' + w.parent_name.split(' ')[0] : '') + '! Spots open this week for ' + first + ':\n' + r.m.slice(0, 6).map(o => '• ' + SHORT[o.day] + ' ' + o.time).join('\n') + '\nWant one?';
+    return `<div class="arow"><div class="who"><b>${i + 1}. ${esc(w.student_name)}</b> <span style="font-size:11px;color:#888">${age !== '' ? 'Age ' + age : ''}${w.skill_level ? ' · ' + esc(w.skill_level) : ''}${w.status === 'Drop-In' ? ' · Drop-In' : ''}</span>
+      <small>${r.m.length ? `<span style="color:#065f46;font-weight:600">● ${r.m.length} open slot${r.m.length === 1 ? '' : 's'} match</span>` : 'No matches this week'}${w.last_notified ? ' · ' + ago(w.last_notified) : ''}${w.open_to_anything ? ' · Open to anything' : ''}</small></div>
+      ${r.m.length && w.parent_phone ? `<a class="paybtn" style="text-decoration:none;background:#fff;border:1px solid #1c9a73;color:#1c7a5a" href="${smsHref(w.parent_phone, txt)}">📱 Text</a>` : ''}</div>`;
+  }).join('') : '<div class="center">No one on the waitlist</div>';
+  // Birthdays this week (Mon–Sun)
+  const b = students.filter(x => isOn(x) && x.dob).map(x => { const d = wk.find(d => d.date.getMonth() + 1 === +x.dob.slice(5, 7) && d.date.getDate() === +x.dob.slice(8, 10)); return d ? { x, d } : null; }).filter(Boolean);
+  $('d_bday').innerHTML = b.length ? b.map(({ x, d }) => `<div class="arow"><div class="who"><b>${esc(x.first_name)} ${esc(x.last_name)}</b><small>${d.name}, ${d.label} · turns ${d.date.getFullYear() - +x.dob.slice(0, 4)}</small></div></div>`).join('') : '<div class="center">No birthdays this week</div>';
 }
 
 // ================= OPENINGS (port of 2.0 renderOpenings_ / renderWaitlistPanel_ / makeup text) =================
