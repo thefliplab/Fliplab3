@@ -45,7 +45,7 @@
   .srow .co { font-size:11px; color:#888; flex-shrink:0; }
   .tag { font-size:10px; padding:2px 7px; border-radius:10px; font-weight:600; }
   .t-shared { background:#EFE7FF; color:#3C3489; } .t-nophoto { background:#FCEBEB; color:#A32D2D; } .t-photo { background:#EAF3DE; color:#3B6D11; }
-  .t-away { background:#FEF3C7; color:#92400E; } .t-open { background:#EAF3DE; color:#3B6D11; } .t-summer { background:#FEF3C7; color:#92400E; } .t-ex { background:#E6F1FB; color:#185FA5; } .t-coach { background:#FCE7F3; color:#9D174D; }
+  .t-away { background:#FEF3C7; color:#92400E; } .t-open { background:#EAF3DE; color:#3B6D11; } .t-summer { background:#FEF3C7; color:#92400E; } .t-ex { background:#E6F1FB; color:#185FA5; } .srow.oc { background:#FBEAF0; border-left:4px solid #D4537E; } .srow.oc .tm, .srow.oc .nm b { color:#72243E; } .srow.oc .co { color:#993556; font-weight:600; }
   .srow.open { background:#fafafa; } .srow.open .tm { color:#999; } .srow.summer { background:#FFFBEB; border-left:3px solid #F59E0B; }
   .srow.away .tm { color:#B45309; } .pairwrap { display:flex; align-items:stretch; background:#FAF7FF; border-bottom:1px solid #f0f0f0; }
   .pairwrap .bar { width:3px; background:#7C3AED; margin:8px 8px; border-radius:2px; } .pairwrap .srow { background:transparent; border-bottom:1px dashed #d8cfee; padding-left:4px; }
@@ -873,10 +873,10 @@ function renderWeek() {
   const mc = mainCoach();
   const pills = p => (p.lesson_type === 'Shared' && !p.pair_id ? '<span class="tag t-shared">Shared</span>' : '')
     + (photo[p.student_id] === 'No' ? '<span class="tag t-nophoto">No Photo</span>' : photo[p.student_id] === 'Yes' ? '<span class="tag t-photo">Photo OK</span>' : '')
-    + (p.coach && mc && p.coach !== mc ? `<span class="tag t-coach">${esc(p.coach)}</span>` : '')
     + (p.exType === 'Move' ? '<span class="tag t-ex">Moved</span>' : p.exType === 'Add' ? '<span class="tag t-ex">This week</span>' : '');
   const openRow = (d, slot) => `<div class="srow open tap${slot.summer ? ' summer' : ''}" onclick="openAdd('${d.name}','${esc(slot.time)}','${esc(slot.coach)}')"><div class="tm">${esc(slot.time)}</div><div class="nm"><span class="tag ${slot.summer ? 't-summer' : 't-open'}">${slot.summer ? '☀️ Summer Open' : 'Open'}</span></div><div class="co" style="color:#bbb">${esc(slot.coach)}</div></div>`;
-  const row = (p, showTime) => `<div class="srow tap" onclick="openLesson('${esc(p.id)}')"><div class="tm">${showTime ? esc(p.time) : ''}</div><div class="nm"><b>${esc(p.student_name)}</b>${pills(p)}${covering(p)}</div><div class="co">${esc(p.coach || 'TBD')}</div></div>`;
+  const oc = p => p.coach && mc && p.coach !== mc ? ' oc' : '';  // another coach's lesson → pink row
+  const row = (p, showTime) => `<div class="srow tap${oc(p)}" onclick="openLesson('${esc(p.id)}')"><div class="tm">${showTime ? esc(p.time) : ''}</div><div class="nm"><b>${esc(p.student_name)}</b>${pills(p)}${covering(p)}</div><div class="co">${esc(p.coach || 'TBD')}</div></div>`;
   // One-week fill sitting in a slot whose regular is Away → "covering for <name>"
   const covering = p => { if (!addExId(p.id)) return ''; const a = weekRows.find(r => r.status === 'Cancelled' && r.day === p.day && r.time === p.time); return a ? `<i style="font-size:11px;color:#999">covering for ${esc(a.student_name)}</i>` : ''; };
 
