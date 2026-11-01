@@ -864,6 +864,7 @@ function renderWeek() {
     + (photo[p.student_id] === 'No' ? '<span class="tag t-nophoto">No Photo</span>' : photo[p.student_id] === 'Yes' ? '<span class="tag t-photo">Photo OK</span>' : '')
     + (p.coach && mc && p.coach !== mc ? `<span class="tag t-coach">${esc(p.coach)}</span>` : '')
     + (p.exType === 'Move' ? '<span class="tag t-ex">Moved</span>' : p.exType === 'Add' ? '<span class="tag t-ex">This week</span>' : '');
+  const openRow = (d, slot) => `<div class="srow open tap${slot.summer ? ' summer' : ''}" onclick="openAdd('${d.name}','${esc(slot.time)}','${esc(slot.coach)}')"><div class="tm">${esc(slot.time)}</div><div class="nm"><span class="tag ${slot.summer ? 't-summer' : 't-open'}">${slot.summer ? '☀️ Summer Open' : 'Open'}</span></div><div class="co" style="color:#bbb">${esc(slot.coach)}</div></div>`;
   const row = (p, showTime) => `<div class="srow tap" onclick="openLesson('${esc(p.id)}')"><div class="tm">${showTime ? esc(p.time) : ''}</div><div class="nm"><b>${esc(p.student_name)}</b>${pills(p)}${covering(p)}</div><div class="co">${esc(p.coach || 'TBD')}</div></div>`;
   // One-week fill sitting in a slot whose regular is Away → "covering for <name>"
   const covering = p => { if (!addExId(p.id)) return ''; const a = weekRows.find(r => r.status === 'Cancelled' && r.day === p.day && r.time === p.time); return a ? `<i style="font-size:11px;color:#999">covering for ${esc(a.student_name)}</i>` : ''; };
@@ -888,10 +889,12 @@ function renderWeek() {
             html += `<div class="pairwrap"><div class="srow" style="border:0;background:transparent;padding-right:0"><div class="tm">${esc(g[0].time)}</div></div><div class="bar"></div><div style="flex:1;min-width:0"><div style="padding:6px 0 0 4px"><span class="tag t-shared">Shared</span></div>${g.map(p => row(p, false).replace('<div class="tm"></div>', '')).join('')}</div></div>`;
           } else html += row(g[0], true);
         });
+        // Only another coach's lesson here → this slot is still open for the slot's coach
+        if (slot.coach && !ls.some(p => !p.coach || p.coach === 'TBD' || p.coach === slot.coach)) html += openRow(d, slot);
       } else {
         const away = weekRows.find(p => p.day === d.name && p.time === slot.time && p.status === 'Cancelled');
         if (away) html += `<div class="srow away tap" onclick="openAway('${esc(away.id)}')"><div class="tm">${esc(slot.time)}</div><div class="nm"><span class="tag t-away">🏖 Away</span><b style="color:#92400E">${esc(away.student_name)}</b><i style="font-size:11px;color:#B45309">out this week</i></div><div class="co">${esc(away.coach || slot.coach)}</div></div>`;
-        else html += `<div class="srow open tap${slot.summer ? ' summer' : ''}" onclick="openAdd('${d.name}','${esc(slot.time)}','${esc(slot.coach)}')"><div class="tm">${esc(slot.time)}</div><div class="nm"><span class="tag ${slot.summer ? 't-summer' : 't-open'}">${slot.summer ? '☀️ Summer Open' : 'Open'}</span></div><div class="co" style="color:#bbb">${esc(slot.coach)}</div></div>`;
+        else html += openRow(d, slot);
       }
     });
     html += '</div>';
@@ -1602,8 +1605,10 @@ const matchesSlot = (w, day, time) => {
 function computeOpenings() {
   // Same slots the Schedule shows as Open or Away (nobody live in that slot this week), minus slots already past
   const slots = slotsForWeek();
-  const busy = new Set(weekRows.filter(p => p.status !== 'Cancelled').map(p => p.day + '|' + p.time)), seen = new Set();
-  return slots.filter(s => { const k = s.day + '|' + s.time; if (busy.has(k) || seen.has(k) || slotPast(s.day, s.time)) return false; seen.add(k); return true; })
+  // A slot is taken only by a lesson with the same coach (lessons with no coach / TBD still block it)
+  const live = weekRows.filter(p => p.status !== 'Cancelled'), seen = new Set();
+  const taken = s => live.some(p => p.day === s.day && p.time === s.time && (!p.coach || p.coach === 'TBD' || !s.coach || p.coach === s.coach));
+  return slots.filter(s => { const k = s.day + '|' + s.time; if (seen.has(k) || slotPast(s.day, s.time) || taken(s)) return false; seen.add(k); return true; })
     .sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || timeVal(a.time) - timeVal(b.time));
 }
 function renderOpen() {
