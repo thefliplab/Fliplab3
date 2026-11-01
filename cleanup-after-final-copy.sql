@@ -56,4 +56,12 @@ update waitlist set status = 'Waitlist'
   where student_id in ('STU1784582401244', 'STU1781180024360', 'STU1786384060445', 'STU1786477195830', 'STU1780344777406')
     and status in ('Drop-In', 'Waiting');
 
+-- 6. Old skill level names → L1–L6 (Steve, Oct 31)
+with m(o, n) as (values ('Level Beginner 3','L3-Building'), ('Level Advanced 3','L4-Progressing'), ('Level 1/2','L1-Foundations'),
+                        ('Level 4','L4-Progressing'), ('Level 5','L5-Advanced'), ('Level 6','L6-Elite'))
+update students t set skill_level = m.n from m where t.skill_level = m.o;
+with m(o, n) as (values ('Level Beginner 3','L3-Building'), ('Level Advanced 3','L4-Progressing'), ('Level 1/2','L1-Foundations'),
+                        ('Level 4','L4-Progressing'), ('Level 5','L5-Advanced'), ('Level 6','L6-Elite'))
+update waitlist t set skill_level = m.n from m where t.skill_level = m.o;
+
 commit;
