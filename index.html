@@ -195,6 +195,19 @@
     <div class="card" style="padding:0;overflow:hidden" id="balList"><div class="center">Loading…</div></div>
     <div class="sec">Payment history <select id="histFilter" onchange="loadHistory()"><option value="">This week</option></select></div>
     <div class="card" style="padding:0;overflow:hidden" id="histList"></div>
+    <div class="sec">Financial report — for taxes / CPA</div>
+    <div class="card">
+      <div class="row2" style="grid-template-columns:1fr 1fr 1fr">
+        <div><label>Quick pick</label><select id="fin_pick" onchange="finPick()"></select></div>
+        <div><label>From</label><input type="date" id="fin_from" onchange="$('fin_pick').value='';finRun()"></div>
+        <div><label>To</label><input type="date" id="fin_to" onchange="$('fin_pick').value='';finRun()"></div>
+      </div>
+      <div id="fin_out"><div class="center">Loading…</div></div>
+      <button class="btn ghost" style="margin-top:10px" onclick="finCsv()">⬇️ Export CSV</button>
+      <div class="sec" style="margin-top:16px">Revenue by month <span style="font-weight:400;font-size:12px;color:#888" id="fin_year"></span></div>
+      <div id="fin_mom"></div>
+      <div style="font-size:11px;color:#aaa;margin-top:6px">The current month is still in progress, so its total will look lower until the month ends.</div>
+    </div>
   </section>
 
   <!-- Edit student -->
@@ -841,6 +854,79 @@ function renderPay() {
   const f = $('histFilter'), cur = f.value;
   f.innerHTML = '<option value="">This week</option>' + students.filter(isOn).map(s => `<option value="${esc(s.id)}"${s.id === cur ? ' selected' : ''}>${esc(s.first_name)} ${esc(s.last_name)}</option>`).join('');
   loadHistory();
+  if (!finLoaded) finInit();
+}
+
+// ================= FINANCIAL REPORT (port of 2.0 getFinancialReport / getMonthOverMonth / CSV) =================
+let finLoaded = false, finRows = [];
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const finCat = x => String(x.lesson_id || '').startsWith('CLS_') ? 'Group Class' : x.lesson_type === 'Shared' ? 'Private — Shared' : x.lesson_type === 'Group' ? 'Private — Group' : x.lesson_type === 'Solo' ? 'Private — Solo' : 'Private — Other';
+async function fetchAllPayments(from, to) {
+  let out = [];
+  for (let i = 0; ; i += 1000) {
+    const r = await sb.from('payments').select('id,date,student_name,amount,method,lesson_type,lesson_id,notes').gte('date', from).lte('date', to).order('date').range(i, i + 999);
+    if (r.error) throw r.error;
+    out = out.concat(r.data); if (r.data.length < 1000) return out;
+  }
+}
+function finInit() {
+  finLoaded = true;
+  const y = new Date().getFullYear();
+  let o = `<option value="">— Whole year ${y} —</option>`;
+  for (let m = new Date().getMonth(); m >= 0; m--) o += `<option value="${y}-${String(m + 1).padStart(2, '0')}">${MON[m]} ${y}</option>`;
+  for (let m = 11; m >= 0; m--) o += `<option value="${y - 1}-${String(m + 1).padStart(2, '0')}">${MON[m]} ${y - 1}</option>`;
+  $('fin_pick').innerHTML = o + `<option value="Y${y - 1}">— Whole year ${y - 1} —</option>`;
+  finPick();
+}
+function finPick() {
+  const v = $('fin_pick').value, y = new Date().getFullYear();
+  if (!v) { $('fin_from').value = y + '-01-01'; $('fin_to').value = y + '-12-31'; }
+  else if (v[0] === 'Y') { $('fin_from').value = v.slice(1) + '-01-01'; $('fin_to').value = v.slice(1) + '-12-31'; }
+  else { const [yy, mm] = v.split('-').map(Number); $('fin_from').value = v + '-01'; $('fin_to').value = ymd(new Date(yy, mm, 0)); }
+  finRun();
+}
+async function finRun() {
+  const from = $('fin_from').value, to = $('fin_to').value;
+  if (!from || !to) return;
+  $('fin_out').innerHTML = '<div class="center">Loading…</div>';
+  try { finRows = await fetchAllPayments(from, to); } catch (e) { $('fin_out').innerHTML = '<div class="msg err">' + esc(e.message) + '</div>'; return; }
+  const by = key => { const t = {}; finRows.forEach(x => { const k = key(x); t[k] = (t[k] || 0) + (+x.amount || 0); }); return Object.entries(t).sort((a, b) => b[1] - a[1]); };
+  const grand = finRows.reduce((t, x) => t + (+x.amount || 0), 0);
+  const tbl = (title, rows) => `<div style="margin-top:10px"><b style="font-size:13px">${title}</b>${rows.map(([k, v]) => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;border-bottom:1px solid #f3f3f3"><span>${esc(k)}</span><span>${money(v)}</span></div>`).join('')}</div>`;
+  $('fin_out').innerHTML = `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:6px"><span style="color:#888;font-size:13px">${finRows.length} payments</span><b style="font-size:22px;color:#3B6D11">${money(grand)}</b></div>`
+    + tbl('By category', by(finCat)) + tbl('By payment method', by(x => x.method || 'Unknown'))
+    + tbl('By quarter', by(x => x.date ? x.date.slice(0, 4) + '-Q' + (Math.floor((+x.date.slice(5, 7) - 1) / 3) + 1) : 'Unknown').sort());
+  finMom(from.slice(0, 4));
+}
+async function finMom(year) {
+  // Month-over-month for the year of the From date (same as 2.0 getMonthOverMonth)
+  let rows = finRows;
+  if ($('fin_from').value !== year + '-01-01' || $('fin_to').value !== year + '-12-31') {
+    try { rows = await fetchAllPayments(year + '-01-01', year + '-12-31'); } catch (e) { return; }
+  }
+  const t = {}; rows.forEach(x => { if (x.date) { const k = x.date.slice(0, 7); t[k] = (t[k] || 0) + (+x.amount || 0); } });
+  const keys = Object.keys(t).sort();
+  $('fin_year').textContent = year;
+  $('fin_mom').innerHTML = keys.length ? keys.map((k, i) => {
+    const prev = i ? t[keys[i - 1]] : null, d = prev === null ? null : t[k] - prev, pct = prev ? Math.round(d / prev * 100) : null;
+    const chg = d === null ? '' : `<span style="font-size:11px;color:${d >= 0 ? '#3B6D11' : '#A32D2D'}">${d >= 0 ? '▲' : '▼'} ${money(Math.abs(d))}${pct !== null ? ' (' + Math.abs(pct) + '%)' : ''}</span>`;
+    return `<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:5px 0;border-bottom:1px solid #f3f3f3"><span style="min-width:70px">${MON[+k.slice(5) - 1]} ${k.slice(0, 4)}</span>${chg}<b>${money(t[k])}</b></div>`;
+  }).join('') : '<div class="center">No payments</div>';
+}
+function finCsv() {
+  if (!finRows.length) return alert('No payments in this range.');
+  const f = v => { const s = v == null ? '' : String(v); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const row = a => a.map(f).join(','), L = [], sum = (key) => { const t = {}; finRows.forEach(x => { const k = key(x); t[k] = (t[k] || 0) + (+x.amount || 0); }); return Object.keys(t).sort().map(k => row([k, t[k].toFixed(2)])); };
+  const from = $('fin_from').value, to = $('fin_to').value;
+  L.push(row(['Flip Lab — Financial Report']), row(['Scope', 'Range ' + from + ' to ' + to]), row(['Generated', new Date().toLocaleString()]), '');
+  L.push(row(['ITEMIZED TRANSACTIONS']), row(['Date','Student','Amount','Method','Category','Year','Month','Quarter','LessonID','Notes']));
+  finRows.forEach(x => { const d = x.date || ''; L.push(row([d, x.student_name, (+x.amount || 0).toFixed(2), x.method, finCat(x), d.slice(0, 4), d ? +d.slice(5, 7) : '', d ? 'Q' + (Math.floor((+d.slice(5, 7) - 1) / 3) + 1) : '', x.lesson_id, x.notes])); });
+  L.push('', row(['SUMMARY']), row(['Total transactions', finRows.length]), row(['Grand total', finRows.reduce((t, x) => t + (+x.amount || 0), 0).toFixed(2)]), '');
+  L.push(row(['BY MONTH']), ...sum(x => (x.date || 'Unknown').slice(0, 7)), '', row(['BY QUARTER']), ...sum(x => x.date ? x.date.slice(0, 4) + '-Q' + (Math.floor((+x.date.slice(5, 7) - 1) / 3) + 1) : 'Unknown'), '');
+  L.push(row(['BY CATEGORY']), ...sum(finCat), '', row(['BY PAYMENT METHOD']), ...sum(x => x.method || 'Unknown'));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([L.join('\r\n')], { type: 'text/csv' }));
+  a.download = 'Flip_Lab_Financials_' + from + '_to_' + to + '.csv'; a.click();
 }
 async function loadHistory() {
   const sid = $('histFilter').value; let rows = weekPay;
