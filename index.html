@@ -150,6 +150,7 @@
       <div class="metric"><small>Paid</small><b id="m_paid">—</b></div>
       <div class="metric"><small>Unpaid</small><b id="m_unpaid">—</b></div>
     </div>
+    <div class="wk"><button id="am_priv" onclick="setAttMode('privates')" style="background:var(--mint);color:#fff;border-color:var(--mint)">Private Lessons</button><button id="am_cls" onclick="setAttMode('classes')">Classes</button></div>
     <div id="attList"><div class="center">Loading…</div></div>
   </section>
 
@@ -465,6 +466,7 @@ async function saveStudent() {
 
 // ================= SCHEDULE (port of 2.0 getPrivates + applyExceptionsToPrivates_ + renderDynScheduleList_) =================
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+let attMode = 'privates', clsSched = [], clsRoster = [], clsAtt = [];
 let monthTotal = 0, waitlist = [], openSlots = [];
 let weekOffset = 0, weekRows = [], weekSlots = [], weekEx = [], weekAtt = [], weekPay = [], weekLoading = 0;
 
@@ -485,19 +487,21 @@ async function loadWeek() {
   $('wkLabel').textContent = $('attWkLabel').textContent = $('payWkLabel').textContent = $('openWkLabel').textContent = (weekOffset === 0 ? 'This week · ' : '') + wd[0].label + ' – ' + wd[6].label;
   $('schedGrid').innerHTML = $('attList').innerHTML = $('balList').innerHTML = $('openList').innerHTML = '<div class="center">Loading…</div>';
   const att = curTab === 'attendance' || curTab === 'payments', mStart = ymd(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
-  const [L, X, S, A, P, M, W] = await Promise.all([
+  const [L, X, S, A, P, M, C, W] = await Promise.all([
     sb.from('private_lessons').select('*').not('status', 'in', '("Cancelled","Dropped")'),
     sb.from('schedule_exceptions').select('*').eq('week_start', ws).not('status', 'in', '("Deleted","Expired")'),
     sb.from('available_slots').select('*').eq('active', true),
     att ? sb.from('attendance').select('*').eq('week_start', ws) : { data: [] },
     att ? sb.from('payments').select('*').eq('week_start', ws) : { data: [] },
     curTab === 'payments' ? sb.from('payments').select('amount').gte('date', mStart) : { data: [] },
+    curTab === 'attendance' && attMode === 'classes' ? Promise.all([sb.from('class_schedule').select('*').eq('active', true), sb.from('class_enrollments').select('*').not('status', 'in', '("Dropped","Waitlisted")'), sb.from('class_attendance').select('*').eq('week_start', ws)]) : null,
     curTab === 'openings' ? sb.from('waitlist').select('*').in('status', ['Waiting','Waitlist','Drop-In']).order('signup_date') : { data: [] }
   ]);
   if (my !== weekLoading) return;
   const err = L.error || X.error || S.error || A.error || P.error || M.error || W.error;
   if (err) { $('schedGrid').innerHTML = $('attList').innerHTML = '<div class="msg err">' + esc(err.message) + '</div>'; return; }
-  weekAtt = A.data; weekPay = P.data; waitlist = W.data || []; monthTotal = (M.data || []).reduce((t, x) => t + (+x.amount || 0), 0);
+  weekAtt = A.data; weekPay = P.data; waitlist = W.data || [];
+  if (C) { const ce = C.find(r => r.error); if (ce) { $('attList').innerHTML = '<div class="msg err">' + esc(ce.error.message) + '</div>'; return; } [clsSched, clsRoster, clsAtt] = C.map(r => r.data); } monthTotal = (M.data || []).reduce((t, x) => t + (+x.amount || 0), 0);
   const base = L.data.filter(p => !(p.start_date && p.start_date > we) && !(p.end_date && p.end_date <= ws));
   weekEx = X.data;
   weekRows = applyExceptions(base, X.data);
@@ -784,7 +788,13 @@ const paidOf = p => weekPay.filter(x => x.lesson_id === p.id).reduce((t, x) => (
 const priceNum = p => parseFloat(String(p.price || '').replace(/[^0-9.]/g, '')) || priceFor(p.duration, p.lesson_type === 'Shared' ? 'Shared' : 'Solo').slice(1) * 1;
 let qpRow = null;
 
+function setAttMode(m) {
+  attMode = m;
+  [['am_priv','privates'],['am_cls','classes']].forEach(([id, v]) => { const on = v === m; $(id).style.background = on ? 'var(--mint)' : '#fff'; $(id).style.color = on ? '#fff' : ''; $(id).style.borderColor = on ? 'var(--mint)' : ''; });
+  loadWeek();
+}
 function renderAtt() {
+  if (attMode === 'classes') return renderClassAtt();
   const lessons = weekRows.filter(p => p.status !== 'Cancelled').sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || timeVal(a.time) - timeVal(b.time));
   let n = { att: 0, no: 0, paid: 0, unpaid: 0 };
   lessons.forEach(p => { const st = (attOf(p) || {}).status || '';
@@ -966,6 +976,51 @@ async function undoPay(id) {
   if (res.error) return alert(res.error.message);
   weekPay = weekPay.filter(x => !rows.includes(x)); afterPay(-total);
 }
+// ---- Classes (port of 2.0 renderClassAttendanceTab_ / classAttMark_) ----
+// Class payment id = CLS_<scheduleId>_<studentId>_<weekStart> (same as 2.0)
+const clsPayId = (c, sid) => 'CLS_' + c.id + '_' + sid + '_' + weekStartStr();
+const clsPrice = c => +String(c.price || '').replace(/[^0-9.]/g, '') || 20;
+const clsAttOf = (c, sid) => clsAtt.find(a => a.schedule_id === c.id && a.student_id === sid);
+const clsObj = (c, r) => ({ id: clsPayId(c, r.student_id), student_id: r.student_id, student_name: r.student_name, day: c.day, time: c.time, price: '$' + clsPrice(c), lesson_type: null });
+function renderClassAtt() {
+  const cls = [...clsSched].sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || timeVal(a.time) - timeVal(b.time));
+  let n = { att: 0, no: 0, paid: 0, unpaid: 0 }, html = '';
+  if (!cls.length) { $('attList').innerHTML = '<div class="card center">No active classes</div>'; ['m_att','m_no','m_paid','m_unpaid'].forEach(i => $(i).textContent = '—'); return; }
+  cls.forEach(c => {
+    const roster = clsRoster.filter(r => r.schedule_id === c.id).sort((a, b) => (a.student_name || '').localeCompare(b.student_name || ''));
+    const dd = weekDates().find(d => d.name === c.day);
+    html += `<div class="dayhd">${esc(c.day)} · ${esc(c.time)} · ${esc(c.class_name)}<span>${dd ? dd.label : ''} · ${roster.length} enrolled · $${clsPrice(c)}</span></div><div class="card" style="padding:0;margin-bottom:6px;border-radius:0 0 10px 10px;overflow:hidden">`;
+    if (!roster.length) html += '<div class="center">No students enrolled</div>';
+    roster.forEach(r => {
+      const st = (clsAttOf(c, r.student_id) || {}).status || '', o = clsObj(c, r), pd = paidOf(o), k = esc(c.id) + "','" + esc(r.student_id);
+      if (st === 'Attended') { n.att++; pd.amt > 0 ? n.paid++ : n.unpaid++; } else if (NOT_HERE.includes(st)) n.no++;
+      html += `<div class="arow"><div class="who"><b>${esc(r.student_name)}</b><small>${esc(r.parent_name || '')}${r.status && r.status !== 'Enrolled' ? ' · ' + esc(r.status) : ''}</small></div>
+        <button class="here${st === 'Attended' ? ' on' : ''}" onclick="clsMark('${k}','${st === 'Attended' ? '' : 'Attended'}')">${st === 'Attended' ? '✓ Here' : 'Here'}</button>
+        <select class="nothere${NOT_HERE.includes(st) ? ' on' : ''}" onchange="clsMark('${k}',this.value)"><option value="">${st ? '— Clear' : '— Not Here'}</option>${NOT_HERE.map(x => `<option${x === st ? ' selected' : ''}>${x}</option>`).join('')}</select>
+        ${pd.amt > 0 ? `<span class="paid" style="cursor:pointer" title="Tap to remove" onclick="clsUndoPay('${k}')">✓ Paid $${pd.amt.toFixed(0)}${pd.method ? ' · ' + esc(pd.method) : ''}</span>` : `<button class="paybtn" onclick="clsPay('${k}')">$ Record Payment</button>`}</div>`;
+    });
+    html += '</div>';
+  });
+  $('m_att').textContent = n.att; $('m_no').textContent = n.no; $('m_paid').textContent = n.paid; $('m_unpaid').textContent = n.unpaid;
+  $('attList').innerHTML = html;
+}
+const clsFind = (cid, sid) => { const c = clsSched.find(x => x.id === cid), r = clsRoster.find(x => x.schedule_id === cid && x.student_id === sid); return c && r ? { c, r } : null; };
+async function clsMark(cid, sid, status) {
+  const f = clsFind(cid, sid); if (!f) return;
+  const cur = clsAttOf(f.c, sid); let res;
+  if (!status) res = cur ? await sb.from('class_attendance').delete().eq('id', cur.id) : { error: null };
+  else if (cur) res = await sb.from('class_attendance').update({ status, marked_at: new Date().toISOString() }).eq('id', cur.id).select().single();
+  else res = await sb.from('class_attendance').insert({ gym_id: gymId, student_id: sid, student_name: f.r.student_name, schedule_id: cid, class_name: f.c.class_name,
+    coach: f.c.coach, day: f.c.day, week_start: weekStartStr(), status }).select().single();
+  if (res.error) return alert(res.error.message);
+  clsAtt = clsAtt.filter(a => a !== cur); if (status) clsAtt.push(res.data);
+  renderClassAtt();
+  // Same as 2.0: marking Here opens Record Payment if not paid yet
+  if (status === 'Attended' && !(paidOf(clsObj(f.c, f.r)).amt > 0)) openPay(clsObj(f.c, f.r));
+}
+function clsPay(cid, sid) { const f = clsFind(cid, sid); if (f) openPay(clsObj(f.c, f.r)); }
+function clsUndoPay(cid, sid) { const f = clsFind(cid, sid); if (!f) return; const o = clsObj(f.c, f.r); weekRows.push(o); undoPay(o.id).finally(() => { weekRows = weekRows.filter(x => x !== o); }); }
+
 // Mark every unmarked lesson that day as Here (leaves Absent/Late/etc. alone)
 async function allHere(day) {
   const ls = weekRows.filter(p => p.day === day && p.status !== 'Cancelled' && !attOf(p));
@@ -976,7 +1031,7 @@ async function allHere(day) {
   weekAtt.push(...res.data); renderAtt();
 }
 function openPay(id) {
-  qpRow = weekRows.find(r => r.id === id && r.status !== 'Cancelled'); if (!qpRow) return;
+  qpRow = typeof id === 'object' ? id : weekRows.find(r => r.id === id && r.status !== 'Cancelled'); if (!qpRow) return;
   $('qp_who').textContent = qpRow.student_name + ' — ' + qpRow.day + ' ' + qpRow.time;
   const pd = paidOf(qpRow), left = priceNum(qpRow) - pd.amt;
   $('qp_amount').value = left > 0 ? left : priceNum(qpRow); $('qp_special').checked = false; $('qp_msg').textContent = '';
@@ -987,7 +1042,7 @@ async function savePay(method) {
   if (!(amount > 0)) { $('qp_msg').className = 'msg err'; $('qp_msg').textContent = 'Enter an amount.'; return; }
   $('qp_msg').className = 'msg'; $('qp_msg').textContent = 'Saving…';
   const res = await sb.from('payments').insert({ gym_id: gymId, student_id: p.student_id, student_name: p.student_name, lesson_id: p.id, day: p.day, amount, method,
-    date: ymd(new Date()), week_start: weekStartStr(), lesson_type: p.lesson_type || 'Solo', extra: $('qp_special').checked ? { Adjusted: 'Yes' } : {} }).select().single();
+    date: ymd(new Date()), week_start: weekStartStr(), lesson_type: p.lesson_type || null, extra: $('qp_special').checked ? { Adjusted: 'Yes' } : {} }).select().single();
   if (res.error) { $('qp_msg').className = 'msg err'; $('qp_msg').textContent = res.error.message; return; }
   weekPay.push(res.data); $('payModal').classList.add('hidden'); afterPay(amount);
 }
