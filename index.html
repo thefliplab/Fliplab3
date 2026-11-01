@@ -447,6 +447,17 @@
     <div id="al_msg" class="msg"></div>
   </div>
 </div>
+<!-- Away slot: fill it this week or put the regular back -->
+<div class="ovl hidden" id="awayModal" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="mdl">
+    <div class="mh"><b id="aw_title"></b><button class="x" onclick="$('awayModal').classList.add('hidden')">✕</button></div>
+    <div id="aw_sub" style="font-size:13px;color:#B45309;margin:-4px 0 12px"></div>
+    <label>Fill this week — waitlist / drop-in matches</label>
+    <div id="aw_matches" style="margin-bottom:10px"></div>
+    <button class="btn" id="aw_fill">+ Fill with someone else</button>
+    <button class="btn" id="aw_back" style="background:#fff;color:#92400E;border:1px solid #F59E0B;margin-top:8px"></button>
+  </div>
+</div>
 <script>
 const sb = supabase.createClient('https://angmtyojkwlrefxpcgoa.supabase.co', 'sb_publishable_fPciNfnNHpHQikB8mqHNpw_hIVRIGo5');
 const FIELDS = ['first_name','last_name','dob','skill_level','parent_name','parent_phone','parent_email','emergency_name','emergency_phone','notes'];
@@ -840,7 +851,7 @@ function renderWeek() {
         });
       } else {
         const away = weekRows.find(p => p.day === d.name && p.time === slot.time && p.status === 'Cancelled');
-        if (away) html += `<div class="srow away tap" onclick="restoreLesson('${esc(away.id)}')"><div class="tm">${esc(slot.time)}</div><div class="nm"><span class="tag t-away">🏖 Away</span><b style="color:#92400E">${esc(away.student_name)}</b><i style="font-size:11px;color:#B45309">out this week</i></div><div class="co">${esc(away.coach || slot.coach)}</div></div>`;
+        if (away) html += `<div class="srow away tap" onclick="openAway('${esc(away.id)}')"><div class="tm">${esc(slot.time)}</div><div class="nm"><span class="tag t-away">🏖 Away</span><b style="color:#92400E">${esc(away.student_name)}</b><i style="font-size:11px;color:#B45309">out this week</i></div><div class="co">${esc(away.coach || slot.coach)}</div></div>`;
         else html += `<div class="srow open tap${slot.summer ? ' summer' : ''}" onclick="openAdd('${d.name}','${esc(slot.time)}','${esc(slot.coach)}')"><div class="tm">${esc(slot.time)}</div><div class="nm"><span class="tag ${slot.summer ? 't-summer' : 't-open'}">${slot.summer ? '☀️ Summer Open' : 'Open'}</span></div><div class="co" style="color:#bbb">${esc(slot.coach)}</div></div>`;
       }
     });
@@ -1654,7 +1665,24 @@ async function removeWl(id) {
   waitlist = waitlist.filter(x => x !== w); renderOpen();
 }
 
-// Tap an "Away" row → undo this week's cancel/move
+// Tap an "Away" row → fill the slot for this week, or put the regular student back
+function openAway(id) {
+  const p = weekRows.find(r => r.id === id); if (!p) return;
+  const day = p.day, time = p.time, coach = p.coach || '', first = p.student_name.split(' ')[0];
+  const d = weekDates().find(x => x.name === day);
+  const booked = new Set(weekEx.filter(e => e.type === 'Add').map(e => e.student_id));
+  const m = waitlist.filter(w => w.student_id && !booked.has(w.student_id) && matchesSlot(w, day, time));
+  const go = (o) => { $('awayModal').classList.add('hidden'); openAdd(day, time, coach, Object.assign({ scope: 'week' }, o)); };
+  $('aw_title').textContent = day + ' ' + (d ? d.label + ' ' : '') + '· ' + time;
+  $('aw_sub').textContent = '🏖 ' + p.student_name + ' is out this week';
+  $('aw_matches').innerHTML = m.length ? m.map((w, i) => `<button class="paybtn" style="background:var(--mint-soft);color:#1c7a5a;margin:0 6px 6px 0" data-i="${i}">${esc(w.student_name)} <small style="color:#888">${esc(w.status)}</small></button>`).join('') : '<span style="color:#aaa;font-size:13px">No matches — use Fill with someone else.</span>';
+  $('aw_matches').querySelectorAll('button').forEach(b => b.onclick = () => { const w = m[+b.dataset.i]; go({ studentId: w.student_id, wl: w }); });
+  $('aw_fill').onclick = () => go({});
+  $('aw_back').textContent = '↩ Put ' + first + ' back this week';
+  $('aw_back').onclick = () => { $('awayModal').classList.add('hidden'); restoreLesson(id); };
+  $('awayModal').classList.remove('hidden');
+}
+// Undo this week's cancel/move
 async function restoreLesson(id) {
   const p = weekRows.find(r => r.id === id), ex = weekEx.find(e => e.lesson_id === id && e.type !== 'Add');
   if (!p || !ex) return;
