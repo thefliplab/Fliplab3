@@ -32,10 +32,75 @@
   .toolbar { display:flex; gap:8px; } .toolbar input { margin:0; } .toolbar .btn { width:auto; white-space:nowrap; }
   .chk { display:flex; gap:8px; align-items:center; margin-bottom:10px; } .chk input { width:auto; margin:0; }
   .center { text-align:center; color:var(--muted); padding:20px; }
+  #tabs { display:flex; gap:4px; } #tabs button { border:0; color:#cfd6dc; } #tabs button.on { background:#3a4651; color:#fff; }
+  .wk { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
+  .wk button { background:#fff; border:1px solid var(--line); border-radius:8px; padding:7px 10px; font-size:13px; }
+  .wk input, .wk select { width:auto; flex:1; min-width:120px; margin:0; padding:7px 10px; font-size:14px; }
+  .wklabel { font-size:13px; color:var(--muted); font-weight:600; min-width:120px; text-align:center; }
+  .dayhd { background:#9FE1CB; color:#2c2c2a; padding:6px 12px; font-weight:600; font-size:13px; margin-top:6px; border-radius:6px 6px 0 0; }
+  .dayhd.today { background:#1c9a73; color:#fff; } .dayhd span { font-weight:400; opacity:.85; font-size:11px; margin-left:6px; }
+  .srow { display:flex; align-items:center; gap:10px; padding:8px 12px; border-bottom:1px solid #f0f0f0; font-size:14px; background:#fff; }
+  .srow .tm { min-width:72px; color:#666; font-weight:500; }
+  .srow .nm { flex:1; display:flex; align-items:center; flex-wrap:wrap; gap:4px; min-width:0; }
+  .srow .co { font-size:11px; color:#888; flex-shrink:0; }
+  .tag { font-size:10px; padding:2px 7px; border-radius:10px; font-weight:600; }
+  .t-shared { background:#EFE7FF; color:#3C3489; } .t-nophoto { background:#FCEBEB; color:#A32D2D; } .t-photo { background:#EAF3DE; color:#3B6D11; }
+  .t-away { background:#FEF3C7; color:#92400E; } .t-open { background:#EAF3DE; color:#3B6D11; } .t-summer { background:#FEF3C7; color:#92400E; } .t-ex { background:#E6F1FB; color:#185FA5; } .srow.oc { background:#FBEAF0; border-left:4px solid #D4537E; } .srow.oc .tm, .srow.oc .nm b { color:#72243E; } .srow.oc .co { color:#993556; font-weight:600; }
+  .srow.open { background:#fafafa; } .srow.open .tm { color:#999; } .srow.summer { background:#FFFBEB; border-left:3px solid #F59E0B; }
+  .srow.away .tm { color:#B45309; } .pairwrap { display:flex; align-items:stretch; background:#FAF7FF; border-bottom:1px solid #f0f0f0; }
+  .pairwrap .bar { width:3px; background:#7C3AED; margin:8px 8px; border-radius:2px; } .pairwrap .srow { background:transparent; border-bottom:1px dashed #d8cfee; padding-left:4px; }
+  .pairwrap .srow:last-child { border-bottom:0; }
+  .srow.tap { cursor:pointer; } .srow.tap:hover { background:#f6fbf9; }
+  .ovl { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:flex-start; justify-content:center; z-index:20; overflow:auto; padding:30px 12px; }
+  .mdl { background:#fff; border-radius:12px; width:100%; max-width:460px; padding:16px; }
+  .mdl .mh { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; } .mdl .mh b { font-size:16px; }
+  .mdl .x { background:#fff; border:1px solid var(--line); border-radius:6px; padding:4px 10px; }
+  .mdl input[readonly] { background:#f9f8f5; }
+  .pairbox { background:#EAF4FF; border:1px solid #B8D9F5; border-radius:8px; padding:10px; margin-bottom:10px; font-size:13px; color:#185FA5; }
+  .ddwrap { position:relative; } .dd { position:absolute; left:0; right:0; top:62px; background:#fff; border:1px solid var(--line); border-radius:8px; max-height:200px; overflow:auto; z-index:3; box-shadow:0 4px 12px rgba(0,0,0,.1); }
+  .dd div { padding:9px 10px; font-size:14px; cursor:pointer; border-bottom:1px solid #f3f3f3; } .dd div:hover { background:var(--mint-soft); } .dd small { color:var(--muted); }
+  .btnrow { display:flex; gap:8px; }
+  .shead { display:flex; gap:12px; align-items:center; margin:12px 0 8px; } .shead .av { width:46px; height:46px; border-radius:50%; background:var(--mint-soft); color:#1c7a5a; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; }
+  .shead b { font-size:19px; } .shead small { display:block; color:var(--muted); font-size:13px; margin-top:2px; } .shead a { color:#185FA5; text-decoration:none; }
+  .wkbar { background:#fff; border-radius:10px; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:10px 12px; margin-bottom:8px; font-size:13px; }
+  .wkbar .lbl { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:4px; }
+  .wkline { display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding:3px 0; }
+  .qa { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; } .qa button { padding:7px 11px; border-radius:8px; border:1px solid var(--line); background:#fff; font-size:13px; font-weight:600; }
+  .qa .pri { background:var(--mint); color:#fff; border-color:var(--mint); } .qa .warn { background:#FFF4D6; color:#7A5B00; border-color:#F0D88C; } .qa .dang { color:var(--danger); }
+  .stabs { display:flex; gap:2px; border-bottom:1px solid var(--line); margin-bottom:10px; overflow-x:auto; } .stabs button { border:0; background:none; padding:9px 12px; font-size:14px; color:var(--muted); border-bottom:2px solid transparent; white-space:nowrap; }
+  .stabs button.on { color:#1c7a5a; border-bottom-color:var(--mint); font-weight:600; }
+  .stat { display:inline-block; background:#f3f5f7; border-radius:8px; padding:6px 10px; margin:0 6px 6px 0; font-size:12px; color:var(--muted); } .stat b { display:block; font-size:16px; color:var(--text); }
+  .metrics { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:10px; }
+  .metric { background:#fff; border-radius:10px; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:10px; text-align:center; }
+  .metric small { display:block; font-size:11px; color:var(--muted); } .metric b { font-size:20px; }
+  .arow { display:flex; align-items:center; gap:8px; padding:9px 12px; border-bottom:1px solid #f0f0f0; background:#fff; flex-wrap:wrap; }
+  .arow .who { flex:1; min-width:140px; } .arow .who small { display:block; font-size:11px; color:#888; } .arow .who a { font-size:11px; color:#185FA5; text-decoration:none; }
+  .arow .tc { font-size:12px; color:#666; min-width:86px; }
+  .here { padding:5px 9px; border-radius:5px; border:0; font-size:12px; font-weight:600; background:#EAF3DE; color:#3B6D11; } .here.on { background:#1a5c2a; color:#fff; }
+  .nothere { width:auto; margin:0; padding:4px 6px; font-size:12px; font-weight:600; border-radius:5px; color:#888; } .nothere.on { background:#8b1a1a; color:#fff; border-color:#8b1a1a; }
+  .paybtn { padding:5px 10px; border-radius:5px; border:0; font-size:12px; font-weight:600; background:#FAEEDA; color:#854F0B; }
+  .bal { font-size:12px; color:#854F0B; font-weight:600; min-width:70px; text-align:right; } .bal.ok { color:#3B6D11; }
+  .sec { font-weight:600; font-size:14px; margin:14px 0 6px; display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .sec select { width:auto; margin:0; padding:5px 8px; font-size:13px; }
+  .mbtn { padding:5px 9px; border-radius:5px; border:1px solid var(--line); background:#fff; font-size:12px; font-weight:600; }
+  .mbtn.on { background:#d1fae5; color:#065f46; border-color:#d1fae5; } .mbtn.off { background:#f3f4f6; color:#888; border-color:#f3f4f6; }
+  .mlist { width:100%; background:#f6fbf9; border-radius:8px; padding:6px 10px; font-size:13px; } .mlist div { padding:4px 0; }
+  .mlist a { color:#185FA5; text-decoration:none; font-weight:600; }
+  .slotpick { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0; } .slotpick label { display:flex; align-items:center; gap:5px; background:#f3f5f7; border-radius:16px; padding:5px 10px; font-size:13px; color:var(--text); }
+  .slotpick input { width:auto; margin:0; }
+  #tabs { overflow-x:auto; }
+  @media (max-width:640px) { nav { flex-wrap:wrap; row-gap:8px; } #tabs { order:3; width:100%; flex-wrap:wrap; gap:4px; } #tabs button { flex:1 0 22%; padding:7px 2px; font-size:13px; } }
+  .schip { display:inline-flex; flex-direction:column; align-items:flex-start; border-radius:8px; padding:5px 9px; margin:3px; font-size:12px; border:1px solid transparent; cursor:pointer; min-width:84px; }
+  .schip b { font-size:13px; } .schip.open { background:#EAF3DE; color:#3B6D11; border-color:#cfe5b8; } .schip.booked { background:#f3f1f8; color:#555; }
+  .schip.off { background:#fff; color:#aaa; border:1px dashed #ccc; } .schip.add { background:#fff; color:#1c7a5a; border:1px dashed var(--mint); justify-content:center; align-items:center; }
+  .schip small { font-size:11px; max-width:150px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .paid { font-size:11px; padding:3px 8px; border-radius:10px; background:#EAF3DE; color:#3B6D11; font-weight:600; } .btn.red { background:var(--danger); }
 </style>
 </head>
 <body>
-<nav><b>Flip<span>Lab</span> 3.0</b><button id="outBtn" class="hidden" onclick="signOut()">Sign out</button></nav>
+<nav><b>Flip<span>Lab</span> 3.0</b>
+  <div id="tabs" class="hidden"><button id="tabBtn_dashboard" onclick="go('dashboard')">Dashboard</button><button id="tabBtn_schedule" onclick="go('schedule')">Schedule</button><button id="tabBtn_attendance" onclick="go('attendance')">Attendance</button><button id="tabBtn_openings" onclick="go('openings')">Openings</button><button id="tabBtn_payments" onclick="go('payments')">Payments</button><button id="tabBtn_students" onclick="go('students')">Students</button><button id="tabBtn_slots" onclick="go('slots')">Slots</button></div>
+  <button id="outBtn" class="hidden" onclick="openAcct()">⚙ Account</button></nav>
 <main>
 
   <!-- Login -->
@@ -63,15 +128,143 @@
       <input id="q" placeholder="Search students or parents" oninput="render()">
       <button class="btn" onclick="openEdit(null)">+ Add</button>
     </div>
-    <div class="chk" style="margin-top:10px"><input type="checkbox" id="showInactive" onchange="render()"><label for="showInactive">Show inactive</label></div>
+    <div class="stabs" id="grpTabs" style="margin-top:10px"></div>
+    <div class="chk"><input type="checkbox" id="showInactive" onchange="render()"><label for="showInactive">Show inactive &amp; dropped</label></div>
     <div class="hdr"><span id="gymName">Students</span><span id="count"></span></div>
     <div class="card" id="list"></div>
   </section>
 
+
+  <!-- Dashboard (port of 2.0 v-dashboard) -->
+  <section id="dashboardView" class="hidden">
+    <div class="metrics" style="margin-top:4px">
+      <div class="metric"><small>Active students</small><b id="d_active">—</b></div>
+      <div class="metric"><small>Today's lessons</small><b id="d_today">—</b></div>
+      <div class="metric"><small>Unpaid this week</small><b id="d_unpaid" style="color:#854F0B">—</b></div>
+      <div class="metric"><small>Waitlist</small><b id="d_wl">—</b></div>
+    </div>
+    <div class="sec" id="d_todayHead">Today's schedule</div>
+    <div class="card" style="padding:0;overflow:hidden" id="d_sched"></div>
+    <div class="sec">Needs attention</div>
+    <div class="card" style="padding:0;overflow:hidden" id="d_attn"></div>
+    <div class="sec" style="cursor:pointer;user-select:none" onclick="toggleDashWl()"><span><span id="d_wlArrow">▸</span> Waitlist</span> <span id="d_wlSub" style="font-weight:400;font-size:12px;color:#888"></span></div>
+    <div class="card" style="padding:0;overflow:hidden" id="d_wlist"></div>
+    <div class="sec">🎂 Birthdays this week</div>
+    <div class="card" style="padding:0;overflow:hidden" id="d_bday"></div>
+  </section>
+
+  <!-- Schedule -->
+  <section id="scheduleView" class="hidden">
+    <div class="wk">
+      <button onclick="shiftWeek(-1)">← Prev</button>
+      <button onclick="shiftWeek(0)">This week</button>
+      <button onclick="shiftWeek(1)">Next →</button>
+      <div class="wklabel" id="wkLabel"></div>
+      <button onclick="openAdd()" style="background:var(--mint);color:#fff;border:0;font-weight:600">+ Add lesson</button>
+      <button onclick="openPrint()">🖨 Print</button>
+    </div>
+    <div class="wk">
+      <select id="coachFilter" onchange="renderWeek()"><option value="">All coaches</option></select>
+      <input id="schedSearch" placeholder="Search student…" oninput="renderWeek()">
+    </div>
+    <div id="schedGrid"><div class="center">Loading…</div></div>
+  </section>
+
+  <!-- Attendance (port of 2.0 renderAttendanceTab_) -->
+  <section id="attendanceView" class="hidden">
+    <div class="wk">
+      <button onclick="shiftWeek(-1)">← Prev</button>
+      <button onclick="shiftWeek(0)">This week</button>
+      <button onclick="shiftWeek(1)">Next →</button>
+      <div class="wklabel" id="attWkLabel"></div>
+    </div>
+    <div class="metrics">
+      <div class="metric"><small>Attended</small><b id="m_att">—</b></div>
+      <div class="metric"><small>Absent / Other</small><b id="m_no">—</b></div>
+      <div class="metric"><small>Paid</small><b id="m_paid">—</b></div>
+      <div class="metric"><small>Unpaid</small><b id="m_unpaid">—</b></div>
+    </div>
+    <div class="wk"><button id="am_priv" onclick="setAttMode('privates')" style="background:var(--mint);color:#fff;border-color:var(--mint)">Private Lessons</button><button id="am_cls" onclick="setAttMode('classes')">Classes</button></div>
+    <div id="attList"><div class="center">Loading…</div></div>
+  </section>
+
+  <!-- Openings (port of 2.0 v-openings) -->
+  <section id="openingsView" class="hidden">
+    <div class="wk">
+      <button onclick="shiftWeek(-1)">← Prev</button>
+      <button onclick="shiftWeek(0)">This week</button>
+      <button onclick="shiftWeek(1)">Next →</button>
+      <div class="wklabel" id="openWkLabel"></div>
+    </div>
+    <div class="card">
+      <div class="sec" style="margin:0;cursor:pointer" onclick="$('mkWrap').classList.toggle('hidden')">📋 Makeup Availability Text <span style="color:#888">▾</span></div>
+      <div id="mkWrap" class="hidden">
+        <div style="font-size:12px;color:#999;margin-top:6px">Pick slots → copy → send to parents → first to confirm gets the spot</div>
+        <div class="slotpick" id="mkPick"></div>
+        <button class="btn" id="mkCopy" onclick="mkCopy()">📋 Copy Text</button>
+      </div>
+    </div>
+    <div class="sec">Openings</div>
+    <div class="card" style="padding:0;overflow:hidden" id="openList"><div class="center">Loading…</div></div>
+    <div class="sec">Waitlist <span id="wlCount" style="font-weight:400;font-size:12px;color:#888"></span></div>
+    <div class="card" style="padding:0;overflow:hidden" id="wlList"></div>
+    <div class="sec">Drop-In <span id="diCount" style="font-weight:400;font-size:12px;color:#888"></span><button class="paybtn" style="margin-left:auto;background:var(--mint);color:#fff" onclick="openDropIn()">+ Add Drop-In</button></div>
+    <div class="card" style="padding:0;overflow:hidden" id="diList"></div>
+  </section>
+
+  <!-- Slots (seasons + weekly time slots; replaces 2.0 v-slots + Summer slots) -->
+  <section id="slotsView" class="hidden">
+    <div class="stabs" id="seasonTabs" style="margin-top:4px"></div>
+    <div id="seasonInfo" style="font-size:13px;color:#666;margin-bottom:8px"></div>
+    <div class="qa"><button class="pri" onclick="openBulkSlots()">+ Bulk add</button><button onclick="openSeason(null)">+ New season</button><button id="seasonEditBtn" onclick="openSeason(curSeasonId)">✎ Edit season</button></div>
+    <div id="slotDays"><div class="center">Loading…</div></div>
+    <div style="font-size:12px;color:#888;margin:10px 2px">🟢 Open = no weekly lesson in it, so it's open for new signups. One-week cancellations don't count — those only show on Openings for drop-ins. Tap a slot to turn it off or remove it.<br>The signup page and website still read 2.0 until booking moves to 3.0.</div>
+  </section>
+
+  <!-- Payments (port of 2.0 v-payments / getOutstandingBalances) -->
+  <section id="paymentsView" class="hidden">
+    <div class="wk">
+      <button onclick="shiftWeek(-1)">← Prev</button>
+      <button onclick="shiftWeek(0)">This week</button>
+      <button onclick="shiftWeek(1)">Next →</button>
+      <div class="wklabel" id="payWkLabel"></div>
+    </div>
+    <div class="metrics">
+      <div class="metric"><small>Collected for week</small><b id="pm_week" style="color:#3B6D11">—</b></div>
+      <div class="metric"><small>Outstanding for week</small><b id="pm_out" style="color:#854F0B">—</b></div>
+      <div class="metric"><small>Collected this month</small><b id="pm_month">—</b></div>
+      <div class="metric"><small>Unpaid students</small><b id="pm_unpaid" style="color:#854F0B">—</b></div>
+    </div>
+    <div class="sec">Outstanding balances — this week</div>
+    <div class="card" style="padding:0;overflow:hidden" id="balList"><div class="center">Loading…</div></div>
+    <div class="sec">Payment history <select id="histFilter" onchange="loadHistory()"><option value="">This week</option></select></div>
+    <div class="card" style="padding:0;overflow:hidden" id="histList"></div>
+    <div class="sec">Financial report — for taxes / CPA</div>
+    <div class="card">
+      <div class="row2" style="grid-template-columns:1fr 1fr 1fr">
+        <div><label>Quick pick</label><select id="fin_pick" onchange="finPick()"></select></div>
+        <div><label>From</label><input type="date" id="fin_from" onchange="$('fin_pick').value='';finRun()"></div>
+        <div><label>To</label><input type="date" id="fin_to" onchange="$('fin_pick').value='';finRun()"></div>
+      </div>
+      <div id="fin_out"><div class="center">Loading…</div></div>
+      <button class="btn ghost" style="margin-top:10px" onclick="finCsv()">⬇️ Export CSV</button>
+      <div class="sec" style="margin-top:16px">Revenue by month <span style="font-weight:400;font-size:12px;color:#888" id="fin_year"></span></div>
+      <div id="fin_mom"></div>
+      <div style="font-size:11px;color:#aaa;margin-top:6px">The current month is still in progress, so its total will look lower until the month ends.</div>
+    </div>
+  </section>
+
   <!-- Edit student -->
   <section id="editView" class="hidden">
-    <div class="hdr"><span id="editTitle">Student</span></div>
-    <div class="card">
+    <button class="btn ghost" style="width:auto;padding:7px 12px;font-size:13px" onclick="go('students')">← Students</button>
+    <div class="hdr hidden" id="newHdr"><span id="editTitle">New student</span></div>
+    <div id="sdTop"></div>
+    <div class="stabs" id="sdTabs">
+      <button data-t="profile" onclick="sdTab('profile')">Profile</button><button data-t="schedule" onclick="sdTab('schedule')">Schedule</button>
+      <button data-t="payments" onclick="sdTab('payments')">Payments</button><button data-t="attendance" onclick="sdTab('attendance')">Attendance</button>
+    </div>
+    <div id="sdPanel" class="hidden"></div>
+    <div class="card" id="sdProfile">
       <div class="row2">
         <div><label>First name</label><input id="f_first_name"></div>
         <div><label>Last name</label><input id="f_last_name"></div>
@@ -79,23 +272,29 @@
       <div class="row2">
         <div><label>Birthday</label><input id="f_dob" type="date"></div>
         <div><label>Skill level</label>
-          <select id="f_skill_level"><option value=""></option><option>L1</option><option>L2</option><option>L3</option><option>L4</option><option>L5</option><option>L6</option></select>
+          <select id="f_skill_level"></select>
         </div>
       </div>
       <label>Parent name</label><input id="f_parent_name">
       <div class="row2">
-        <div><label>Parent phone</label><input id="f_parent_phone" type="tel"></div>
+        <div><label>Parent phone</label><input id="f_parent_phone" type="tel" inputmode="numeric" placeholder="(513) 555-1234" oninput="this.value=typingPhone(this.value)"></div>
         <div><label>Parent email</label><input id="f_parent_email" type="email"></div>
       </div>
       <div class="row2">
-        <div><label>Emergency contact</label><input id="f_emergency_name"></div>
-        <div><label>Emergency phone</label><input id="f_emergency_phone" type="tel"></div>
+        <div><label>School</label><input id="x_School"></div>
+        <div><label>Photo permission</label><select id="x_PhotoPermission"><option value=""></option><option>Yes</option><option>No</option></select></div>
+      </div>
+      <div class="row2">
+        <div><label>Preferred payment</label><select id="x_PreferredPayment"><option value=""></option><option>Cash</option><option>Venmo</option><option>Zelle</option></select></div>
+        <div><label>Waiver</label><input id="x_WaiverSigned" readonly style="background:#f9f8f5"></div>
       </div>
       <label>Notes</label><textarea id="f_notes" rows="3"></textarea>
-      <div class="chk"><input type="checkbox" id="f_active"><label for="f_active">Active</label></div>
+      <label>Status</label>
+      <select id="f_status"><option>Active</option><option>Waitlist</option><option>Drop-In</option><option>Inactive</option><option>Dropped</option></select>
       <div class="chk"><input type="checkbox" id="f_unsubscribed"><label for="f_unsubscribed">Unsubscribed from emails/texts</label></div>
+      <div class="chk"><input type="checkbox" id="f_trade"><label for="f_trade">🤝 Trade (no charge — lessons never show as owed or in money totals)</label></div>
       <div class="row2">
-        <button class="btn ghost" onclick="show('studentsView')">Cancel</button>
+        <button class="btn ghost" onclick="go('students')">Close</button>
         <button class="btn" onclick="saveStudent()">Save</button>
       </div>
       <div id="editMsg" class="msg"></div>
@@ -103,15 +302,261 @@
   </section>
 
 </main>
+
+<!-- Edit lesson modal (port of 2.0 modal-move-lesson) -->
+<div class="ovl hidden" id="lessonModal" onclick="if(event.target===this)closeLesson()">
+  <div class="mdl">
+    <div class="mh"><b id="lm_title">Edit lesson</b><button class="x" onclick="closeLesson()">✕</button></div>
+    <label>Student</label><input id="lm_student" readonly>
+    <div class="row2">
+      <div><label>Coach</label><select id="lm_coach"></select></div>
+      <div><label>Skill level</label><input id="lm_skill" readonly></div>
+    </div>
+    <div class="row2">
+      <div><label>Move to day</label><select id="lm_day"></select></div>
+      <div><label>Move to time</label><select id="lm_time"></select></div>
+    </div>
+    <div class="row2">
+      <div><label>Duration</label><select id="lm_duration"><option>30 min</option><option>45 min</option><option>60 min</option></select></div>
+      <div><label>Lesson type</label><select id="lm_type"><option>Solo</option><option>Shared</option><option>Group</option></select></div>
+    </div>
+    <label>Price per lesson</label><input id="lm_price" type="number" min="0" step="1">
+    <div id="lm_priceHint" style="font-size:11px;color:#888;margin:-6px 0 10px"></div>
+    <div id="lm_pair" class="pairbox hidden">🔗 Shared lesson with <b id="lm_partner"></b>
+      <div class="chk" style="margin:6px 0 0"><input type="checkbox" id="lm_movePartner" checked><label for="lm_movePartner" style="color:#185FA5">Also apply to partner</label></div></div>
+    <div id="lm_scopeWrap">
+      <label>Apply change to</label>
+      <select id="lm_scope" onchange="$('lm_startWrap').classList.toggle('hidden', this.value !== 'permanent')">
+        <option value="week">This week only</option><option value="permanent">Permanent (from start week forward)</option></select>
+      <div id="lm_startWrap" class="hidden"><label>New schedule starts the week of</label><input type="date" id="lm_start">
+        <div style="font-size:11px;color:#888;margin:-6px 0 10px">Earlier weeks are left alone.</div></div>
+    </div>
+    <div id="lm_oneoff" class="msg hidden" style="color:#185FA5">One-week lesson (claimed spot / extra) — changes apply to this week only.</div>
+    <label>Notes</label><textarea id="lm_notes" rows="2" placeholder="Lesson notes..."></textarea>
+    <div class="btnrow">
+      <button class="btn red" style="flex:1" onclick="cancelLesson()">Cancel lesson</button>
+      <button class="btn" style="flex:2" id="lm_save" onclick="saveLesson()">Save changes</button>
+    </div>
+    <div id="lm_msg" class="msg"></div>
+  </div>
+</div>
+<!-- Account: change password + sign out -->
+<div class="ovl hidden" id="acctModal" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="mdl">
+    <div class="mh"><b>Account</b><button class="x" onclick="$('acctModal').classList.add('hidden')">✕</button></div>
+    <div id="acctEmail" style="font-size:13px;color:var(--muted);margin-bottom:10px"></div>
+    <label>New password</label><input id="pw1" type="password" autocomplete="new-password">
+    <label>Type it again</label><input id="pw2" type="password" autocomplete="new-password">
+    <button class="btn" onclick="changePw()">Change password</button>
+    <div id="pwMsg" class="msg"></div>
+    <div style="border-top:1px solid #eee;margin-top:14px;padding-top:10px"><b>Google Calendar sync</b>
+      <label>Sync</label><select id="cs_mode"><option value="off">Off</option><option value="test">Test calendar</option><option value="live">Live — real Flip Lab calendar</option></select>
+      <label>Test calendar ID</label><input id="cs_test" placeholder="…@group.calendar.google.com">
+      <label>Live calendar ID (Flip Lab)</label><input id="cs_live" placeholder="…@group.calendar.google.com">
+      <div class="row2"><div><label>Other coaches' color</label><select id="cs_color"></select></div>
+        <div><label>&nbsp;</label><label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="cs_class" style="width:auto"> Classes on calendar</label></div></div>
+      <button class="btn" onclick="saveCal()">Save calendar settings</button>
+      <button class="btn ghost" style="margin-top:8px" onclick="testText()">📱 Send test text to my phone</button>
+      <div id="cs_msg" class="msg"></div>
+    </div>
+    <div style="border-top:1px solid #eee;margin-top:14px;padding-top:10px"><b>Coaches</b>
+      <div id="coachList" style="margin:6px 0 8px"></div>
+      <div class="row2"><div><label>Name</label><input id="co_name" placeholder="Coach Emma"></div><div><label>Phone</label><input id="co_phone" type="tel" inputmode="numeric" placeholder="(513) 555-1234" oninput="this.value=typingPhone(this.value)"></div></div>
+      <label>Specialty</label><input id="co_spec" placeholder="e.g. Cheer, jumps">
+      <button class="btn" onclick="addCoach()">+ Add coach</button>
+      <div id="coMsg" class="msg"></div>
+    </div>
+    <button class="btn ghost" style="margin-top:14px" onclick="$('acctModal').classList.add('hidden');signOut()">Sign out</button>
+  </div>
+</div>
+
+<!-- Add Drop-In (port of 2.0 modal-add-dropin) -->
+<div class="ovl hidden" id="diModal" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="mdl">
+    <div class="mh"><b>Add to Drop-In list</b><button class="x" onclick="$('diModal').classList.add('hidden')">✕</button></div>
+    <div class="ddwrap"><label>Student</label><input id="di_search" placeholder="Search student..." autocomplete="off" oninput="diDD()" onfocus="diDD()" onblur="setTimeout(()=>$('di_dd').classList.add('hidden'),150)">
+      <div class="dd hidden" id="di_dd"></div></div>
+    <div id="di_info" style="font-size:12px;color:#888;margin:-6px 0 10px"></div>
+    <div class="chk"><input type="checkbox" id="di_any" onchange="$('di_prefs').classList.toggle('hidden', this.checked)"><label for="di_any">Open to any day/time</label></div>
+    <div id="di_prefs">
+      <label>Preferred days</label>
+      <div class="slotpick" id="di_days"></div>
+      <div id="di_times"></div>
+    </div>
+    <label>Notes</label><textarea id="di_notes" rows="2"></textarea>
+    <button class="btn" id="di_save" onclick="saveDropIn()">Add to Drop-In</button>
+    <div id="di_msg" class="msg"></div>
+  </div>
+</div>
+
+<!-- Slot actions -->
+<div class="ovl hidden" id="slotModal" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="mdl">
+    <div class="mh"><b id="sm_title">Slot</b><button class="x" onclick="$('slotModal').classList.add('hidden')">✕</button></div>
+    <div id="sm_body"></div>
+    <div id="sm_msg" class="msg"></div>
+  </div>
+</div>
+<!-- Bulk add slots (port of 2.0 modal-bulk-slots) -->
+<div class="ovl hidden" id="bulkModal" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="mdl">
+    <div class="mh"><b id="bk_title">Bulk add slots</b><button class="x" onclick="$('bulkModal').classList.add('hidden')">✕</button></div>
+    <label>Days</label><div class="slotpick" id="bk_days"></div>
+    <label>Coach</label><select id="bk_coach"></select>
+    <div class="row2"><div><label>Start time</label><select id="bk_start" onchange="bkPreview()"></select></div><div><label>End time</label><select id="bk_end" onchange="bkPreview()"></select></div></div>
+    <label>Interval between slots</label><select id="bk_int" onchange="bkPreview()"><option value="30">Every 30 minutes</option><option value="45">Every 45 minutes</option><option value="60">Every hour</option><option value="90">Every 90 minutes</option></select>
+    <div id="bk_prev" style="font-size:12px;color:#888;margin-bottom:10px;padding:8px 10px;background:#fffdf7;border:1px solid #f0ddb8;border-radius:8px"></div>
+    <button class="btn" onclick="saveBulk()">Create slots</button>
+    <div id="bk_msg" class="msg"></div>
+  </div>
+</div>
+<!-- Season edit -->
+<div class="ovl hidden" id="seasonModal" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="mdl">
+    <div class="mh"><b id="se_title">Season</b><button class="x" onclick="$('seasonModal').classList.add('hidden')">✕</button></div>
+    <label>Name</label><input id="se_name" placeholder="e.g. Winter break">
+    <div class="row2"><div><label>Starts (every year)</label><input type="date" id="se_start"></div><div><label>Ends (every year)</label><input type="date" id="se_end"></div></div>
+    <div style="font-size:11px;color:#888;margin:-6px 0 10px">Only the month and day are used — the season repeats every year.</div>
+    <div id="se_copyWrap"><label>Start it with the times from</label><select id="se_copy"></select></div>
+    <button class="btn" onclick="saveSeason()">Save season</button>
+    <div id="se_msg" class="msg"></div>
+  </div>
+</div>
+
+<!-- Quick pay (port of 2.0 modal-quick-pay) -->
+<div class="ovl hidden" id="payModal" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="mdl">
+    <div class="mh"><b>Record payment</b><button class="x" onclick="$('payModal').classList.add('hidden')">✕</button></div>
+    <div id="qp_who" style="font-weight:600"></div>
+    <label>Amount</label><input id="qp_amount" type="number" step="1" min="0">
+    <div class="chk"><input type="checkbox" id="qp_special"><label for="qp_special">Special price — counts as paid in full</label></div>
+    <div class="row2" style="grid-template-columns:1fr 1fr 1fr">
+      <button class="btn" onclick="savePay('Cash')">Cash</button><button class="btn" onclick="savePay('Venmo')">Venmo</button><button class="btn" onclick="savePay('Zelle')">Zelle</button>
+    </div>
+    <div id="qp_msg" class="msg"></div>
+  </div>
+</div>
+
+<!-- Add lesson modal (port of 2.0 modal-add-lesson) -->
+<div class="ovl hidden" id="addModal" onclick="if(event.target===this)closeAdd()">
+  <div class="mdl">
+    <div class="mh"><b>Add lesson for student</b><button class="x" onclick="closeAdd()">✕</button></div>
+    <div class="ddwrap"><label>Student</label><input id="al_student" placeholder="Search student..." autocomplete="off" oninput="alDD('student')" onfocus="alDD('student')" onblur="setTimeout(()=>$('al_studentDD').classList.add('hidden'),150)">
+      <div class="dd hidden" id="al_studentDD"></div></div>
+    <div class="ddwrap"><label>Partner <span style="color:#aaa">(optional — share this slot)</span></label><input id="al_partner" placeholder="Search student to share with..." autocomplete="off" oninput="alDD('partner')" onfocus="alDD('partner')" onblur="setTimeout(()=>$('al_partnerDD').classList.add('hidden'),150)">
+      <div class="dd hidden" id="al_partnerDD"></div></div>
+    <div id="al_price" style="font-size:11px;color:#888;margin:-6px 0 6px"></div>
+    <label>Price <span style="color:#aaa">(per kid — change for a deal)</span></label><input id="al_priceIn" inputmode="decimal" oninput="alPriceTouched = true; alPriceNote()">
+    <div id="al_priceNote" style="font-size:11px;color:#B45309;margin:-6px 0 10px"></div>
+    <div class="row2">
+      <div><label>Coach</label><select id="al_coach"></select></div>
+      <div><label>Focus</label><input id="al_focus" placeholder="e.g. Back handspring"></div>
+    </div>
+    <label>Duration</label><select id="al_duration" onchange="alPrice()"><option>30 min</option><option>45 min</option><option>60 min</option></select>
+    <div class="row2">
+      <div><label>Day</label><select id="al_day"></select></div>
+      <div><label>Time</label><select id="al_time"></select></div>
+    </div>
+    <label>Scope</label>
+    <select id="al_scope" onchange="$('al_startWrap').classList.toggle('hidden', this.value !== 'permanent'); alPriceNote()"><option value="permanent">Permanent (every week)</option><option value="week">This week only</option></select>
+    <div id="al_startWrap"><label>Start date (week the lesson begins)</label><input type="date" id="al_start"></div>
+    <button class="btn" id="al_save" onclick="saveAdd()">Add lesson</button>
+    <div id="al_msg" class="msg"></div>
+  </div>
+</div>
+<!-- Away slot: fill it this week or put the regular back -->
+<div class="ovl hidden" id="awayModal" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="mdl">
+    <div class="mh"><b id="aw_title"></b><button class="x" onclick="$('awayModal').classList.add('hidden')">✕</button></div>
+    <div id="aw_sub" style="font-size:13px;color:#B45309;margin:-4px 0 12px"></div>
+    <label>Fill this week — waitlist / drop-in matches</label>
+    <div id="aw_matches" style="margin-bottom:10px"></div>
+    <button class="btn" id="aw_fill">+ Fill with someone else</button>
+    <button class="btn" id="aw_back" style="background:#fff;color:#92400E;border:1px solid #F59E0B;margin-top:8px"></button>
+  </div>
+</div>
+<!-- Edit payment: tap ✓ Paid → change amount / method / date, or remove -->
+<div class="ovl hidden" id="epModal" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="mdl">
+    <div class="mh"><b id="ep_title">Edit payment</b><button class="x" onclick="$('epModal').classList.add('hidden')">✕</button></div>
+    <div id="ep_sub" style="font-size:12px;color:#888;margin:-4px 0 10px"></div>
+    <div class="row2">
+      <div><label>Amount</label><input id="ep_amount" inputmode="decimal"></div>
+      <div><label>Method</label><select id="ep_method"><option>Cash</option><option>Venmo</option><option>Zelle</option><option>Check</option><option>Other</option></select></div>
+    </div>
+    <label>Date paid</label><input type="date" id="ep_date">
+    <label style="display:flex;align-items:center;gap:6px;margin:4px 0 10px"><input type="checkbox" id="ep_special" style="width:auto"> ★ Special price this week (counts as paid in full)</label>
+    <button class="btn" onclick="saveEditPay()">Save</button>
+    <button class="btn ghost" style="margin-top:8px;color:#A32D2D" onclick="removeEditPay()">Remove payment</button>
+    <div id="ep_msg" class="msg"></div>
+  </div>
+</div>
+<!-- Send an opening: claim link per family, first tap wins -->
+<div class="ovl hidden" id="soModal" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="mdl">
+    <div class="mh"><b id="so_title">Send opening</b><button class="x" onclick="$('soModal').classList.add('hidden')">✕</button></div>
+    <div id="so_sub" style="font-size:12px;color:#888;margin:-4px 0 8px"></div>
+    <div id="so_list" style="max-height:38vh;overflow:auto"></div>
+    <div id="so_all" style="font-size:12px;color:#1c7a5a;cursor:pointer;margin:6px 0" onclick="soShowAll = true; soRender()">+ show all waitlist / drop-in</div>
+    <label>Message <span style="color:#aaa">({parent} {kid} {link} fill in per family)</span></label>
+    <textarea id="so_msg" rows="4"></textarea>
+    <button class="btn" id="so_send" onclick="sendOpening()">Send</button>
+    <div id="so_res" class="msg"></div>
+  </div>
+</div>
+<!-- Print schedule (port of 2.0 Print Schedule): portrait letter, one page, size A−/A+/Auto-fit -->
+<div class="ovl hidden" id="printModal">
+  <div class="mdl" style="max-width:560px">
+    <div class="mh"><b>Print schedule</b><button class="x" onclick="$('printModal').classList.add('hidden')">✕</button></div>
+    <div id="prCtl" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+      <button class="paybtn" onclick="prSize(-0.5)">A−</button><span id="prPct" style="min-width:44px;text-align:center;font-size:13px"></span><button class="paybtn" onclick="prSize(0.5)">A+</button>
+      <button class="paybtn" onclick="prAuto(true)">Auto-fit</button><span id="prFit" class="tag"></span>
+      <button class="paybtn" style="margin-left:auto;background:var(--mint);color:#fff" onclick="window.print()">🖨 Print</button>
+    </div>
+    <div id="psWrap" style="overflow:hidden"><div id="pSheet"><div id="pContent"></div></div></div>
+  </div>
+</div>
+<style>
+  #pSheet { width:7.9in; height:10.4in; background:#fff; color:#2c2c2a; border:1px solid #bbb; overflow:hidden; position:relative; transform-origin:top left; box-sizing:border-box; }
+  #pSheet.over { border-bottom:3px solid #E24B4A; }
+  #pContent { font-family:Arial, sans-serif; }
+  #pContent table { width:100%; border-collapse:collapse; table-layout:fixed; }
+  #pContent td, #pContent th { border:1px solid #ccc; padding:.25em .45em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #pContent th { background:#f5f4f0; color:#888; font-weight:500; font-size:.85em; text-align:left; }
+  #pContent .ph { background:#FFE800; text-align:center; font-weight:600; }
+  #pContent .pb { display:inline-block; border:1px solid #999; width:5.5em; height:1.7em; vertical-align:middle; margin:0 .9em 0 .35em; }
+  @page { size: letter portrait; margin: 0.3in; }
+  @media print {
+    body > *:not(#printModal) { display:none !important; }
+    #printModal { position:static !important; background:none !important; padding:0 !important; display:block !important; }
+    #printModal .mdl { max-width:none !important; padding:0 !important; margin:0 !important; box-shadow:none !important; border:0 !important; background:none !important; }
+    #printModal .mh, #prCtl { display:none !important; }
+    #psWrap { height:auto !important; overflow:visible !important; }
+    #pSheet { transform:none !important; border:0 !important; }
+    #pContent th, #pContent .ph { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  }
+</style>
+<script src="week.js"></script>
 <script>
 const sb = supabase.createClient('https://angmtyojkwlrefxpcgoa.supabase.co', 'sb_publishable_fPciNfnNHpHQikB8mqHNpw_hIVRIGo5');
-const FIELDS = ['first_name','last_name','dob','skill_level','parent_name','parent_phone','parent_email','emergency_name','emergency_phone','notes'];
+// Phone layout: (513) 555-1234. 10 digits (or 11 starting with 1) get formatted; anything else is left as typed.
+function fmtPhone(v) { v = String(v || '').trim(); let d = v.replace(/\D/g, ''); if (d.length === 11 && d[0] === '1') d = d.slice(1); return d.length === 10 ? '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6) : v; }
+function typingPhone(v) { let d = v.replace(/\D/g, ''); if (d.length > 10) return v; return !d ? '' : d.length < 4 ? '(' + d : d.length < 7 ? '(' + d.slice(0, 3) + ') ' + d.slice(3) : '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6); }
+const FIELDS = ['first_name','last_name','dob','skill_level','parent_name','parent_phone','parent_email','notes'];
+const OFF = ['Inactive','Dropped'];
+const isOn = s => !OFF.includes(s.status);
+let gymTitle = '';
 let mode = 'in', gymId = null, students = [], editingId = null;
 
 const $ = id => document.getElementById(id);
+// Remember where Steve is so a refresh brings him back (tab, open student, group, class mode, week)
+const ss = { get(k, d) { try { const v = sessionStorage.getItem('fl3_' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+             set(k, v) { try { sessionStorage.setItem('fl3_' + k, JSON.stringify(v)); } catch (e) {} } };
 function show(view) {
-  ['loginView','waitView','studentsView','editView'].forEach(v => $(v).classList.toggle('hidden', v !== view));
+  ['loginView','waitView','studentsView','editView','scheduleView','attendanceView','paymentsView','openingsView','dashboardView','slotsView'].forEach(v => $(v).classList.toggle('hidden', v !== view));
   $('outBtn').classList.toggle('hidden', view === 'loginView');
+  $('tabs').classList.toggle('hidden', !gymId);
+  ['dashboard','schedule','attendance','openings','payments','students','slots'].forEach(t => $('tabBtn_' + t).classList.toggle('on', view === t + 'View'));
 }
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
@@ -134,6 +579,96 @@ async function doAuth() {
   boot();
 }
 
+async function openAcct() {
+  const { data: { user } } = await sb.auth.getUser();
+  $('acctEmail').textContent = user ? 'Signed in as ' + user.email : '';
+  $('pw1').value = $('pw2').value = ''; $('pwMsg').textContent = '';
+  renderCoaches(); loadCal(); $('acctModal').classList.remove('hidden');
+}
+// ================= CALENDAR SYNC SETTINGS (edge function cal-sync does the work) =================
+const GCOLORS = [['1','Lavender'],['2','Sage'],['3','Grape'],['4','Flamingo (pink)'],['5','Banana'],['6','Tangerine'],['7','Peacock'],['8','Graphite'],['9','Blueberry'],['10','Basil'],['11','Tomato']];
+let calRow = null;
+async function loadCal() {
+  const r = await sb.from('cal_settings').select('*').maybeSingle(); calRow = r.data || null; const c = calRow || {};
+  $('cs_mode').value = c.mode || 'off'; $('cs_test').value = c.test_calendar_id || ''; $('cs_live').value = c.live_calendar_id || '';
+  $('cs_color').innerHTML = GCOLORS.map(([v, n]) => `<option value="${v}"${v === (c.other_color || '4') ? ' selected' : ''}>${n}</option>`).join('');
+  $('cs_class').checked = c.class_on !== false;
+  $('cs_msg').className = 'msg'; $('cs_msg').textContent = c.last_result ? 'Last sync ' + new Date(c.last_run_at).toLocaleString() + ': ' + c.last_result : (c.mode && c.mode !== 'off' ? 'Waiting for the first sync…' : '');
+}
+async function testText() {
+  const me = coachRows.find(c => c.name === mainCoach()) || {}, m = $('cs_msg');
+  const to = prompt('Send a test text to:', me.phone || ''); if (!to) return;
+  m.className = 'msg'; m.textContent = 'Sending test text…';
+  const r = await sb.functions.invoke('sms-send', { body: { messages: [{ to, text: 'FlipLab 3.0 test text ✓', family: 'Test' }] } });
+  const err = r.error ? ((r.data && r.data.error) || r.error.message) : r.data.failed ? r.data.results[0].error : '';
+  m.className = err ? 'msg err' : 'msg'; m.textContent = err ? 'Not sent: ' + err : '✓ Handed to your phone — the text should arrive in a few seconds';
+}
+async function saveCal() {
+  const mode = $('cs_mode').value, m = $('cs_msg');
+  if (mode === 'live' && (calRow || {}).mode !== 'live' && !confirm('Turn on LIVE sync to your real Flip Lab calendar?\n\nOnly do this at switch-over, after turning off 2.0\'s Sunday calendar rebuild — otherwise lessons show twice.')) return;
+  if (mode === 'test' && !$('cs_test').value.trim()) { m.className = 'msg err'; m.textContent = 'Add the test calendar ID first.'; return; }
+  if (mode === 'live' && !$('cs_live').value.trim()) { m.className = 'msg err'; m.textContent = 'Add the Flip Lab calendar ID first.'; return; }
+  const rec = { gym_id: gymId, mode, test_calendar_id: $('cs_test').value.trim() || null, live_calendar_id: $('cs_live').value.trim() || null,
+    other_color: $('cs_color').value, class_on: $('cs_class').checked, main_coach: mainCoach() || null, updated_at: new Date().toISOString() };
+  const r = await sb.from('cal_settings').upsert(rec);
+  if (r.error) { m.className = 'msg err'; m.textContent = r.error.message; return; }
+  m.className = 'msg'; m.textContent = mode === 'off' ? '✓ Saved — sync is off' : '✓ Saved — the calendar updates within a minute or two';
+  calRow = { ...(calRow || {}), ...rec };
+}
+// ================= COACHES (replaces 2.0 Coaches tab) =================
+let coachRows = [], myEmail = '';
+async function loadCoaches() { const r = await sb.from('coaches').select('*').order('name'); coachRows = r.data || []; }
+// Coach picker list: active coaches + anyone already on a lesson/slot this week (so old values never vanish)
+const coachNames = () => [...new Set(coachRows.filter(c => c.active).map(c => c.name).concat(weekRows.map(r => r.coach), weekSlots.map(s => s.coach)).filter(Boolean))].sort();
+// "Main" coach = the coach whose email is the signed-in account; other coaches get a tag on the Schedule
+const mainCoach = () => (coachRows.find(c => c.active && c.email && c.email.toLowerCase() === myEmail) || {}).name || '';
+// Another coach's lesson (e.g. Coach Emma): shown on the schedule, but paid to that coach directly → kept out of Flip Lab money
+const isOther = p => { const m = mainCoach(); return !!(p && p.coach && m && p.coach !== m); };
+// Trade students (lessons swapped for services): never owed, never in money totals
+const isTrade = p => { const s = p && students.find(x => x.id === p.student_id); return !!(s && (s.extra || {}).Trade === 'Yes'); };
+const noCharge = p => isOther(p) || isTrade(p);
+function renderCoaches() {
+  $('co_name').value = $('co_phone').value = $('co_spec').value = ''; $('coMsg').textContent = '';
+  $('coachList').innerHTML = coachRows.map(c => `<div class="arow" style="padding:6px 0"><div class="who"><b style="${c.active ? '' : 'color:#aaa'}">${esc(c.name)}</b><small>${esc([c.specialties, c.phone].filter(Boolean).join(' · '))}</small></div>
+    <button class="paybtn" style="${c.active ? 'background:var(--mint-soft);color:#1c7a5a' : 'background:#eee;color:#888'}" onclick="toggleCoach('${esc(c.id)}')">${c.active ? 'Active' : 'Inactive'}</button><button class="paybtn" style="background:#FCEBEB;color:#A32D2D;margin-left:6px" title="Delete" onclick="deleteCoach('${esc(c.id)}')">🗑</button></div>`).join('') || '<small style="color:#aaa">No coaches yet</small>';
+}
+async function addCoach() {
+  const name = $('co_name').value.trim(), m = $('coMsg'); m.className = 'msg err';
+  if (!name) return m.textContent = 'Enter a name.';
+  if (coachRows.some(c => c.name.toLowerCase() === name.toLowerCase())) return m.textContent = 'That coach is already on the list.';
+  const r = await sb.from('coaches').insert({ id: 'C' + Date.now(), gym_id: gymId, name, phone: fmtPhone($('co_phone').value) || null, specialties: $('co_spec').value.trim() || null, active: true });
+  if (r.error) return m.textContent = r.error.message;
+  await loadCoaches(); renderCoaches(); $('coMsg').className = 'msg'; $('coMsg').textContent = '✓ ' + name + ' added';
+}
+async function deleteCoach(id) {
+  const c = coachRows.find(x => x.id === id); if (!c) return;
+  // Never leave lessons pointing at a coach that no longer exists
+  const r = await sb.from('private_lessons').select('day,time,student_name,end_date').eq('coach', c.name);
+  if (r.error) return alert(r.error.message);
+  const today = ymd(new Date()), live = (r.data || []).filter(l => !l.end_date || l.end_date > today);
+  if (live.length) return alert(c.name + ' still has ' + live.length + ' lesson' + (live.length === 1 ? '' : 's') + ':\n' + live.slice(0, 5).map(l => '• ' + l.student_name + ' ' + l.day + ' ' + l.time).join('\n') + '\n\nMove or cancel them first, or mark ' + c.name + ' Inactive instead.');
+  if (!confirm('Delete ' + c.name + '?')) return;
+  const d = await sb.from('coaches').delete().eq('id', id);
+  if (d.error) return alert(d.error.message);
+  coachRows = coachRows.filter(x => x !== c); renderCoaches();
+}
+async function toggleCoach(id) {
+  const c = coachRows.find(x => x.id === id); if (!c) return;
+  if (c.active && !confirm('Mark ' + c.name + ' inactive?\n\nTheir lessons stay on the schedule; they just stop showing in the coach pickers.')) return;
+  const r = await sb.from('coaches').update({ active: !c.active }).eq('id', id);
+  if (r.error) return alert(r.error.message);
+  c.active = !c.active; renderCoaches();
+}
+async function changePw() {
+  const a = $('pw1').value, b = $('pw2').value, m = $('pwMsg');
+  m.className = 'msg err';
+  if (a.length < 8) return m.textContent = 'Use at least 8 characters.';
+  if (a !== b) return m.textContent = "The two passwords don't match.";
+  m.className = 'msg'; m.textContent = 'Saving…';
+  const { error } = await sb.auth.updateUser({ password: a });
+  if (error) { m.className = 'msg err'; m.textContent = error.message; return; }
+  m.textContent = '✓ Password changed. Use it next time you sign in.'; $('pw1').value = $('pw2').value = '';
+}
 async function signOut() { await sb.auth.signOut(); show('loginView'); }
 
 async function boot() {
@@ -141,52 +676,1316 @@ async function boot() {
   if (!session) { show('loginView'); return; }
   const { data: gyms, error } = await sb.from('gyms').select('id,name').limit(1);
   if (error || !gyms || !gyms.length) { show('waitView'); return; }
-  gymId = gyms[0].id; $('gymName').textContent = gyms[0].name + ' — Students';
+  gymId = gyms[0].id; gymTitle = gyms[0].name; $('gymName').textContent = gyms[0].name + ' — Students';
+  const SE = await sb.from('seasons').select('*').order('sort'); seasons = SE.data || [];
+  myEmail = (session.user.email || '').toLowerCase(); await loadCoaches(); rtStart();
   await loadStudents();
-  show('studentsView');
+  weekOffset = ss.get('week', 0); stuGroup = ss.get('group', 'priv'); attMode = ss.get('attMode', 'privates');
+  if (attMode === 'classes') setAttModeButtons();
+  const tab = ss.get('tab', 'dashboard'), sid = ss.get('student', null);
+  if (tab === 'student' && sid && students.find(x => x.id === sid)) { curTab = 'students'; openEdit(sid); if (!weekRows.length) loadWeek(); }
+  else go(['dashboard','schedule','attendance','openings','payments','students','slots'].includes(tab) ? tab : 'dashboard');
 }
+let curTab = 'schedule';
+function go(tab) { curTab = tab; ss.set('tab', tab); if (tab === 'slots') { show('slotsView'); return loadSlots(); } if (tab === 'students') { show('studentsView'); render(); if (!weekRows.length) loadWeek(); return; } show(tab + 'View'); loadWeek(); }
 
-async function loadStudents() {
-  $('list').innerHTML = '<div class="center">Loading…</div>';
+async function loadStudents(quiet) {
+  if (!quiet) $('list').innerHTML = '<div class="center">Loading…</div>';
   const { data, error } = await sb.from('students').select('*').order('last_name').order('first_name');
   if (error) { $('list').innerHTML = '<div class="msg err">' + esc(error.message) + '</div>'; return; }
-  students = data; render();
+  students = data;
+  // Group membership: live private lesson, active class enrollment, waitlist / drop-in list (or student status)
+  const today = ymd(new Date());
+  const [L, E, W] = await Promise.all([
+    sb.from('private_lessons').select('student_id,start_date,end_date,status').or('end_date.is.null,end_date.gt.' + today),
+    sb.from('class_enrollments').select('student_id,status,schedule_id'),
+    sb.from('waitlist').select('student_id,status').in('status', ['Waiting','Waitlist','Drop-In'])
+  ]);
+  grp = { priv: new Set(), cls: new Set(), wl: new Set(), di: new Set() };
+  (L.data || []).filter(l => !['Cancelled','Dropped'].includes(l.status) && runsBetween(l, today)).forEach(l => grp.priv.add(l.student_id));
+  (E.data || []).filter(e => !['Dropped','Waitlisted'].includes(e.status)).forEach(e => grp.cls.add(e.student_id));
+  (W.data || []).forEach(w => (w.status === 'Drop-In' ? grp.di : grp.wl).add(w.student_id));
+  students.forEach(s => { if (s.status === 'Waitlist') grp.wl.add(s.id); if (s.status === 'Drop-In') grp.di.add(s.id); });
+  render();
 }
+let grp = { priv: new Set(), cls: new Set(), wl: new Set(), di: new Set() }, stuGroup = 'priv';
+const GROUPS = [['priv','Private'],['cls','Class'],['wl','Waitlist'],['di','Drop-In'],['all','All']];
+function setGroup(g) { stuGroup = g; ss.set('group', g); render(); }
 
 function render() {
   const q = $('q').value.trim().toLowerCase(), all = $('showInactive').checked;
-  const rows = students.filter(s => (all || s.active) &&
-    (!q || [s.first_name, s.last_name, s.parent_name, s.parent_phone, s.parent_email].join(' ').toLowerCase().includes(q)));
+  const inG = (s, g) => g === 'all' || grp[g].has(s.id);
+  const base = students.filter(s => (all || isOn(s)) && (!q || [s.first_name, s.last_name, s.parent_name, s.parent_phone, s.parent_email].join(' ').toLowerCase().includes(q)));
+  $('grpTabs').innerHTML = GROUPS.map(([g, l]) => `<button class="${g === stuGroup ? 'on' : ''}" onclick="setGroup('${g}')">${l} <span style="font-size:11px;opacity:.7">${base.filter(s => inG(s, g)).length}</span></button>`).join('');
+  const rows = base.filter(s => inG(s, stuGroup));
+  const tags = s => [grp.priv.has(s.id) && 'Private', grp.cls.has(s.id) && 'Class', grp.wl.has(s.id) && 'Waitlist', grp.di.has(s.id) && 'Drop-In'].filter(Boolean);
   $('count').textContent = rows.length;
+  $('gymName').textContent = (GROUPS.find(x => x[0] === stuGroup) || [, 'Students'])[1] + (stuGroup === 'all' ? ' students' : '');
   $('list').innerHTML = rows.length ? rows.map(s => `
     <div class="stu" onclick="openEdit('${esc(s.id)}')">
       <div><b>${esc(s.first_name)} ${esc(s.last_name)}</b>
         <small>${esc(s.parent_name || '')}${s.parent_phone ? ' · ' + esc(s.parent_phone) : ''}</small></div>
-      <span class="pill ${s.active ? '' : 'off'}">${s.active ? esc(s.skill_level || 'Active') : 'Inactive'}</span>
-    </div>`).join('') : '<div class="center">No students yet.</div>';
+      <span style="text-align:right"><span class="pill ${isOn(s) ? '' : 'off'}">${esc(s.status || 'Active')}${s.skill_level ? ' · ' + esc(s.skill_level.split('-')[0]) : ''}</span>
+        ${tags(s).length ? `<small style="display:block;margin-top:3px;color:#888;font-size:11px">${tags(s).join(' · ')}</small>` : ''}</span>
+    </div>`).join('') : '<div class="center">No students in this group.</div>';
 }
 
+const XF = ['School','PhotoPermission','PreferredPayment','WaiverSigned'];
 function openEdit(id) {
   editingId = id;
-  const s = students.find(x => x.id === id) || { active: true };
+  const s = students.find(x => x.id === id) || { status: 'Active' }, x = s.extra || {};
+  // Level list = 2.0 levels; keep any older value (e.g. "Level Beginner 3") so saving never wipes it
+  const LV = ['L1-Foundations','L2-Rising','L3-Building','L4-Progressing','L5-Advanced','L6-Elite'];
+  $('f_skill_level').innerHTML = '<option value=""></option>' + LV.concat(s.skill_level && !LV.includes(s.skill_level) ? [s.skill_level] : []).map(v => `<option>${esc(v)}</option>`).join('');
   FIELDS.forEach(f => $('f_' + f).value = s[f] ?? '');
-  $('f_active').checked = !!s.active; $('f_unsubscribed').checked = !!s.unsubscribed;
-  $('editTitle').textContent = id ? (s.first_name + ' ' + s.last_name) : 'New student';
+  XF.forEach(f => $('x_' + f).value = x[f] ?? '');
+  $('f_status').value = s.status || 'Active'; $('f_unsubscribed').checked = !!s.unsubscribed; $('f_trade').checked = (s.extra || {}).Trade === 'Yes';
   $('editMsg').textContent = '';
+  $('newHdr').classList.toggle('hidden', !!id); $('sdTabs').classList.toggle('hidden', !id); $('sdTop').innerHTML = '';
   show('editView'); window.scrollTo(0, 0);
+  if (id) { ss.set('tab', 'student'); ss.set('student', id); }
+  sdTab('profile');
+  if (id) loadStudentDetail(s);
 }
 
 async function saveStudent() {
-  const rec = { gym_id: gymId, active: $('f_active').checked, unsubscribed: $('f_unsubscribed').checked };
-  FIELDS.forEach(f => { const v = $('f_' + f).value.trim(); rec[f] = v === '' ? null : v; });
+  const st = $('f_status').value;
+  const cur = students.find(x => x.id === editingId) || {}, prevStatus = cur.status, extra = { ...(cur.extra || {}) };
+  XF.forEach(f => { if (f !== 'WaiverSigned') { const v = $('x_' + f).value.trim(); if (v) extra[f] = v; else delete extra[f]; } });
+  if ($('f_trade').checked) extra.Trade = 'Yes'; else delete extra.Trade;
+  const rec = { gym_id: gymId, status: st, active: !OFF.includes(st), unsubscribed: $('f_unsubscribed').checked, extra };
+  FIELDS.forEach(f => { let v = $('f_' + f).value.trim(); if (f.endsWith('_phone')) v = fmtPhone(v); rec[f] = v === '' ? null : v; });
   if (!rec.first_name) { $('editMsg').className = 'msg err'; $('editMsg').textContent = 'First name is required.'; return; }
   $('editMsg').className = 'msg'; $('editMsg').textContent = 'Saving…';
   const res = editingId
     ? await sb.from('students').update(rec).eq('id', editingId)
     : await sb.from('students').insert(rec);
   if (res.error) { $('editMsg').className = 'msg err'; $('editMsg').textContent = res.error.message; return; }
-  await loadStudents(); show('studentsView');
+  // Always line the list entry up for Waitlist / Drop-In (fixes earlier saves); otherwise only when Status changed
+  if (editingId && (st !== prevStatus || st === 'Waitlist' || st === 'Drop-In')) { const e = await syncWaitlist({ ...cur, ...rec, id: editingId }, st); if (e) { $('editMsg').className = 'msg err'; $('editMsg').textContent = 'Saved, but the waitlist list did not update: ' + e; return; } }
+  await loadStudents();
+  if (editingId) { $('editMsg').className = 'msg'; $('editMsg').textContent = '✓ Saved'; const s = students.find(x => x.id === editingId); if (s) renderSdTop(s); }
+  else go('students');
 }
+
+// Keep the Waitlist / Drop-In list (Openings tab) in step with the student's Status:
+// Waitlist or Drop-In → their list entry gets that status (one is added if they have none);
+// Inactive / Dropped → their list entry is Removed; Active → list left alone (active kids can also be drop-ins).
+async function syncWaitlist(s, st) {
+  const live = await sb.from('waitlist').select('id,status').eq('student_id', s.id).in('status', ['Waiting','Waitlist','Drop-In']);
+  if (live.error) return live.error.message;
+  let r = { error: null };
+  if (st === 'Waitlist' || st === 'Drop-In') {
+    if (live.data.length) r = await sb.from('waitlist').update({ status: st }).in('id', live.data.map(x => x.id));
+    else r = await sb.from('waitlist').insert({ gym_id: gymId, student_id: s.id, student_name: (s.first_name || '') + ' ' + (s.last_name || ''), dob: s.dob, parent_name: s.parent_name,
+      parent_phone: s.parent_phone, parent_email: s.parent_email, skill_level: s.skill_level, status: st, open_to_anything: true, signup_date: ymd(new Date()) });
+  } else if ((st === 'Inactive' || st === 'Dropped') && live.data.length) r = await sb.from('waitlist').update({ status: 'Removed' }).in('id', live.data.map(x => x.id));
+  return r.error ? r.error.message : null;
+}
+
+// ================= STUDENT DETAIL (port of 2.0 unified student modal) =================
+let sd = null;  // { s, lessons, pays, att, cls, clsAtt }
+function sdTab(t) {
+  document.querySelectorAll('#sdTabs button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
+  $('sdProfile').classList.toggle('hidden', t !== 'profile'); $('sdPanel').classList.toggle('hidden', t === 'profile');
+  if (t !== 'profile') renderSdPanel(t);
+}
+async function loadStudentDetail(s) {
+  sd = { s, loading: true }; renderSdTop(s);
+  const [L, P, A, E, CA] = await Promise.all([
+    sb.from('private_lessons').select('*').eq('student_id', s.id).order('start_date', { ascending: false }),
+    sb.from('payments').select('*').eq('student_id', s.id).order('date', { ascending: false }).limit(300),
+    sb.from('attendance').select('*').eq('student_id', s.id).order('week_start', { ascending: false }).limit(300),
+    sb.from('class_enrollments').select('*').eq('student_id', s.id),
+    sb.from('class_attendance').select('*').eq('student_id', s.id).order('week_start', { ascending: false }).limit(200)
+  ]);
+  if (editingId !== s.id) return;
+  const err = L.error || P.error || A.error || E.error || CA.error;
+  if (err) { $('sdTop').innerHTML += '<div class="msg err">' + esc(err.message) + '</div>'; return; }
+  // Make sure this week's marks + payments for this student are in memory (they're only loaded on some tabs)
+  const ws = weekStartStr(), have = new Set(weekAtt.map(a => a.id)), haveP = new Set(weekPay.map(x => x.id));
+  A.data.filter(a => a.week_start === ws && !have.has(a.id)).forEach(a => weekAtt.push(a));
+  P.data.filter(x => x.week_start === ws && !haveP.has(x.id)).forEach(x => weekPay.push(x));
+  sd = { s, lessons: L.data, pays: P.data, att: A.data, cls: E.data, clsAtt: CA.data };
+  renderSdTop(s);
+  const t = (document.querySelector('#sdTabs button.on') || {}).dataset; if (t && t.t !== 'profile') renderSdPanel(t.t);
+}
+const liveLesson = l => runsBetween(l, ymd(new Date())) && !['Cancelled','Dropped'].includes(l.status);
+function renderSdTop(s) {
+  const age = ageOf(s.dob), x = s.extra || {};
+  const mine = weekRows.filter(p => p.student_id === s.id);
+  const wk = weekDates();
+  let week = mine.length ? mine.map(p => {
+    const a = attOf(p), pd = paidOf(p), st = a ? a.status : '';
+    return `<div class="wkline"><b>${esc(p.day)} ${esc(p.time)}</b><span style="color:#888">${esc(p.coach || '')}${p.status === 'Cancelled' || noCharge(p) ? '' : ' · ' + esc(p.lesson_type || 'Solo') + ' · $' + priceNum(p)}</span>
+      ${p.status === 'Cancelled' ? '<span class="tag t-away">Cancelled this week</span>' : st === 'Attended' ? '<span class="tag t-photo">✓ Here</span>' : st ? `<span class="tag t-nophoto">${esc(st)}</span>` : '<span class="tag t-ex">Upcoming</span>'}
+      ${p.status === 'Cancelled' || noCharge(p) ? '' : pd.amt > 0 ? `<span class="tag t-photo">Paid $${pd.amt.toFixed(0)}</span>` : '<span class="tag t-summer">Unpaid</span>'}</div>`;
+  }).join('') : `<div class="wkline" style="color:#888">No lesson ${weekOffset === 0 ? 'this week' : 'the week of ' + wk[0].label}</div>`;
+  const live = mine.filter(p => p.status !== 'Cancelled' && !noCharge(p)), owing = live.filter(p => priceNum(p) - paidOf(p).amt > 0 && !paidOf(p).adj);
+  const qa = [];
+  if (['Inactive','Dropped','Waitlist'].includes(s.status)) qa.push(`<button class="pri" onclick="sdStatus('Active')">↺ Re-enroll (Active)</button>`);
+  else {
+    if (owing.length) qa.push(`<button class="pri" onclick="openPay('${esc(owing[0].id)}')">$ Record payment</button>`);
+    if (s.parent_phone && owing.length) qa.push(`<button onclick="location.href=smsHref('${esc(s.parent_phone)}', sdRemindText())">📱 Payment reminder</button>`);
+    if (live.length) qa.push(`<button class="warn" onclick="sdCancelWeek()">✕ Cancel ${weekOffset === 0 ? 'this week' : 'that week'}</button>`);
+    qa.push(`<button class="dang" onclick="sdStatus('Dropped')">Drop student</button>`);
+  }
+  $('sdTop').innerHTML = `<div class="shead"><div class="av">${esc((s.first_name || '?')[0])}${esc((s.last_name || '')[0] || '')}</div>
+    <div><b>${esc(s.first_name)} ${esc(s.last_name)}</b> <span class="pill ${isOn(s) ? '' : 'off'}">${esc(s.status || 'Active')}</span>${s.skill_level ? ` <span class="pill">${esc(s.skill_level)}</span>` : ''}${x.PhotoPermission === 'No' ? ' <span class="tag t-nophoto">No Photo</span>' : ''}
+    <small>${age !== '' ? 'Age ' + age + ' · ' : ''}${esc(s.parent_name || '')}${s.parent_phone ? ` · <a href="${smsHref(s.parent_phone)}">${esc(s.parent_phone)}</a>` : ''}</small></div></div>
+    <div class="wkbar"><div class="lbl">${weekOffset === 0 ? 'This week' : 'Week of ' + wk[0].label}</div>${week}</div>
+    <div class="qa">${qa.join('')}</div>`;
+}
+function sdRemindText() {
+  const s = sd.s, owed = weekRows.filter(p => p.student_id === s.id && p.status !== 'Cancelled' && !noCharge(p)).reduce((t, p) => t + Math.max(0, priceNum(p) - paidOf(p).amt), 0);
+  return 'Hi' + (s.parent_name ? ' ' + s.parent_name.split(' ')[0] : '') + '! Just a friendly reminder that ' + s.first_name + "'s lesson this week (" + money(owed) + ') is still open. Cash, Venmo or Zelle all work. Thank you!';
+}
+async function sdCancelWeek() {
+  const s = sd.s, ls = weekRows.filter(p => p.student_id === s.id && p.status !== 'Cancelled');
+  if (!ls.length || !confirm('Cancel ' + s.first_name + "'s " + ls.map(p => p.day + ' ' + p.time).join(', ') + ' for ' + (weekOffset === 0 ? 'this week' : 'the week of ' + weekDates()[0].label) + ' only?')) return;
+  for (const p of ls) {
+    const ex = addExId(p.id);
+    const res = ex ? await sb.from('schedule_exceptions').update({ status: 'Deleted' }).eq('id', ex) : await saveException(p, { type: 'Cancel', notes: 'Cancelled from student page' });
+    if (res.error) return alert(res.error.message);
+  }
+  await loadWeek(); renderSdTop(s);
+}
+async function sdStatus(st) {
+  const s = sd.s;
+  if (st === 'Dropped' && !confirm('Mark ' + s.first_name + ' as Dropped?\n\nTheir lessons stay on the schedule until you remove them (tap the lesson → Cancel → Permanent).')) return;
+  const res = await sb.from('students').update({ status: st, active: !OFF.includes(st) }).eq('id', s.id);
+  if (res.error) return alert(res.error.message);
+  const e = await syncWaitlist(s, st); if (e) alert('Status saved, but the waitlist list did not update: ' + e);
+  s.status = st; $('f_status').value = st; renderSdTop(s); loadStudents();
+}
+function renderSdPanel(t) {
+  const el = $('sdPanel');
+  if (!sd || sd.loading) { el.innerHTML = '<div class="card center">Loading…</div>'; return; }
+  const row = (a, b, c) => `<div class="arow"><div class="who">${a}</div>${b || ''}${c || ''}</div>`;
+  if (t === 'schedule') {
+    const live = sd.lessons.filter(liveLesson), past = sd.lessons.filter(l => !liveLesson(l));
+    const cls = sd.cls.filter(e => !['Dropped'].includes(e.status));
+    el.innerHTML = `<div class="sec" style="margin-top:0">Weekly lessons</div><div class="card" style="padding:0;overflow:hidden">${live.length ? live.map(l => row(`<b>${esc(l.day)} ${esc(l.time)}</b><small>${esc(l.coach || 'TBD')} · ${esc(l.duration || '30 min')} · ${esc(l.lesson_type || 'Solo')}${l.matched_with ? ' with ' + esc(l.matched_with) : ''}${l.start_date ? ' · since ' + esc(l.start_date) : ''}</small>`, `<div class="bal ok">${(l.extra || {}).SpecialPrice === 'Yes' ? esc(l.price || '') + ' ★' : l.lesson_type === 'Shared' ? priceFor(l.duration || '30 min', 'Shared') : esc(l.price || priceFor(l.duration || '30 min', 'Solo'))}</div>`)).join('') : '<div class="center">No weekly lessons</div>'}</div>
+      <div class="sec">Classes</div><div class="card" style="padding:0;overflow:hidden">${cls.length ? cls.map(e => row(`<b>${esc(e.class_name || e.schedule_id)}</b><small>${esc(e.status || '')}${e.enroll_date ? ' · since ' + esc(e.enroll_date) : ''}</small>`)).join('') : '<div class="center">No classes</div>'}</div>
+      ${past.length ? `<div class="sec">Past lessons</div><div class="card" style="padding:0;overflow:hidden">${past.slice(0, 20).map(l => row(`<span style="color:#888">${esc(l.day)} ${esc(l.time)} · ${esc(l.coach || '')} · ${esc(l.lesson_type || '')}</span><small>${esc(l.start_date || '…')} → ${esc(l.end_date || '')}</small>`)).join('')}</div>` : ''}
+      <div style="font-size:12px;color:#888;margin-top:8px">To move, cancel or change a lesson, tap it on the Schedule tab.</div>`;
+  } else if (t === 'payments') {
+    const tot = sd.pays.reduce((a, x) => a + (+x.amount || 0), 0), yr = String(new Date().getFullYear());
+    const ytd = sd.pays.filter(x => (x.date || '').startsWith(yr)).reduce((a, x) => a + (+x.amount || 0), 0);
+    el.innerHTML = `<div><span class="stat">All time<b>${money(tot)}</b></span><span class="stat">${yr}<b>${money(ytd)}</b></span><span class="stat">Payments<b>${sd.pays.length}</b></span>${(sd.s.extra || {}).PreferredPayment ? `<span class="stat">Prefers<b>${esc(sd.s.extra.PreferredPayment)}</b></span>` : ''}</div>
+      <div class="card" style="padding:0;overflow:hidden">${sd.pays.length ? sd.pays.map(x => row(`<b>${money(+x.amount || 0)}</b> <span style="color:#888;font-size:12px">${esc(x.method || '')}</span><small>${esc(x.date || '')} · ${String(x.lesson_id || '').startsWith('CLS_') ? 'Class' : esc(x.lesson_type || 'Lesson')}${(x.extra || {}).Adjusted === 'Yes' ? ' · ★ special' : ''}</small>`)).join('') : '<div class="center">No payments</div>'}</div>`;
+  } else if (t === 'attendance') {
+    const all = sd.att.map(a => ({ wk: a.week_start, what: (a.extra || {}).Date || '', time: a.time || '', st: a.status }))
+      .concat(sd.clsAtt.map(a => ({ wk: a.week_start, what: '🤸 ' + (a.class_name || 'Class'), time: '', st: a.status }))).sort((a, b) => String(b.wk).localeCompare(String(a.wk)));
+    const c = k => all.filter(a => a.st === k).length, here = c('Attended'), out = all.length - here;
+    el.innerHTML = `<div><span class="stat">Here<b>${here}</b></span><span class="stat">Absent<b>${c('Absent')}</b></span><span class="stat">Cancelled<b>${c('Cancelled')}</b></span><span class="stat">Other<b>${out - c('Absent') - c('Cancelled')}</b></span>${all.length ? `<span class="stat">Show rate<b>${Math.round(here / all.length * 100)}%</b></span>` : ''}</div>
+      <div class="card" style="padding:0;overflow:hidden">${all.length ? all.map(a => row(`<b>Week of ${esc(a.wk || '')}</b><small>${esc(a.what)} ${esc(a.time)}</small>`, `<span class="tag ${a.st === 'Attended' ? 't-photo' : 't-nophoto'}">${a.st === 'Attended' ? '✓ Here' : esc(a.st)}</span>`)).join('') : '<div class="center">No attendance yet</div>'}</div>`;
+  }
+}
+
+// ================= SCHEDULE (port of 2.0 getPrivates + applyExceptionsToPrivates_ + renderDynScheduleList_) =================
+// ---- Seasons: each slot belongs to a season; the season whose dates cover a week's Monday supplies that week's slots ----
+let seasons = [];
+const mdIn = (md, a, b) => a <= b ? md >= a && md <= b : md >= a || md <= b;   // handles seasons that wrap past Dec 31
+// When seasons overlap, the newer one (higher sort) wins, e.g. a Winter break inside the School year
+const seasonFor = dateStr => { const md = String(dateStr).slice(5, 10); return seasons.filter(x => mdIn(md, x.start_md, x.end_md)).sort((a, b) => (b.sort || 0) - (a.sort || 0))[0] || seasons[0] || null; };
+const slotSeason = sl => sl.season_id || (sl.is_summer ? 'fliplab:summer' : 'fliplab:school');
+function slotsForWeek() { const se = seasonFor(weekStartStr()); return weekSlots.filter(sl => !se || slotSeason(sl) === se.id); }
+const isExtraSlot = sl => { const se = seasons.find(x => x.id === slotSeason(sl)); return !!se && /summer/i.test(se.name) && !(sl.extra || {}).copied_from_school_year; };
+// A weekly lesson actually runs between from and to (a lesson whose end isn't after its own start never runs)
+let attMode = 'privates', clsSched = [], clsRoster = [], clsAtt = [], clsOff = new Set();
+let allLessons = [];
+let monthTotal = 0, waitlist = [], openSlots = [];
+let weekOffset = 0, weekRows = [], weekSlots = [], weekEx = [], weekAtt = [], weekPay = [], weekLoading = 0;
+
+const ymd = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+function weekDates() {
+  const t = new Date(); t.setHours(0,0,0,0);
+  const mon = new Date(t); mon.setDate(t.getDate() + (t.getDay() === 0 ? -6 : 1 - t.getDay()) + (curTab === 'dashboard' ? 0 : weekOffset) * 7);
+  return DAYS.map((name, i) => { const d = new Date(mon); d.setDate(mon.getDate() + i); return { name, date: d, label: d.toLocaleDateString(undefined, { month:'short', day:'numeric' }) }; });
+}
+function shiftWeek(n) { weekOffset = n === 0 ? 0 : weekOffset + n; ss.set('week', weekOffset); loadWeek(); }
+
+async function loadWeek(quiet) {
+  const wd = weekDates(), ws = ymd(wd[0].date), we = ymd(wd[6].date), my = ++weekLoading;
+  $('wkLabel').textContent = $('attWkLabel').textContent = $('payWkLabel').textContent = $('openWkLabel').textContent = (weekOffset === 0 ? 'This week · ' : '') + wd[0].label + ' – ' + wd[6].label;
+  if (!quiet) $('schedGrid').innerHTML = $('attList').innerHTML = $('balList').innerHTML = $('openList').innerHTML = '<div class="center">Loading…</div>';
+  const att = curTab === 'attendance' || curTab === 'payments' || curTab === 'dashboard', mStart = ymd(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const [L, X, S, A, P, M, C, W] = await Promise.all([
+    sb.from('private_lessons').select('*').not('status', 'in', '("Cancelled","Dropped")'),
+    sb.from('schedule_exceptions').select('*').eq('week_start', ws).not('status', 'in', '("Deleted","Expired")'),
+    sb.from('available_slots').select('*').eq('active', true),
+    att ? sb.from('attendance').select('*').eq('week_start', ws) : { data: [] },
+    att ? sb.from('payments').select('*').eq('week_start', ws) : { data: [] },
+    curTab === 'payments' ? sb.from('payments').select('amount').gte('date', mStart) : { data: [] },
+    (curTab === 'attendance' && attMode === 'classes') || curTab === 'payments' || curTab === 'dashboard' ? Promise.all([sb.from('class_schedule').select('*').eq('active', true), sb.from('class_enrollments').select('*').not('status', 'in', '("Dropped","Waitlisted")'), sb.from('class_attendance').select('*').eq('week_start', ws), sb.from('class_week_off').select('schedule_id').eq('week_start', ws)]) : null,
+    curTab === 'openings' || curTab === 'dashboard' ? sb.from('waitlist').select('*').in('status', ['Waiting','Waitlist','Drop-In']).order('signup_date') : { data: [] }
+  ]);
+  if (my !== weekLoading) return;
+  const err = L.error || X.error || S.error || A.error || P.error || M.error || W.error;
+  if (err) { $('schedGrid').innerHTML = $('attList').innerHTML = '<div class="msg err">' + esc(err.message) + '</div>'; return; }
+  weekAtt = A.data; weekPay = P.data; waitlist = W.data || [];
+  if (C) { const ce = C.find(r => r.error); if (ce) { $('attList').innerHTML = '<div class="msg err">' + esc(ce.error.message) + '</div>'; return; } [clsSched, clsRoster, clsAtt] = C.map(r => r.data); clsOff = new Set((C[3].data || []).map(o => o.schedule_id)); } monthTotal = (M.data || []).reduce((t, x) => t + (+x.amount || 0), 0);
+  allLessons = L.data; dashNextMon = null; dashHist = null;
+  const base = L.data.filter(p => !(p.start_date && p.start_date > we) && !(p.end_date && p.end_date <= ws));
+  weekEx = X.data;
+  weekRows = applyExceptions(base, X.data);
+  if (curTab === 'dashboard') { const C7 = await sb.from('claim_links').select('student_name,day,time,claimed_at').eq('status', 'won').gte('claimed_at', new Date(Date.now() - 7 * 864e5).toISOString()).order('claimed_at', { ascending: false }); recentClaims = C7.data || []; }
+  weekSlots = S.data;
+  const coaches = coachNames();
+  const cf = $('coachFilter'), cur = cf.value;
+  cf.innerHTML = '<option value="">All coaches</option>' + coaches.map(c => `<option${c === cur ? ' selected' : ''}>${esc(c)}</option>`).join('');
+  if (curTab === 'dashboard') renderDash(); else if (curTab === 'openings') renderOpen(); else if (curTab === 'payments') renderPay(); else if (att) renderAtt(); else renderWeek();
+}
+
+
+function renderWeek() {
+  const wd = weekDates(), ws = ymd(wd[0].date), md = ws.slice(5);
+  const coach = $('coachFilter').value, q = $('schedSearch').value.trim().toLowerCase();
+  const todayName = weekOffset === 0 ? DAYS[(new Date().getDay() + 6) % 7] : '';
+  const live = weekRows.filter(p => p.status !== 'Cancelled' && (!coach || p.coach === coach) && (!q || (p.student_name || '').toLowerCase().includes(q)));
+  const slots = slotsForWeek().filter(s => !coach || s.coach === coach);
+  const photo = {}; students.forEach(s => photo[s.id] = (s.extra || {}).PhotoPermission || '');
+  const mc = mainCoach();
+  const pills = p => (p.lesson_type === 'Shared' && !p.pair_id ? '<span class="tag t-shared">Shared</span>' : '')
+    + (photo[p.student_id] === 'No' ? '<span class="tag t-nophoto">No Photo</span>' : photo[p.student_id] === 'Yes' ? '<span class="tag t-photo">Photo OK</span>' : '')
+    + (p.exType === 'Move' ? '<span class="tag t-ex">Moved</span>' : p.exType === 'Add' ? '<span class="tag t-ex">This week</span>' : '');
+  const openRow = (d, slot) => `<div class="srow open tap${slot.summer ? ' summer' : ''}" onclick="openAdd('${d.name}','${esc(slot.time)}','${esc(slot.coach)}')"><div class="tm">${esc(slot.time)}</div><div class="nm"><span class="tag ${slot.summer ? 't-summer' : 't-open'}">${slot.summer ? '☀️ Summer Open' : 'Open'}</span></div><div class="co" style="color:#bbb">${esc(slot.coach)}</div></div>`;
+  const oc = p => p.coach && mc && p.coach !== mc ? ' oc' : '';  // another coach's lesson → pink row
+  const row = (p, showTime) => `<div class="srow tap${oc(p)}" onclick="openLesson('${esc(p.id)}')"><div class="tm">${showTime ? esc(p.time) : ''}</div><div class="nm"><b>${esc(p.student_name)}</b>${pills(p)}${covering(p)}</div><div class="co">${esc(p.coach || 'TBD')}</div></div>`;
+  // One-week fill sitting in a slot whose regular is Away → "covering for <name>"
+  const covering = coverNote;
+
+  let html = '';
+  wd.forEach(d => {
+    const byTime = {};
+    live.forEach(p => { if (p.day === d.name) (byTime[p.time] = byTime[p.time] || []).push(p); });
+    const times = {};
+    slots.filter(s => s.day === d.name).forEach(s => { if (s.time) times[s.time] = { time: s.time, coach: s.coach || '', summer: isExtraSlot(s) }; });
+    Object.keys(byTime).forEach(t => { if (!times[t]) times[t] = { time: t, coach: '' }; });
+    const list = Object.values(times).sort((a, b) => timeVal(a.time) - timeVal(b.time));
+    html += `<div class="dayhd${d.name === todayName ? ' today' : ''}">${d.name}<span>${d.label}</span></div><div class="card" style="padding:0;margin-bottom:6px;border-radius:0 0 10px 10px;overflow:hidden">`;
+    if (!list.length) html += '<div class="srow" style="color:#aaa;font-style:italic">No slots configured</div>';
+    list.forEach(slot => {
+      const ls = byTime[slot.time] || [];
+      if (ls.length) {
+        const groups = [], gi = {};
+        ls.forEach(p => { const k = p.pair_id || ('solo:' + p.id); if (gi[k] === undefined) { gi[k] = groups.length; groups.push([]); } groups[gi[k]].push(p); });
+        groups.forEach(g => {
+          if (g.length > 1 && g[0].pair_id) {
+            html += `<div class="pairwrap"><div class="srow" style="border:0;background:transparent;padding-right:0"><div class="tm">${esc(g[0].time)}</div></div><div class="bar"></div><div style="flex:1;min-width:0"><div style="padding:6px 0 0 4px"><span class="tag t-shared">Shared</span></div>${g.map(p => row(p, false).replace('<div class="tm"></div>', '')).join('')}</div></div>`;
+          } else html += row(g[0], true);
+        });
+        // Only another coach's lesson here → this slot is still open for the slot's coach
+        if (slot.coach && !ls.some(p => !p.coach || p.coach === 'TBD' || p.coach === slot.coach)) html += openRow(d, slot);
+      } else {
+        const away = weekRows.find(p => p.day === d.name && p.time === slot.time && p.status === 'Cancelled');
+        if (away) html += `<div class="srow away tap" onclick="openAway('${esc(away.id)}')"><div class="tm">${esc(slot.time)}</div><div class="nm"><span class="tag t-away">🏖 Away</span><b style="color:#92400E">${esc(away.student_name)}</b><i style="font-size:11px;color:#B45309">out this week</i></div><div class="co">${esc(away.coach || slot.coach)}</div></div>`;
+        else html += openRow(d, slot);
+      }
+    });
+    html += '</div>';
+  });
+  $('schedGrid').innerHTML = html;
+}
+
+// ================= EDIT LESSON (port of 2.0 openMoveLesson / saveMoveLesson / cancelFromSchedule) =================
+let lmRow = null;
+const TIMES = (() => { const a = []; for (let m = 8 * 60; m <= 21 * 60; m += 15) { const h = Math.floor(m / 60), mm = m % 60; a.push(((h + 11) % 12 + 1) + ':' + String(mm).padStart(2, '0') + ' ' + (h < 12 ? 'AM' : 'PM')); } return a; })();
+const opts = (arr, cur) => [...new Set([cur, ...arr].filter(Boolean))].map(v => `<option${v === cur ? ' selected' : ''}>${esc(v)}</option>`).join('');
+const weekStartStr = () => ymd(weekDates()[0].date);
+const dateFor = day => { const d = weekDates().find(x => x.name === day); return d ? ymd(d.date) : null; };
+const mondayOf = s => { const d = new Date(s + 'T00:00:00'); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return ymd(d); };
+// One-week lessons: claimed spots (EX_ONLY_x) and extras attached to a lesson (lessonId_EX_x) — both are Add exceptions
+const addExId = id => id.startsWith('EX_ONLY_') ? id.slice(8) : (id.includes('_EX_') ? id.split('_EX_')[1] : null);
+const partnersOf = p => p.pair_id ? weekRows.filter(r => r.pair_id === p.pair_id && r.id !== p.id && r.status !== 'Cancelled' && !addExId(r.id)) : [];
+function lmMsg(t, err) { $('lm_msg').className = 'msg' + (err ? ' err' : ''); $('lm_msg').textContent = t; }
+function closeLesson() { $('lessonModal').classList.add('hidden'); lmRow = null; }
+
+function openLesson(id) {
+  const p = weekRows.find(r => r.id === id && r.status !== 'Cancelled'); if (!p) return;
+  lmRow = p;
+  const stu = students.find(s => s.id === p.student_id) || {};
+  const coaches = coachNames();
+  $('lm_title').textContent = p.student_name + ' — ' + p.day + ' ' + p.time;
+  $('lm_student').value = p.student_name || '';
+  $('lm_skill').value = stu.skill_level || p.focus || '';
+  $('lm_coach').innerHTML = opts(coaches.concat('TBD'), p.coach || 'TBD');
+  $('lm_day').innerHTML = opts(DAYS, p.day);
+  $('lm_time').innerHTML = opts(TIMES, p.time);
+  $('lm_duration').value = p.duration || '30 min';
+  $('lm_type').value = ['Solo','Shared','Group'].includes(p.lesson_type) ? p.lesson_type : 'Solo';
+  $('lm_notes').value = p.notes || '';
+  $('lm_price').value = priceNum(p);
+  $('lm_priceHint').textContent = isSpecial(p) ? '★ Special price — kept even in a shared slot. Set it to the regular price to remove it.'
+    : 'Regular price. Change it + choose Permanent to give this family a special price going forward.';
+  const oneOff = !!addExId(p.id);
+  $('lm_scopeWrap').classList.toggle('hidden', oneOff); $('lm_oneoff').classList.toggle('hidden', !oneOff);
+  $('lm_scope').value = 'week'; $('lm_startWrap').classList.add('hidden'); $('lm_start').value = weekStartStr();
+  const pr = oneOff ? [] : partnersOf(p);
+  $('lm_pair').classList.toggle('hidden', !pr.length); $('lm_partner').textContent = pr.map(r => r.student_name).join(', ');
+  $('lm_movePartner').checked = true;
+  lmMsg('');
+  $('lessonModal').classList.remove('hidden');
+}
+
+// Upsert one exception per lesson+week (same as 2.0 saveScheduleException)
+async function saveException(p, fields) {
+  const ws = weekStartStr(), cur = weekEx.find(e => e.lesson_id === p.id && e.type !== 'Add');
+  const rec = { gym_id: gymId, lesson_id: p.id, student_id: p.student_id, student_name: p.student_name, coach: p.coach,
+    base_day: p.bday, base_time: p.btime, week_start: ws, original_date: dateFor(p.bday), status: 'Active',
+    new_day: null, new_time: null, new_coach: null, ...fields };
+  return cur ? sb.from('schedule_exceptions').update(rec).eq('id', cur.id) : sb.from('schedule_exceptions').insert({ ...rec, created_at: new Date().toISOString() });
+}
+
+// Permanent: end the old lesson the Monday before start week, add a new lesson from that Monday (2.0 moveLesson permanent)
+async function permanentChange(p, ch, startMonday) {
+  const { data: src, error } = await sb.from('private_lessons').select('*').eq('id', p.id).single();
+  if (error) return { error };
+  const e1 = await sb.from('private_lessons').update({ end_date: startMonday }).eq('id', p.id);
+  if (e1.error) return e1;
+  const { id, created_at, ...copy } = src;
+  return sb.from('private_lessons').insert({ ...copy, ...ch, extra: { ...(src.extra || {}), ...(ch.extra || {}) }, status: 'Confirmed', paid: 'Unpaid', start_date: startMonday, end_date: null });
+}
+
+async function saveLesson() {
+  const p = lmRow; if (!p) return;
+  const ch = { day: $('lm_day').value, time: $('lm_time').value, coach: $('lm_coach').value, duration: $('lm_duration').value, lesson_type: $('lm_type').value, notes: $('lm_notes').value.trim() || null };
+  const moved = ch.day !== p.day || ch.time !== p.time || ch.coach !== (p.coach || 'TBD');
+  const exId = addExId(p.id);
+  const newPrice = +$('lm_price').value, regular = +priceFor(ch.duration, ch.lesson_type === 'Shared' ? 'Shared' : 'Solo').slice(1);
+  const priceChanged = newPrice > 0 && newPrice !== priceNum(p);
+  if (priceChanged && (exId || $('lm_scope').value !== 'permanent'))
+    return lmMsg(exId ? 'One-week lessons: use ★ Special price on the Payments tab.' : 'A price change needs "Permanent" (for just this week, use ★ Special price on the Payments tab).', true);
+  // Special = a price different from the regular one; regular price clears it
+  const special = priceChanged ? newPrice !== regular : isSpecial(p);
+  ch.price = '$' + (priceChanged ? newPrice : special ? priceNum(p) : regular);
+  ch.extra = { SpecialPrice: special ? 'Yes' : '' };
+  const other = ch.duration !== (p.duration || '30 min') || ch.lesson_type !== p.lesson_type || priceChanged;
+  $('lm_save').disabled = true; lmMsg('Saving…');
+  let res;
+  if (exId) {
+    res = await sb.from('schedule_exceptions').update({ new_day: ch.day, new_time: ch.time, new_coach: ch.coach, lesson_type: ch.lesson_type, notes: ch.notes }).eq('id', exId);
+  } else if ($('lm_scope').value === 'permanent' && (moved || other)) {
+    const start = mondayOf($('lm_start').value || weekStartStr());
+    for (const r of [p, ...($('lm_movePartner').checked ? partnersOf(p) : [])]) {
+      res = await permanentChange(r, r === p ? ch : { day: ch.day, time: ch.time, coach: ch.coach, duration: ch.duration, lesson_type: ch.lesson_type }, start);
+      if (res.error) break;
+    }
+  } else {
+    if (other) { $('lm_save').disabled = false; return lmMsg('Changing duration or lesson type needs "Permanent".', true); }
+    if (moved) for (const r of [p, ...($('lm_movePartner').checked ? partnersOf(p) : [])]) {
+      res = await saveException(r, { type: 'Move', new_day: ch.day, new_time: ch.time, new_coach: ch.coach, notes: ch.notes });
+      if (res.error) break;
+    }
+    if ((!res || !res.error) && ch.notes !== (p.notes || null))
+      res = await sb.from('private_lessons').update({ notes: ch.notes }).eq('id', p.id);
+  }
+  $('lm_save').disabled = false;
+  if (!res) return closeLesson();
+  if (res.error) return lmMsg(res.error.message, true);
+  closeLesson(); loadWeek();
+}
+
+async function cancelLesson() {
+  const p = lmRow; if (!p) return;
+  const exId = addExId(p.id), perm = !exId && $('lm_scope').value === 'permanent';
+  if (exId) { if (!confirm('Cancel ' + p.student_name + '?\n\nThis was a one-week spot. The slot opens back up and the family stays on the waitlist.')) return; }
+  else if (perm) { if (!confirm('Permanently remove ' + p.student_name + ' from the week of ' + mondayOf($('lm_start').value || weekStartStr()) + ' forward?\n\nEarlier weeks are left alone.')) return; }
+  else if (!confirm('Cancel lesson for ' + p.student_name + ' for this week only?')) return;
+  lmMsg('Cancelling…');
+  let res;
+  if (exId) {
+    res = await sb.from('schedule_exceptions').update({ status: 'Deleted' }).eq('id', exId);
+    if (!res.error && p.student_id) await sb.from('waitlist').update({ status: 'Drop-In' }).eq('student_id', p.student_id).eq('status', 'Claimed');
+  } else if (perm) res = await sb.from('private_lessons').update({ end_date: mondayOf($('lm_start').value || weekStartStr()) }).eq('id', p.id);
+  else res = await saveException(p, { type: 'Cancel', notes: 'Cancelled from schedule' });
+  if (res.error) return lmMsg(res.error.message, true);
+  closeLesson(); loadWeek();
+}
+
+// ================= ADD LESSON (port of 2.0 openAddLessonForSlot_ / addLessonForStudent) =================
+let alPick = { student: null, partner: null };
+function alMsg(t, err) { $('al_msg').className = 'msg' + (err ? ' err' : ''); $('al_msg').textContent = t; }
+function closeAdd() { $('addModal').classList.add('hidden'); }
+let alWl = null;
+function openAdd(day, time, coach, o = {}) {
+  const coaches = coachNames();
+  alPick = { student: null, partner: null };
+  $('al_student').value = ''; $('al_partner').value = ''; $('al_focus').value = '';
+  $('al_coach').innerHTML = opts(coaches.concat('TBD'), coach || coaches[0] || 'TBD');
+  $('al_day').innerHTML = opts(DAYS, day || 'Monday');
+  $('al_time').innerHTML = opts(TIMES, time || '4:00 PM');
+  $('al_duration').value = '30 min';
+  $('al_scope').value = o.scope || 'permanent'; $('al_startWrap').classList.toggle('hidden', $('al_scope').value !== 'permanent'); $('al_start').value = weekStartStr();
+  alWl = o.wl || null; alPriceTouched = false;
+  alPrice(); alMsg('');
+  if (o.studentId && students.find(x => x.id === o.studentId)) alSet('student', o.studentId);
+  $('addModal').classList.remove('hidden'); if (!o.studentId) $('al_student').focus();
+}
+function alDD(which) {
+  const q = $('al_' + which).value.trim().toLowerCase(), other = alPick[which === 'student' ? 'partner' : 'student'];
+  alPick[which] = null; alPrice();
+  const list = students.filter(s => isOn(s) && (!other || s.id !== other.id) && (!q || (s.first_name + ' ' + s.last_name).toLowerCase().includes(q))).slice(0, 30);
+  const dd = $('al_' + which + 'DD');
+  dd.innerHTML = list.map(s => `<div onmousedown="alSet('${which}','${esc(s.id)}')">${esc(s.first_name)} ${esc(s.last_name)} <small>${esc(s.status || '')}${s.skill_level ? ' · ' + esc(s.skill_level) : ''}</small></div>`).join('') || '<div><small>No match</small></div>';
+  dd.classList.remove('hidden');
+}
+function alSet(which, id) {
+  const s = students.find(x => x.id === id); alPick[which] = s;
+  $('al_' + which).value = s.first_name + ' ' + s.last_name; $('al_' + which + 'DD').classList.add('hidden');
+  if (which === 'student' && s.skill_level && !$('al_focus').value) $('al_focus').value = s.skill_level;
+  alPrice();
+}
+let alPriceTouched = false;
+const alRegular = () => +priceFor($('al_duration').value, alPick.partner ? 'Shared' : 'Solo').slice(1);
+const alCustom = () => { const v = parseFloat($('al_priceIn').value.replace(/[^0-9.]/g, '')); return isNaN(v) || v === alRegular() ? null : v; };
+function alPriceNote() { const c = alCustom(); $('al_priceNote').textContent = c === null ? '' : '★ Special price $' + c + ($('al_scope').value === 'week' ? ' for this week only' : ' every week'); }
+function alPrice() {
+  const dur = $('al_duration').value, shared = !!alPick.partner;
+  if (!alPriceTouched) $('al_priceIn').value = alRegular();
+  alPriceNote();
+  $('al_price').textContent = (shared ? 'Shared — ' + priceFor(dur, 'Shared') + '/wk each' : 'Solo — ' + priceFor(dur, 'Solo') + '/wk') + ' (' + dur + ')';
+}
+async function saveAdd() {
+  const st = alPick.student, pt = alPick.partner;
+  if (!st) return alMsg('Pick a student from the list.', true);
+  if ($('al_partner').value.trim() && !pt) return alMsg('Pick the partner from the list (or clear it).', true);
+  const day = $('al_day').value, time = $('al_time').value, coach = $('al_coach').value, dur = $('al_duration').value;
+  const type = pt ? 'Shared' : 'Solo', kids = pt ? [st, pt] : [st], name = s => s.first_name + ' ' + s.last_name;
+  const custom = alCustom();
+  if ($('al_priceIn').value.trim() && custom === null && isNaN(parseFloat($('al_priceIn').value.replace(/[^0-9.]/g, '')))) return alMsg('Price should be a number.', true);
+  $('al_save').disabled = true; alMsg('Saving…');
+  let res;
+  if ($('al_scope').value === 'week') {
+    // One-week lesson = Add exception (shows as "This week")
+    res = await sb.from('schedule_exceptions').insert(kids.map(k => ({ gym_id: gymId, lesson_id: 'BASE_' + k.id + '_' + day, student_id: k.id, student_name: name(k),
+      coach, base_day: '', base_time: '', week_start: weekStartStr(), original_date: dateFor(day), type: 'Add', new_day: day, new_time: time, new_coach: coach,
+      status: 'Active', notes: $('al_focus').value.trim() || null, lesson_type: type, created_at: new Date().toISOString(), extra: custom === null ? {} : { Price: '$' + custom } })));
+  } else {
+    const start = mondayOf($('al_start').value || weekStartStr()), pairId = pt ? 'PAIR' + Date.now() : null;
+    res = await sb.from('private_lessons').insert(kids.map(k => ({ gym_id: gymId, student_id: k.id, student_name: name(k), coach, day, time, duration: dur,
+      focus: $('al_focus').value.trim() || k.skill_level || null, price: custom === null ? priceFor(dur, type) : '$' + custom, extra: custom === null ? {} : { SpecialPrice: 'Yes' }, status: 'Confirmed', booked_date: ymd(new Date()), paid: 'Unpaid',
+      lesson_type: type, share_type: pt ? 'Matched' : 'No', pair_id: pairId, matched_with: pt ? name(k === st ? pt : st) : null, friend_name: pt ? name(k === st ? pt : st) : null,
+      start_date: start })));
+    // Same as 2.0: a permanent lesson makes a Waitlist/Drop-In/Inactive student Active (waitlist row left alone)
+    const flip = kids.filter(k => ['Waitlist','Drop-In','Inactive'].includes(k.status)).map(k => k.id);
+    if (!res.error && flip.length) { await sb.from('students').update({ status: 'Active', active: true }).in('id', flip); flip.forEach(id => students.find(s => s.id === id).status = 'Active'); }
+  }
+  $('al_save').disabled = false;
+  if (res.error) return alMsg(res.error.message, true);
+  // Convert from the waitlist: a permanent lesson marks the entry Converted (same as 2.0)
+  if (alWl && $('al_scope').value === 'permanent' && alWl.student_id === st.id) await sb.from('waitlist').update({ status: 'Converted' }).eq('id', alWl.id);
+  closeAdd(); loadWeek();
+}
+
+// ================= ATTENDANCE (port of 2.0 renderAttendanceTab_ / attMark_ / attQuickPay_) =================
+const NOT_HERE = ['Absent','Cancelled','Rescheduled','Late'];
+// Claimed spots use a stable attendance key (same as 2.0): ATT_<student>_<day>_<time>_<weekStart>
+const attKey = p => p.id.startsWith('EX_ONLY_') ? 'ATT_' + p.student_id + '_' + p.day + '_' + p.time + '_' + weekStartStr() : p.id;
+const attOf = p => weekAtt.find(a => a.lesson_id === attKey(p));
+const isAdj = x => (x.extra || {}).Adjusted === 'Yes';
+const paidOf = p => weekPay.filter(x => x.lesson_id === p.id).reduce((t, x) => ({ amt: t.amt + (+x.amount || 0), method: x.method || t.method, adj: t.adj || isAdj(x) }), { amt: 0, method: '', adj: false });
+const priceNum = p => parseFloat(String(p.price || '').replace(/[^0-9.]/g, '')) || priceFor(p.duration, p.lesson_type === 'Shared' ? 'Shared' : 'Solo').slice(1) * 1;
+let qpRow = null;
+
+function setAttModeButtons() {
+  [['am_priv','privates'],['am_cls','classes']].forEach(([id, v]) => { const on = v === attMode; $(id).style.background = on ? 'var(--mint)' : '#fff'; $(id).style.color = on ? '#fff' : ''; $(id).style.borderColor = on ? 'var(--mint)' : ''; });
+}
+function setAttMode(m) { attMode = m; ss.set('attMode', m); setAttModeButtons(); loadWeek(); }
+function renderAtt() {
+  if (attMode === 'classes') return renderClassAtt();
+  const allLs = weekRows.filter(p => p.status !== 'Cancelled').sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || timeVal(a.time) - timeVal(b.time));
+  const lessons = allLs.filter(p => !isOther(p)), others = allLs.filter(isOther);
+  let n = { att: 0, no: 0, paid: 0, unpaid: 0 };
+  lessons.forEach(p => { const st = (attOf(p) || {}).status || '';
+    if (st === 'Attended') { n.att++; paidOf(p).amt > 0 ? n.paid++ : n.unpaid++; } else if (NOT_HERE.includes(st)) n.no++; });
+  $('m_att').textContent = n.att; $('m_no').textContent = n.no; $('m_paid').textContent = n.paid; $('m_unpaid').textContent = n.unpaid;
+  if (!allLs.length) { $('attList').innerHTML = '<div class="card center">No lessons scheduled this week</div>'; return; }
+  const stu = {}; students.forEach(s => stu[s.id] = s);
+  let html = '';
+  DAYS.forEach(day => {
+    const ls = lessons.filter(p => p.day === day), os = others.filter(p => p.day === day); if (!ls.length && !os.length) return;
+    const dd = weekDates().find(d => d.name === day);
+    const unmarked = ls.filter(p => !attOf(p)).length;
+    html += `<div class="dayhd" style="display:flex;align-items:center">${day}<span>${dd.label}</span>${unmarked ? `<button class="here" style="margin-left:auto;padding:3px 9px" onclick="allHere('${day}')">✓ All here (${unmarked})</button>` : ''}</div><div class="card" style="padding:0;margin-bottom:6px;border-radius:0 0 10px 10px;overflow:hidden">`;
+    ls.concat(os).forEach((p, i) => {
+      const o = isOther(p);
+      if (o && i === ls.length) html += `<div style="padding:6px 12px;font-size:12px;color:#993556;background:#FBEAF0;border-top:1px solid #F4C0D1">Other coaches · paid directly · not in your money</div>`;
+      const st = (attOf(p) || {}).status || '', pd = paidOf(p), s = stu[p.student_id] || {}, k = esc(p.id);
+      const phone = s.parent_phone ? `<a href="sms:${esc(String(s.parent_phone).replace(/\D/g, ''))}">📱 ${esc(s.parent_phone)}</a>` : '';
+      html += `<div class="arow"${o ? ' style="background:#FBEAF0;border-left:4px solid #D4537E"' : ''}><div class="who"><b>${esc(p.student_name)}</b>${coverNote(p) ? '<br>' + coverNote(p) : ''}<small>${esc(p.duration || '')}${p.focus ? ' · ' + esc(p.focus) : ''}</small>${phone}</div>
+        <div class="tc">${esc(p.time)}<br>${esc(p.coach || 'TBD')}</div>
+        <button class="here${st === 'Attended' ? ' on' : ''}" onclick="markAtt('${k}','${st === 'Attended' ? '' : 'Attended'}')" title="${st === 'Attended' ? 'Tap again to clear' : ''}">${st === 'Attended' ? '✓ Here' : 'Here'}</button>
+        <select class="nothere${NOT_HERE.includes(st) ? ' on' : ''}" onchange="markAtt('${k}',this.value)"><option value="">${st ? '— Clear' : '— Not Here'}</option>${NOT_HERE.map(o => `<option${o === st ? ' selected' : ''}>${o}</option>`).join('')}</select>
+        ${o ? '' : isTrade(p) ? '<span class="paid" style="background:#EFE7FF;color:#3C3489">🤝 Trade</span>' : pd.amt > 0 ? `<span class="paid" style="cursor:pointer" title="Tap to edit" onclick="undoPay('${k}')">✓ Paid $${pd.amt.toFixed(0)}${pd.method ? ' · ' + esc(pd.method) : ''}${pd.adj ? ' · ★' : ''}</span>` : `<button class="paybtn" onclick="openPay('${k}')">$ Record Payment</button>`}</div>`;
+    });
+    html += '</div>';
+  });
+  $('attList').innerHTML = html;
+}
+
+async function markAtt(id, status) {
+  const p = weekRows.find(r => r.id === id && r.status !== 'Cancelled'); if (!p) return;
+  const cur = attOf(p);
+  let res;
+  if (!status) res = cur ? await sb.from('attendance').delete().eq('id', cur.id) : { error: null };
+  else if (cur) res = await sb.from('attendance').update({ status, marked_at: new Date().toISOString() }).eq('id', cur.id).select().single();
+  else res = await sb.from('attendance').insert({ gym_id: gymId, student_id: p.student_id, student_name: p.student_name, lesson_id: attKey(p), coach: p.coach,
+    date: dateFor(p.day), time: p.time, week_start: weekStartStr(), status, extra: { Date: p.day } }).select().single();
+  if (res.error) return alert(res.error.message);
+  weekAtt = weekAtt.filter(a => a !== cur); if (status) weekAtt.push(res.data);
+  if (curTab === 'dashboard') renderDash(); else renderAtt();
+}
+
+function afterPay(delta) {
+  if (curTab === 'dashboard') return renderDash();
+  if (!$('editView').classList.contains('hidden') && sd && sd.s) { renderSdTop(sd.s); return loadStudentDetail(sd.s); }
+  if (curTab !== 'payments') return renderAtt();
+  monthTotal += delta; renderPay();
+}
+
+// ================= PAYMENTS TAB =================
+const money = n => '$' + (Math.round(n * 100) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 });
+function renderPay() {
+  // Same rules as 2.0 getOutstandingBalances: skip lessons marked Cancelled/Absent in attendance
+  const skip = new Set(weekAtt.filter(a => a.status === 'Cancelled' || a.status === 'Absent').map(a => a.lesson_id));
+  const stu = {}; students.forEach(s => stu[s.id] = s);
+  // Class fees: kids marked Here in a class this week (same as 2.0 class balances)
+  const clsItems = clsAtt.filter(a => a.status === 'Attended').map(a => {
+    const c = clsSched.find(x => x.id === a.schedule_id) || { id: a.schedule_id, class_name: a.class_name, day: a.day, time: '' };
+    return { ...clsObj(c, { student_id: a.student_id, student_name: a.student_name }), cls: c.class_name || 'Class' };
+  });
+  const bals = weekRows.filter(p => p.status !== 'Cancelled' && !noCharge(p) && !skip.has(attKey(p))).concat(clsItems).map(p => {
+    const paid = paidOf(p), owed = paid.adj ? paid.amt : priceNum(p);
+    return { p, owed, paid: paid.amt, method: paid.method, adj: paid.adj, bal: owed - paid.amt };
+  }).sort((a, b) => (b.bal > 0) - (a.bal > 0) || DAYS.indexOf(a.p.day) - DAYS.indexOf(b.p.day) || timeVal(a.p.time) - timeVal(b.p.time));
+  payItems = clsItems;
+  const weekTotal = weekPay.reduce((t, x) => t + (+x.amount || 0), 0), unpaid = bals.filter(b => b.bal > 0);
+  $('pm_week').textContent = money(weekTotal); $('pm_out').textContent = money(unpaid.reduce((t, b) => t + b.bal, 0));
+  $('pm_month').textContent = money(monthTotal); $('pm_unpaid').textContent = unpaid.length;
+  $('balList').innerHTML = bals.length ? bals.map(b => {
+    const p = b.p, k = esc(p.id), s = stu[p.student_id] || {};
+    const what = p.cls ? p.day + ' ' + p.cls + ' class' : p.day + ' lesson';
+    const remind = 'Hi' + (s.parent_name ? ' ' + s.parent_name.split(' ')[0] : '') + '! Just a friendly reminder that ' + (p.student_name || '').split(' ')[0] + "'s " + what + ' this week (' + money(b.bal) + ') is still open. Cash, Venmo or Zelle all work. Thank you!';
+    const pk = p.cls ? `clsObjFor('${k}')` : `'${k}'`;
+    const phone = s.parent_phone ? `<a href="${smsHref(s.parent_phone, remind)}">📱 Remind</a> <span style="font-size:11px;color:#888">${esc(s.parent_phone)}</span>` : '';
+    return `<div class="arow"><div class="who"><b>${esc(p.student_name)}</b><small>${p.cls ? '🤸 ' + esc(p.cls) + ' · ' : ''}${esc(p.day)} ${esc(p.time)} · owed ${money(b.owed)}${b.paid ? ' · paid ' + money(b.paid) : ''}</small>${b.bal > 0 ? phone : ''}</div>
+      ${b.bal > 0 ? `<div class="bal">${money(b.bal)} due</div><button class="paybtn" onclick="openPay(${pk})">$ Record Payment</button>${b.paid && !p.cls ? `<button class="paybtn" style="background:#EFE7FF;color:#3C3489" onclick="markSpecial('${k}')">★ Special price</button>` : ''}`
+        : `<span class="paid" style="cursor:pointer" title="Tap to edit" onclick="${p.cls ? `clsUndoPayId('${k}')` : `undoPay('${k}')`}">✓ Paid ${money(b.paid)}${b.method ? ' · ' + esc(b.method) : ''}${b.adj ? ' · ★ special' : ''}</span>`}</div>`;
+  }).join('') : '<div class="center">No lessons this week</div>';
+  // history filter: students with a lesson this week or a payment this week, plus everyone active
+  const f = $('histFilter'), cur = f.value;
+  f.innerHTML = '<option value="">This week</option>' + students.filter(isOn).map(s => `<option value="${esc(s.id)}"${s.id === cur ? ' selected' : ''}>${esc(s.first_name)} ${esc(s.last_name)}</option>`).join('');
+  loadHistory();
+  if (!finLoaded) finInit();
+}
+
+// ================= FINANCIAL REPORT (port of 2.0 getFinancialReport / getMonthOverMonth / CSV) =================
+let finLoaded = false, finRows = [];
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const finCat = x => String(x.lesson_id || '').startsWith('CLS_') ? 'Group Class' : x.lesson_type === 'Shared' ? 'Private — Shared' : x.lesson_type === 'Group' ? 'Private — Group' : x.lesson_type === 'Solo' ? 'Private — Solo' : 'Private — Other';
+async function fetchAllPayments(from, to) {
+  let out = [];
+  for (let i = 0; ; i += 1000) {
+    const r = await sb.from('payments').select('id,date,student_name,amount,method,lesson_type,lesson_id,notes').gte('date', from).lte('date', to).order('date').range(i, i + 999);
+    if (r.error) throw r.error;
+    out = out.concat(r.data); if (r.data.length < 1000) return out;
+  }
+}
+function finInit() {
+  finLoaded = true;
+  const y = new Date().getFullYear();
+  let o = `<option value="">— Whole year ${y} —</option>`;
+  for (let m = new Date().getMonth(); m >= 0; m--) o += `<option value="${y}-${String(m + 1).padStart(2, '0')}">${MON[m]} ${y}</option>`;
+  for (let m = 11; m >= 0; m--) o += `<option value="${y - 1}-${String(m + 1).padStart(2, '0')}">${MON[m]} ${y - 1}</option>`;
+  $('fin_pick').innerHTML = o + `<option value="Y${y - 1}">— Whole year ${y - 1} —</option>`;
+  finPick();
+}
+function finPick() {
+  const v = $('fin_pick').value, y = new Date().getFullYear();
+  if (!v) { $('fin_from').value = y + '-01-01'; $('fin_to').value = y + '-12-31'; }
+  else if (v[0] === 'Y') { $('fin_from').value = v.slice(1) + '-01-01'; $('fin_to').value = v.slice(1) + '-12-31'; }
+  else { const [yy, mm] = v.split('-').map(Number); $('fin_from').value = v + '-01'; $('fin_to').value = ymd(new Date(yy, mm, 0)); }
+  finRun();
+}
+async function finRun() {
+  const from = $('fin_from').value, to = $('fin_to').value;
+  if (!from || !to) return;
+  $('fin_out').innerHTML = '<div class="center">Loading…</div>';
+  try { finRows = await fetchAllPayments(from, to); } catch (e) { $('fin_out').innerHTML = '<div class="msg err">' + esc(e.message) + '</div>'; return; }
+  const by = key => { const t = {}; finRows.forEach(x => { const k = key(x); t[k] = (t[k] || 0) + (+x.amount || 0); }); return Object.entries(t).sort((a, b) => b[1] - a[1]); };
+  const grand = finRows.reduce((t, x) => t + (+x.amount || 0), 0);
+  const tbl = (title, rows) => `<div style="margin-top:10px"><b style="font-size:13px">${title}</b>${rows.map(([k, v]) => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;border-bottom:1px solid #f3f3f3"><span>${esc(k)}</span><span>${money(v)}</span></div>`).join('')}</div>`;
+  $('fin_out').innerHTML = `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:6px"><span style="color:#888;font-size:13px">${finRows.length} payments</span><b style="font-size:22px;color:#3B6D11">${money(grand)}</b></div>`
+    + tbl('By category', by(finCat)) + tbl('By payment method', by(x => x.method || 'Unknown'))
+    + tbl('By quarter', by(x => x.date ? x.date.slice(0, 4) + '-Q' + (Math.floor((+x.date.slice(5, 7) - 1) / 3) + 1) : 'Unknown').sort());
+  finMom(from.slice(0, 4));
+}
+async function finMom(year) {
+  // Month-over-month for the year of the From date (same as 2.0 getMonthOverMonth)
+  let rows = finRows;
+  if ($('fin_from').value !== year + '-01-01' || $('fin_to').value !== year + '-12-31') {
+    try { rows = await fetchAllPayments(year + '-01-01', year + '-12-31'); } catch (e) { return; }
+  }
+  const t = {}; rows.forEach(x => { if (x.date) { const k = x.date.slice(0, 7); t[k] = (t[k] || 0) + (+x.amount || 0); } });
+  const keys = Object.keys(t).sort();
+  $('fin_year').textContent = year;
+  $('fin_mom').innerHTML = keys.length ? keys.map((k, i) => {
+    const prev = i ? t[keys[i - 1]] : null, d = prev === null ? null : t[k] - prev, pct = prev ? Math.round(d / prev * 100) : null;
+    const chg = d === null ? '' : `<span style="font-size:11px;color:${d >= 0 ? '#3B6D11' : '#A32D2D'}">${d >= 0 ? '▲' : '▼'} ${money(Math.abs(d))}${pct !== null ? ' (' + Math.abs(pct) + '%)' : ''}</span>`;
+    return `<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:5px 0;border-bottom:1px solid #f3f3f3"><span style="min-width:70px">${MON[+k.slice(5) - 1]} ${k.slice(0, 4)}</span>${chg}<b>${money(t[k])}</b></div>`;
+  }).join('') : '<div class="center">No payments</div>';
+}
+function finCsv() {
+  if (!finRows.length) return alert('No payments in this range.');
+  const f = v => { const s = v == null ? '' : String(v); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const row = a => a.map(f).join(','), L = [], sum = (key) => { const t = {}; finRows.forEach(x => { const k = key(x); t[k] = (t[k] || 0) + (+x.amount || 0); }); return Object.keys(t).sort().map(k => row([k, t[k].toFixed(2)])); };
+  const from = $('fin_from').value, to = $('fin_to').value;
+  L.push(row(['Flip Lab — Financial Report']), row(['Scope', 'Range ' + from + ' to ' + to]), row(['Generated', new Date().toLocaleString()]), '');
+  L.push(row(['ITEMIZED TRANSACTIONS']), row(['Date','Student','Amount','Method','Category','Year','Month','Quarter','LessonID','Notes']));
+  finRows.forEach(x => { const d = x.date || ''; L.push(row([d, x.student_name, (+x.amount || 0).toFixed(2), x.method, finCat(x), d.slice(0, 4), d ? +d.slice(5, 7) : '', d ? 'Q' + (Math.floor((+d.slice(5, 7) - 1) / 3) + 1) : '', x.lesson_id, x.notes])); });
+  L.push('', row(['SUMMARY']), row(['Total transactions', finRows.length]), row(['Grand total', finRows.reduce((t, x) => t + (+x.amount || 0), 0).toFixed(2)]), '');
+  L.push(row(['BY MONTH']), ...sum(x => (x.date || 'Unknown').slice(0, 7)), '', row(['BY QUARTER']), ...sum(x => x.date ? x.date.slice(0, 4) + '-Q' + (Math.floor((+x.date.slice(5, 7) - 1) / 3) + 1) : 'Unknown'), '');
+  L.push(row(['BY CATEGORY']), ...sum(finCat), '', row(['BY PAYMENT METHOD']), ...sum(x => x.method || 'Unknown'));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([L.join('\r\n')], { type: 'text/csv' }));
+  a.download = 'Flip_Lab_Financials_' + from + '_to_' + to + '.csv'; a.click();
+}
+async function loadHistory() {
+  const sid = $('histFilter').value; let rows = weekPay;
+  if (sid) {
+    $('histList').innerHTML = '<div class="center">Loading…</div>';
+    const r = await sb.from('payments').select('*').eq('student_id', sid).order('date', { ascending: false }).limit(200);
+    if (r.error) { $('histList').innerHTML = '<div class="msg err">' + esc(r.error.message) + '</div>'; return; }
+    rows = r.data;
+  } else rows = [...rows].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const tot = rows.reduce((t, x) => t + (+x.amount || 0), 0);
+  $('histList').innerHTML = rows.length ? rows.map(x => `<div class="arow"><div class="who"><b>${esc(x.student_name)}</b><small>${esc(x.date || '')} · ${esc(x.day || '')}${x.lesson_type ? ' · ' + esc(x.lesson_type) : ''}</small></div>
+      <div class="tc">${esc(x.method || '')}</div><div class="bal ok">${money(+x.amount || 0)}</div></div>`).join('')
+      + `<div class="arow" style="justify-content:flex-end;font-weight:600">${rows.length} payment${rows.length === 1 ? '' : 's'} · ${money(tot)}</div>`
+    : '<div class="center">No payments</div>';
+}
+
+// Mark this week's payments for a lesson as a special price (2.0 "Adjusted") → counts as paid in full
+async function markSpecial(id) {
+  const p = weekRows.find(r => r.id === id && r.status !== 'Cancelled'); if (!p) return;
+  const rows = weekPay.filter(x => x.lesson_id === p.id), total = rows.reduce((t, x) => t + (+x.amount || 0), 0);
+  if (!rows.length || !confirm('Special price for ' + p.student_name + ' this week?\n\nThe $' + total.toFixed(0) + ' they paid will count as paid in full.')) return;
+  for (const x of rows) {
+    const extra = { ...(x.extra || {}), Adjusted: 'Yes' };
+    const res = await sb.from('payments').update({ extra }).eq('id', x.id);
+    if (res.error) return alert(res.error.message);
+    x.extra = extra;
+  }
+  renderPay();
+}
+
+// Tap ✓ Paid → edit box (one payment). Several payments on one lesson → keep the old remove-all confirm.
+let epRow = null, epPay = null;
+function undoPay(id) {
+  const p = typeof id === 'object' ? id : weekRows.find(r => r.id === id && r.status !== 'Cancelled'); if (!p) return;
+  const rows = weekPay.filter(x => x.lesson_id === p.id); if (!rows.length) return;
+  if (rows.length > 1) return removePays(p);
+  epRow = p; epPay = rows[0];
+  $('ep_title').textContent = 'Edit payment · ' + p.student_name;
+  $('ep_sub').textContent = (p.day || '') + ' ' + (p.time || '') + ' · lesson $' + priceNum(p);
+  $('ep_amount').value = +epPay.amount || 0;
+  const m = epPay.method || 'Cash'; if (![...$('ep_method').options].some(o => o.value === m)) $('ep_method').insertAdjacentHTML('beforeend', `<option>${esc(m)}</option>`); $('ep_method').value = m;
+  $('ep_date').value = epPay.date || ymd(new Date()); $('ep_special').checked = isAdj(epPay); $('ep_msg').textContent = '';
+  $('epModal').classList.remove('hidden');
+}
+async function saveEditPay() {
+  const amount = +String($('ep_amount').value).replace(/[^0-9.]/g, ''), m = $('ep_msg');
+  if (!(amount > 0)) { m.className = 'msg err'; m.textContent = 'Enter an amount (or use Remove payment).'; return; }
+  const ch = { amount, method: $('ep_method').value, date: $('ep_date').value || epPay.date, extra: { ...(epPay.extra || {}), Adjusted: $('ep_special').checked ? 'Yes' : '' } };
+  m.className = 'msg'; m.textContent = 'Saving…';
+  const res = await sb.from('payments').update(ch).eq('id', epPay.id);
+  if (res.error) { m.className = 'msg err'; m.textContent = res.error.message; return; }
+  const delta = amount - (+epPay.amount || 0); Object.assign(epPay, ch);
+  $('epModal').classList.add('hidden'); afterPay(delta);
+}
+async function removeEditPay() { $('epModal').classList.add('hidden'); await removePays(epRow); }
+async function removePays(p) {
+  const rows = weekPay.filter(x => x.lesson_id === p.id), total = rows.reduce((t, x) => t + (+x.amount || 0), 0);
+  if (!rows.length || !confirm('Remove the $' + total.toFixed(0) + ' payment for ' + p.student_name + ' this week?')) return;
+  const res = await sb.from('payments').delete().in('id', rows.map(x => x.id));
+  if (res.error) return alert(res.error.message);
+  weekPay = weekPay.filter(x => !rows.includes(x)); afterPay(-total);
+}
+// ---- Classes (port of 2.0 renderClassAttendanceTab_ / classAttMark_) ----
+// Class payment id = CLS_<scheduleId>_<studentId>_<weekStart> (same as 2.0)
+const clsPayId = (c, sid) => 'CLS_' + c.id + '_' + sid + '_' + weekStartStr();
+const clsPrice = c => +String(c.price || '').replace(/[^0-9.]/g, '') || 20;
+const clsAttOf = (c, sid) => clsAtt.find(a => a.schedule_id === c.id && a.student_id === sid);
+const clsObj = (c, r) => ({ id: clsPayId(c, r.student_id), student_id: r.student_id, student_name: r.student_name, day: c.day, time: c.time, price: '$' + clsPrice(c), lesson_type: null });
+async function toggleClassOff(id) {
+  const c = clsSched.find(x => x.id === id); if (!c) return;
+  const ws = weekStartStr(), off = clsOff.has(id);
+  if (!off && !confirm('No ' + (c.class_name || 'class') + ' the week of ' + weekDates()[0].label + '?\n\nIt comes off the calendar for that week only.')) return;
+  const r = off ? await sb.from('class_week_off').delete().eq('schedule_id', id).eq('week_start', ws)
+                : await sb.from('class_week_off').insert({ gym_id: gymId, schedule_id: id, week_start: ws });
+  if (r.error) return alert(r.error.message);
+  off ? clsOff.delete(id) : clsOff.add(id); renderClassAtt();
+}
+function renderClassAtt() {
+  const cls = [...clsSched].sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || timeVal(a.time) - timeVal(b.time));
+  let n = { att: 0, no: 0, paid: 0, unpaid: 0 }, html = '';
+  if (!cls.length) { $('attList').innerHTML = '<div class="card center">No active classes</div>'; ['m_att','m_no','m_paid','m_unpaid'].forEach(i => $(i).textContent = '—'); return; }
+  cls.forEach(c => {
+    const roster = clsRoster.filter(r => r.schedule_id === c.id).sort((a, b) => (a.student_name || '').localeCompare(b.student_name || ''));
+    const dd = weekDates().find(d => d.name === c.day);
+    const off = clsOff.has(c.id);
+    html += `<div class="dayhd" style="display:flex;align-items:center;flex-wrap:wrap">${esc(c.day)} · ${esc(c.time)} · ${esc(c.class_name)}<span>${dd ? dd.label : ''} · ${roster.length} enrolled · $${clsPrice(c)}</span>
+      <button class="paybtn" style="margin-left:auto;${off ? 'background:#FCEBEB;color:#A32D2D' : ''}" onclick="toggleClassOff('${esc(c.id)}')">${off ? '✕ No class this week — undo' : 'No class this week'}</button></div><div class="card" style="padding:0;margin-bottom:6px;border-radius:0 0 10px 10px;overflow:hidden">`;
+    if (off) { html += '<div class="center" style="color:#A32D2D">No class this week — off the calendar</div></div>'; return; }
+    if (!roster.length) html += '<div class="center">No students enrolled</div>';
+    roster.forEach(r => {
+      const st = (clsAttOf(c, r.student_id) || {}).status || '', o = clsObj(c, r), pd = paidOf(o), k = esc(c.id) + "','" + esc(r.student_id);
+      if (st === 'Attended') { n.att++; pd.amt > 0 ? n.paid++ : n.unpaid++; } else if (NOT_HERE.includes(st)) n.no++;
+      html += `<div class="arow"><div class="who"><b>${esc(r.student_name)}</b><small>${esc(r.parent_name || '')}${r.status && r.status !== 'Enrolled' ? ' · ' + esc(r.status) : ''}</small></div>
+        <button class="here${st === 'Attended' ? ' on' : ''}" onclick="clsMark('${k}','${st === 'Attended' ? '' : 'Attended'}')">${st === 'Attended' ? '✓ Here' : 'Here'}</button>
+        <select class="nothere${NOT_HERE.includes(st) ? ' on' : ''}" onchange="clsMark('${k}',this.value)"><option value="">${st ? '— Clear' : '— Not Here'}</option>${NOT_HERE.map(x => `<option${x === st ? ' selected' : ''}>${x}</option>`).join('')}</select>
+        ${pd.amt > 0 ? `<span class="paid" style="cursor:pointer" title="Tap to edit" onclick="clsUndoPay('${k}')">✓ Paid $${pd.amt.toFixed(0)}${pd.method ? ' · ' + esc(pd.method) : ''}</span>` : `<button class="paybtn" onclick="clsPay('${k}')">$ Record Payment</button>`}</div>`;
+    });
+    html += '</div>';
+  });
+  $('m_att').textContent = n.att; $('m_no').textContent = n.no; $('m_paid').textContent = n.paid; $('m_unpaid').textContent = n.unpaid;
+  $('attList').innerHTML = html;
+}
+const clsFind = (cid, sid) => { const c = clsSched.find(x => x.id === cid), r = clsRoster.find(x => x.schedule_id === cid && x.student_id === sid); return c && r ? { c, r } : null; };
+async function clsMark(cid, sid, status) {
+  const f = clsFind(cid, sid); if (!f) return;
+  const cur = clsAttOf(f.c, sid); let res;
+  if (!status) res = cur ? await sb.from('class_attendance').delete().eq('id', cur.id) : { error: null };
+  else if (cur) res = await sb.from('class_attendance').update({ status, marked_at: new Date().toISOString() }).eq('id', cur.id).select().single();
+  else res = await sb.from('class_attendance').insert({ gym_id: gymId, student_id: sid, student_name: f.r.student_name, schedule_id: cid, class_name: f.c.class_name,
+    coach: f.c.coach, day: f.c.day, week_start: weekStartStr(), status }).select().single();
+  if (res.error) return alert(res.error.message);
+  clsAtt = clsAtt.filter(a => a !== cur); if (status) clsAtt.push(res.data);
+  renderClassAtt();
+  // Same as 2.0: marking Here opens Record Payment if not paid yet
+  if (status === 'Attended' && !(paidOf(clsObj(f.c, f.r)).amt > 0)) openPay(clsObj(f.c, f.r));
+}
+let payItems = [];
+function clsObjFor(id) { return payItems.find(x => x.id === id); }
+function clsUndoPayId(id) { const o = clsObjFor(id); if (o) undoPay(o); }
+function clsPay(cid, sid) { const f = clsFind(cid, sid); if (f) openPay(clsObj(f.c, f.r)); }
+function clsUndoPay(cid, sid) { const f = clsFind(cid, sid); if (f) undoPay(clsObj(f.c, f.r)); }
+
+// Mark every unmarked lesson that day as Here (leaves Absent/Late/etc. alone)
+async function allHere(day) {
+  const ls = weekRows.filter(p => p.day === day && p.status !== 'Cancelled' && !isOther(p) && !attOf(p));
+  if (!ls.length || !confirm('Mark ' + ls.length + ' unmarked lesson' + (ls.length === 1 ? '' : 's') + ' on ' + day + ' as Here?')) return;
+  const res = await sb.from('attendance').insert(ls.map(p => ({ gym_id: gymId, student_id: p.student_id, student_name: p.student_name, lesson_id: attKey(p), coach: p.coach,
+    date: dateFor(p.day), time: p.time, week_start: weekStartStr(), status: 'Attended', extra: { Date: p.day } }))).select();
+  if (res.error) return alert(res.error.message);
+  weekAtt.push(...res.data); renderAtt();
+}
+function openPay(id) {
+  qpRow = typeof id === 'object' ? id : weekRows.find(r => r.id === id && r.status !== 'Cancelled'); if (!qpRow) return;
+  $('qp_who').textContent = qpRow.student_name + ' — ' + qpRow.day + ' ' + qpRow.time;
+  const pd = paidOf(qpRow), left = priceNum(qpRow) - pd.amt;
+  $('qp_amount').value = left > 0 ? left : priceNum(qpRow); $('qp_special').checked = false; $('qp_msg').textContent = '';
+  $('payModal').classList.remove('hidden');
+}
+async function savePay(method) {
+  const p = qpRow, amount = +$('qp_amount').value; if (!p) return;
+  if (!(amount > 0)) { $('qp_msg').className = 'msg err'; $('qp_msg').textContent = 'Enter an amount.'; return; }
+  $('qp_msg').className = 'msg'; $('qp_msg').textContent = 'Saving…';
+  const res = await sb.from('payments').insert({ gym_id: gymId, student_id: p.student_id, student_name: p.student_name, lesson_id: p.id, day: p.day, amount, method,
+    date: dateFor(p.day) || ymd(new Date()), week_start: weekStartStr(), lesson_type: p.lesson_type || null, extra: $('qp_special').checked ? { Adjusted: 'Yes' } : {} }).select().single();
+  if (res.error) { $('qp_msg').className = 'msg err'; $('qp_msg').textContent = res.error.message; return; }
+  weekPay.push(res.data); $('payModal').classList.add('hidden'); afterPay(amount);
+}
+
+// ================= DASHBOARD (port of 2.0 dashboard: metrics, today, needs attention, waitlist, birthdays) =================
+function toggleDashWl() { ss.set('dashWlOpen', !ss.get('dashWlOpen', false)); setDashWl(); }
+function setDashWl() { const open = ss.get('dashWlOpen', false); $('d_wlist').classList.toggle('hidden', !open); $('d_wlArrow').textContent = open ? '▾' : '▸'; }
+function renderDash() {
+  const todayName = DAYS[(new Date().getDay() + 6) % 7], wk = weekDates(), stu = {}; students.forEach(x => stu[x.id] = x);
+  const live = weekRows.filter(p => p.status !== 'Cancelled');
+  const today = live.filter(p => p.day === todayName).sort((a, b) => timeVal(a.time) - timeVal(b.time));
+  // Unpaid = marked Here this week with no payment (same as 2.0 unpaidAttended)
+  const unpaid = live.filter(p => !noCharge(p) && (attOf(p) || {}).status === 'Attended' && !(paidOf(p).amt > 0));
+  const wl = waitlist.filter(w => (w.extra || {}).Unsubscribed !== 'Yes');
+  $('d_active').textContent = students.filter(x => x.status === 'Active').length;
+  $('d_today').textContent = today.length; $('d_unpaid').textContent = unpaid.length; $('d_wl').textContent = waitlist.length;
+  // Today's lessons with Here / Paid right on the dashboard; after the last one ends, preview tomorrow instead
+  const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes(), durMin = p => parseInt(p.duration) || 30;
+  const todaysCls = clsSched.filter(c => c.day === todayName);
+  const lastEnd = Math.max(-1, ...today.map(p => timeVal(p.time) + durMin(p)), ...todaysCls.map(c => timeVal(c.time) + 60));
+  const showTomorrow = lastEnd < nowMin;  // nothing left today (or nothing today at all and the day is over)
+  $('d_todayHead').textContent = showTomorrow ? 'Tomorrow · ' + DAYS[(DAYS.indexOf(todayName) + 1) % 7] : "Today's schedule · " + todayName;
+  const photo = id => { const v = ((stu[id] || {}).extra || {}).PhotoPermission; return v === 'No' ? '<span class="tag t-nophoto">No Photo</span>' : v === 'Yes' ? '<span class="tag t-photo">Photo OK</span>' : ''; };
+ const nextT = Math.min(...today.filter(p => timeVal(p.time) + durMin(p) > nowMin).map(p => timeVal(p.time)));
+  const lessonRow = (p, act) => {
+    const st = (attOf(p) || {}).status || '', pd = paidOf(p), k = esc(p.id), t0 = timeVal(p.time), past = act && t0 + durMin(p) <= nowMin;
+    const isNow = act && !past && t0 === nextT;
+    const o = isOther(p);
+    return `<div class="arow" style="${past ? 'opacity:.55;' : ''}${o && !isNow ? 'background:#FBEAF0;border-left:4px solid #D4537E;' : ''}${isNow ? 'background:#E8F7F1;border-left:4px solid #1c9a73;' : ''}"><span class="tag" style="background:${isNow ? '#1c9a73;color:#fff' : '#FAECE7;color:#712B13'};min-width:62px;text-align:center;font-size:11px">${isNow ? (t0 <= nowMin ? 'NOW' : 'NEXT') + '<br>' : ''}${esc(p.time)}</span>
+      <div class="who"><b>${esc(p.student_name)}</b> ${p.lesson_type === 'Shared' ? '<span class="tag t-shared">Shared</span>' : ''}${photo(p.student_id)}<small>${esc(p.duration || '30 min')} · ${esc(p.coach || 'Coach')}</small></div>
+      ${act ? `<button class="here${st === 'Attended' ? ' on' : ''}" onclick="markAtt('${k}','${st === 'Attended' ? '' : 'Attended'}')">${st === 'Attended' ? '✓ Here' : 'Here'}</button>
+        ${o ? '' : isTrade(p) ? '<span class="paid" style="background:#EFE7FF;color:#3C3489">🤝 Trade</span>' : pd.amt > 0 ? `<span class="paid" style="cursor:pointer" onclick="undoPay('${k}')">✓ $${pd.amt.toFixed(0)}</span>` : `<button class="paybtn" onclick="openPay('${k}')">$ Pay</button>`}` : ''}</div>`;
+  };
+  const clsRow = c => { const n = clsRoster.filter(r => r.schedule_id === c.id).length;
+    return `<div class="arow"><span class="tag" style="background:#E6F1FB;color:#185FA5;min-width:62px;text-align:center;font-size:11px">${esc(c.time)}</span><div class="who"><b>🤸 ${esc(c.class_name)}</b><small>Class · ${n} enrolled · $${clsPrice(c)}</small></div>${showTomorrow ? '' : `<button class="paybtn" onclick="attMode='classes';ss.set('attMode','classes');setAttModeButtons();go('attendance')">Roster →</button>`}</div>`; };
+  let schedHtml;
+  if (!showTomorrow) {
+    const items = today.map(p => ({ t: timeVal(p.time), h: () => lessonRow(p, true) })).concat(todaysCls.map(c => ({ t: timeVal(c.time), h: () => clsRow(c) }))).sort((a, b) => a.t - b.t);
+    schedHtml = items.length ? items.map(x => x.h()).join('') : `<div class="center">No lessons scheduled for ${todayName}</div>`;
+  } else {
+    const tName = DAYS[(DAYS.indexOf(todayName) + 1) % 7];
+    let tl = tName === 'Monday' ? (dashNextMon || []) : live.filter(p => p.day === tName);
+    if (tName === 'Monday' && !dashNextMon) { loadNextMonday(); tl = null; }
+    const tc = clsSched.filter(c => c.day === tName);
+    const items = (tl || []).sort((a, b) => timeVal(a.time) - timeVal(b.time)).map(p => ({ t: timeVal(p.time), h: () => lessonRow(p, false) })).concat(tc.map(c => ({ t: timeVal(c.time), h: () => clsRow(c) }))).sort((a, b) => a.t - b.t);
+    schedHtml = tl === null ? '<div class="center">Loading…</div>' : items.length ? `<div style="font-size:12px;color:#888;padding:8px 12px 0">${today.length ? "Today's lessons are done — here's tomorrow." : ''}</div>` + items.map(x => x.h()).join('') : `<div class="center">Nothing scheduled for ${tName}</div>`;
+  }
+  $('d_sched').innerHTML = schedHtml
+    + (unpaid.length ? `<div style="margin:8px 10px 10px;padding:8px 10px;background:#FEF0EB;border-radius:8px;font-size:13px;color:#712B13"><b>${unpaid.length} unpaid</b> — ${unpaid.map(p => esc(p.student_name) + (p.day !== todayName ? ' (' + esc(p.day) + ')' : '')).join(', ')}</div>` : '');
+  // Needs attention
+  const opens = computeOpenings(), alerts = [];
+  if (unpaid.length) alerts.push(['#BA7517', unpaid.length + ' unpaid lesson' + (unpaid.length === 1 ? '' : 's') + ' this week', 'Tap to open Payments', "go('payments')"]);
+  opens.map(o => [o, wl.filter(w => matchesSlot(w, o.day, o.time)).length]).filter(x => x[1]).slice(0, 3)
+    .forEach(([o, n]) => alerts.push(['#378ADD', o.day + ' ' + o.time + ' slot open', n + ' waitlist match' + (n === 1 ? '' : 'es') + ' · tap for Openings', "go('openings')"]));
+  if (recentClaims.length) alerts.push(['#1D9E75', recentClaims.length + ' spot' + (recentClaims.length === 1 ? '' : 's') + ' claimed from a text', recentClaims.slice(0, 4).map(c => (c.student_name || '').split(' ')[0] + ' ' + SHORT[c.day] + ' ' + c.time).join(' · '), "go('schedule')"]);
+  const out = weekRows.filter(p => p.status === 'Cancelled' && p.exType !== 'MoveOrigin' && !slotPast(p.day, p.time));
+  if (out.length) alerts.push(['#B45309', out.length + ' out this week — spot' + (out.length === 1 ? '' : 's') + ' to fill', out.map(p => p.student_name.split(' ')[0] + ' ' + SHORT[p.day] + ' ' + p.time).join(' · '), "go('openings')"]);
+  if (dashHist) {
+    const { absent, unpaid2 } = dashHist;
+    if (absent.length) alerts.push(['#A32D2D', absent.length + ' kid' + (absent.length === 1 ? '' : 's') + ' missed the last 2 weeks', absent.join(' · '), "go('students')"]);
+    if (unpaid2.length) alerts.push(['#854F0B', unpaid2.length + ' unpaid 2+ weeks running', unpaid2.join(' · '), "go('payments')"]);
+  } else loadDashHist();
+  const newStu = students.filter(x => x.join_date && x.join_date >= ymd(wk[0].date));
+  if (newStu.length) alerts.push(['#1D9E75', newStu.length + ' new registration' + (newStu.length === 1 ? '' : 's') + ' this week', newStu.map(x => x.first_name + ' ' + x.last_name).join(' · '), "go('students')"]);
+  $('d_attn').innerHTML = alerts.length ? alerts.map(([c, t, sub, fn]) => `<div class="arow" style="cursor:pointer" onclick="${fn}"><span style="width:9px;height:9px;border-radius:50%;background:${c};flex-shrink:0"></span><div class="who"><b>${esc(t)}</b><small>${esc(sub)}</small></div></div>`).join('')
+    : '<div class="center">Nothing needs attention right now</div>';
+  // Waitlist with this week's matching open slots + last notified
+  const ago = d => { if (!d) return ''; const days = Math.floor((Date.now() - new Date(d)) / 864e5); return days < 1 ? 'notified today' : days < 7 ? 'notified ' + days + 'd ago' : 'notified ' + Math.floor(days / 7) + 'w ago'; };
+  const rows = wl.map(w => ({ w, m: opens.filter(o => matchesSlot(w, o.day, o.time)) })).sort((a, b) => (b.m.length > 0) - (a.m.length > 0) || String(a.w.signup_date || '').localeCompare(String(b.w.signup_date || '')));
+  $('d_wlSub').textContent = rows.length ? rows.filter(r => r.m.length).length + ' of ' + rows.length + ' have matches this week' : '';
+  setDashWl();
+  $('d_wlist').innerHTML = rows.length ? rows.map((r, i) => {
+    const w = r.w, age = ageOf(w.dob), first = (w.student_name || '').split(' ')[0];
+    const txt = 'Hi' + (w.parent_name ? ' ' + w.parent_name.split(' ')[0] : '') + '! Spots open this week for ' + first + ':\n' + r.m.slice(0, 6).map(o => '• ' + SHORT[o.day] + ' ' + o.time).join('\n') + '\nWant one?';
+    return `<div class="arow"><div class="who"><b>${i + 1}. ${esc(w.student_name)}</b> <span style="font-size:11px;color:#888">${age !== '' ? 'Age ' + age : ''}${w.skill_level ? ' · ' + esc(w.skill_level) : ''}${w.status === 'Drop-In' ? ' · Drop-In' : ''}</span>
+      <small>${r.m.length ? `<span style="color:#065f46;font-weight:600">● ${r.m.length} open slot${r.m.length === 1 ? '' : 's'} match</span>` : 'No matches this week'}${w.last_notified ? ' · ' + ago(w.last_notified) : ''}${w.open_to_anything ? ' · Open to anything' : ''}</small></div>
+      ${r.m.length && w.parent_phone ? `<a class="paybtn" style="text-decoration:none;background:#fff;border:1px solid #1c9a73;color:#1c7a5a" href="${smsHref(w.parent_phone, txt)}">📱 Text</a>` : ''}</div>`;
+  }).join('') : '<div class="center">No one on the waitlist</div>';
+  // Birthdays this week (Mon–Sun)
+  const b = students.filter(x => isOn(x) && x.dob).map(x => { const d = wk.find(d => d.date.getMonth() + 1 === +x.dob.slice(5, 7) && d.date.getDate() === +x.dob.slice(8, 10)); return d ? { x, d } : null; }).filter(Boolean);
+  $('d_bday').innerHTML = b.length ? b.map(({ x, d }) => `<div class="arow"><div class="who"><b>${esc(x.first_name)} ${esc(x.last_name)}</b><small>${d.name}, ${d.label} · turns ${d.date.getFullYear() - +x.dob.slice(0, 4)}</small></div></div>`).join('') : '<div class="center">No birthdays this week</div>';
+}
+
+// Tomorrow = next Monday (when today is Sunday): build next week's Monday from the lessons + next week's exceptions
+let dashNextMon = null, dashHist = null;
+async function loadNextMonday() {
+  const nm = new Date(weekDates()[0].date); nm.setDate(nm.getDate() + 7); const ws = ymd(nm), we = ymd(new Date(nm.getTime() + 6 * 864e5));
+  const X = await sb.from('schedule_exceptions').select('*').eq('week_start', ws).not('status', 'in', '("Deleted","Expired")');
+  const base = allLessons.filter(p => !(p.start_date && p.start_date > we) && !(p.end_date && p.end_date <= ws));
+  dashNextMon = applyExceptions(base, X.data || []).filter(p => p.status !== 'Cancelled' && p.day === 'Monday');
+  if (curTab === 'dashboard') renderDash();
+}
+// Last 2 finished weeks: kids absent both weeks, and kids who came but didn't pay both weeks
+async function loadDashHist() {
+  dashHist = { absent: [], unpaid2: [] };
+  const w0 = weekDates()[0].date, w1 = ymd(new Date(w0.getTime() - 7 * 864e5)), w2 = ymd(new Date(w0.getTime() - 14 * 864e5));
+  const [A, P] = await Promise.all([sb.from('attendance').select('student_id,student_name,lesson_id,week_start,status').in('week_start', [w1, w2]),
+    sb.from('payments').select('student_id,lesson_id,week_start,amount').in('week_start', [w1, w2])]);
+  if (A.error || P.error) return;
+  const liveIds = new Set(weekRows.map(p => p.student_id)), by = {}, otherIds = new Set(allLessons.filter(isOther).map(l => l.id));
+  A.data.forEach(a => { if (!a.student_id || !liveIds.has(a.student_id) || otherIds.has(a.lesson_id)) return; (by[a.student_id] = by[a.student_id] || { n: a.student_name, w: {} }).w[a.week_start] = (by[a.student_id].w[a.week_start] || []).concat(a); });
+  const paid = new Set(P.data.filter(x => +x.amount > 0).map(x => x.student_id + '|' + x.week_start));
+  Object.entries(by).forEach(([sid, r]) => {
+    const wk = [w1, w2].map(w => r.w[w] || []);
+    if (wk.every(l => l.length && l.every(a => a.status !== 'Attended'))) dashHist.absent.push(r.n);
+    if ([w1, w2].every((w, i) => wk[i].some(a => a.status === 'Attended') && !paid.has(sid + '|' + w))) dashHist.unpaid2.push(r.n);
+  });
+  if (curTab === 'dashboard') renderDash();
+}
+
+// ================= SLOTS =================
+let allSlots = [], slotLessons = [], curSeasonId = null, slotCoaches = [];
+const seasonLabel = se => { const f = md => new Date('2026-' + md + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); return f(se.start_md) + ' – ' + f(se.end_md); };
+// Window of the season's current (or next) run, used to decide which weekly lessons fill its slots
+function seasonWindow(se) {
+  const t = new Date(), y = t.getFullYear(), today = ymd(t), md = today.slice(5);
+  if (mdIn(md, se.start_md, se.end_md)) {   // in season now: today → end
+    const endY = se.start_md <= se.end_md || md <= se.end_md ? y : y + 1;
+    return { from: today, to: endY + '-' + se.end_md, now: true };
+  }
+  const startY = se.start_md > md ? y : y + 1, endY = se.start_md <= se.end_md ? startY : startY + 1;
+  return { from: startY + '-' + se.start_md, to: endY + '-' + se.end_md, now: false };
+}
+async function loadSlots(quiet) {
+  if (!quiet) $('slotDays').innerHTML = '<div class="center">Loading…</div>';
+  const [S, L, C] = await Promise.all([sb.from('available_slots').select('*'), sb.from('private_lessons').select('id,student_name,day,time,start_date,end_date,status,lesson_type'), sb.from('coaches').select('name').eq('active', true)]);
+  if (S.error || L.error) { $('slotDays').innerHTML = '<div class="msg err">' + esc((S.error || L.error).message) + '</div>'; return; }
+  allSlots = S.data; slotLessons = L.data.filter(l => !['Cancelled','Dropped'].includes(l.status)); slotCoaches = (C.data || []).map(c => c.name);
+  if (!curSeasonId || !seasons.find(x => x.id === curSeasonId)) curSeasonId = ss.get('season', (seasonFor(ymd(new Date())) || {}).id);
+  renderSlots();
+}
+function renderSlots() {
+  const now = seasonFor(ymd(new Date()));
+  $('seasonTabs').innerHTML = seasons.map(se => `<button class="${se.id === curSeasonId ? 'on' : ''}" onclick="curSeasonId='${esc(se.id)}';ss.set('season',curSeasonId);renderSlots()">${esc(se.name)}${now && se.id === now.id ? ' <span style="font-size:10px;background:var(--mint);color:#fff;border-radius:8px;padding:1px 6px">now</span>' : ''}</button>`).join('');
+  const se = seasons.find(x => x.id === curSeasonId); if (!se) { $('slotDays').innerHTML = '<div class="center">No seasons yet</div>'; return; }
+  const win = seasonWindow(se);
+  // Weekly lessons that run during this season's window fill its slots (one-week cancellations don't matter here)
+  const les = slotLessons.filter(l => runsBetween(l, win.from, win.to));
+  const mine = allSlots.filter(x => slotSeason(x) === se.id);
+  const who = sl => les.filter(l => l.day === sl.day && l.time === sl.time);
+  const open = mine.filter(x => x.active !== false && !who(x).length).length, booked = mine.filter(x => who(x).length).length;
+  $('seasonInfo').innerHTML = `<b>${esc(se.name)}</b> · ${seasonLabel(se)} · ${win.now ? 'running now' : 'next starts ' + new Date(win.from + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}<br>${mine.length} slots · <b style="color:#3B6D11">${open} open for signup</b> · ${booked} booked${mine.some(x => x.active === false) ? ' · ' + mine.filter(x => x.active === false).length + ' off' : ''}`;
+  // Lesson times with no slot (shown so nothing is hidden)
+  $('slotDays').innerHTML = DAYS.map(d => {
+    const ds = mine.filter(x => x.day === d), extraTimes = [...new Set(les.filter(l => l.day === d && !ds.some(x => x.time === l.time)).map(l => l.time))];
+    const items = ds.map(x => ({ t: timeVal(x.time), h: (() => { const w = who(x), off = x.active === false;
+      return `<div class="schip ${w.length ? 'booked' : off ? 'off' : 'open'}" onclick="slotTap('${esc(x.id)}')"><b>${esc(x.time)}</b><small>${w.length ? esc(w.map(l => l.student_name.split(' ')[0]).join(', ')) : off ? 'Off' : 'Open'}${isExtraSlot(x) ? ' ☀️' : ''}</small></div>`; })() }))
+      .concat(extraTimes.map(t => ({ t: timeVal(t), h: `<div class="schip booked" style="border:1px dashed #d8b4b4" onclick="addSlotAt('${d}','${esc(t)}')"><b>${esc(t)}</b><small>${esc(les.filter(l => l.day === d && l.time === t).map(l => l.student_name.split(' ')[0]).join(', '))} · no slot</small></div>` })))
+      .sort((a, b) => a.t - b.t);
+    return `<div class="dayhd">${d}<span>${ds.length} slot${ds.length === 1 ? '' : 's'}</span></div><div class="card" style="border-radius:0 0 10px 10px;padding:8px;margin-bottom:6px">${items.map(x => x.h).join('')}<div class="schip add" onclick="addSlotAt('${d}','')"><b>+ Add</b></div></div>`;
+  }).join('');
+}
+function slotTap(id) {
+  const x = allSlots.find(z => z.id === id); if (!x) return;
+  const se = seasons.find(z => z.id === slotSeason(x)), win = seasonWindow(se);
+  const w = slotLessons.filter(l => l.day === x.day && l.time === x.time && runsBetween(l, win.from, win.to));
+  $('sm_title').textContent = x.day + ' ' + x.time + ' · ' + se.name; $('sm_msg').textContent = '';
+  $('sm_body').innerHTML = `<div style="font-size:14px;margin-bottom:10px">${w.length ? 'Booked every week: <b>' + esc(w.map(l => l.student_name).join(', ')) + '</b>' : x.active === false ? 'Turned off — not offered to new families.' : '<span style="color:#3B6D11;font-weight:600">Open for signup</span>'}</div>
+    <label>Coach</label><select id="sm_coach" onchange="slotSet('${esc(id)}',{coach:this.value})">${opts(slotCoaches.concat('TBD'), x.coach || 'TBD')}</select>
+    <div class="btnrow"><button class="btn ghost" style="flex:1" onclick="slotSet('${esc(id)}',{active:${x.active === false}})">${x.active === false ? 'Turn on' : 'Turn off'}</button>
+    <button class="btn red" style="flex:1" onclick="slotRemove('${esc(id)}')">Remove slot</button></div>
+    <div style="font-size:11px;color:#888;margin-top:8px">Turning off or removing a slot never touches lessons already in it.</div>`;
+  $('slotModal').classList.remove('hidden');
+}
+async function slotSet(id, ch) {
+  const r = await sb.from('available_slots').update(ch).eq('id', id); if (r.error) { $('sm_msg').className = 'msg err'; $('sm_msg').textContent = r.error.message; return; }
+  Object.assign(allSlots.find(z => z.id === id), ch); $('slotModal').classList.add('hidden'); renderSlots();
+}
+async function slotRemove(id) {
+  const x = allSlots.find(z => z.id === id); if (!x || !confirm('Remove the ' + x.day + ' ' + x.time + ' slot from ' + (seasons.find(z => z.id === slotSeason(x)) || {}).name + '?')) return;
+  const r = await sb.from('available_slots').delete().eq('id', id); if (r.error) return alert(r.error.message);
+  allSlots = allSlots.filter(z => z !== x); $('slotModal').classList.add('hidden'); renderSlots();
+}
+function addSlotAt(day, time) {
+  $('sm_title').textContent = 'Add slot · ' + day; $('sm_msg').textContent = '';
+  $('sm_body').innerHTML = `<label>Time</label><select id="as_time">${opts(TIMES, time || '4:00 PM')}</select><label>Coach</label><select id="as_coach">${opts(slotCoaches.concat('TBD'), slotCoaches[0] || 'TBD')}</select>
+    <button class="btn" onclick="saveSlots([{day:'${day}',time:$('as_time').value,coach:$('as_coach').value}]).then(n=>{if(n!==null)$('slotModal').classList.add('hidden')})">Add slot</button>`;
+  $('slotModal').classList.remove('hidden');
+}
+// Insert slots into the current season, skipping day+times it already has; returns how many were added
+async function saveSlots(list) {
+  const have = new Set(allSlots.filter(z => slotSeason(z) === curSeasonId).map(z => z.day + '|' + z.time));
+  const add = list.filter(x => !have.has(x.day + '|' + x.time)).map(x => ({ ...x, gym_id: gymId, season_id: curSeasonId, is_summer: /summer/i.test((seasons.find(z => z.id === curSeasonId) || {}).name || ''), active: true, booked: false }));
+  if (!add.length) { alert('Those times are already in this season.'); return 0; }
+  const r = await sb.from('available_slots').insert(add).select(); if (r.error) { alert(r.error.message); return null; }
+  allSlots = allSlots.concat(r.data); renderSlots(); return r.data.length;
+}
+function openBulkSlots() {
+  const se = seasons.find(z => z.id === curSeasonId); $('bk_title').textContent = 'Bulk add slots · ' + (se ? se.name : '');
+  $('bk_days').innerHTML = DAYS.map(d => `<label><input type="checkbox" class="bk-day" value="${d}" onchange="bkPreview()">${SHORT[d]}</label>`).join('');
+  $('bk_coach').innerHTML = opts(slotCoaches.concat('TBD'), slotCoaches[0] || 'TBD');
+  $('bk_start').innerHTML = opts(TIMES, '4:00 PM'); $('bk_end').innerHTML = opts(TIMES, '8:00 PM'); $('bk_msg').textContent = '';
+  bkPreview(); $('bulkModal').classList.remove('hidden');
+}
+function bkTimes() { const a = timeVal($('bk_start').value), b = timeVal($('bk_end').value), step = +$('bk_int').value, out = []; for (let m = a; m <= b; m += step) out.push(TIMES.find(t => timeVal(t) === m) || ''); return out.filter(Boolean); }
+function bkPreview() {
+  const days = [...document.querySelectorAll('.bk-day:checked')].map(x => x.value), t = bkTimes();
+  $('bk_prev').textContent = days.length && t.length ? days.length * t.length + ' slots: ' + days.map(d => SHORT[d]).join(', ') + ' at ' + t.join(', ') + ' (any that already exist are skipped)' : 'Pick days and times to preview how many slots will be created.';
+}
+async function saveBulk() {
+  const days = [...document.querySelectorAll('.bk-day:checked')].map(x => x.value), t = bkTimes(), coach = $('bk_coach').value;
+  if (!days.length || !t.length) { $('bk_msg').className = 'msg err'; $('bk_msg').textContent = 'Pick at least one day and a time range.'; return; }
+  const n = await saveSlots(days.flatMap(d => t.map(time => ({ day: d, time, coach }))));
+  if (n) $('bulkModal').classList.add('hidden');
+}
+function openSeason(id) {
+  const se = seasons.find(z => z.id === id), y = new Date().getFullYear();
+  $('se_title').textContent = se ? 'Edit season' : 'New season'; $('se_msg').textContent = '';
+  $('se_name').value = se ? se.name : ''; $('se_start').value = se ? y + '-' + se.start_md : ''; $('se_end').value = se ? y + '-' + se.end_md : '';
+  $('se_copyWrap').classList.toggle('hidden', !!se);
+  $('se_copy').innerHTML = '<option value="">Start empty</option>' + seasons.map(z => `<option value="${esc(z.id)}">${esc(z.name)}</option>`).join('');
+  $('seasonModal').dataset.id = id || ''; $('seasonModal').classList.remove('hidden');
+}
+async function saveSeason() {
+  const id = $('seasonModal').dataset.id, name = $('se_name').value.trim(), a = $('se_start').value.slice(5), b = $('se_end').value.slice(5), m = $('se_msg');
+  m.className = 'msg err';
+  if (!name || !a || !b) return m.textContent = 'Name, start and end are required.';
+  const overlap = seasons.filter(z => z.id !== id && (mdIn(a, z.start_md, z.end_md) || mdIn(b, z.start_md, z.end_md)));
+  if (overlap.length && !confirm('These dates overlap ' + overlap.map(z => z.name).join(', ') + '.\n\nFor those weeks the newest season is used. Save anyway?')) return;
+  let r;
+  if (id) r = await sb.from('seasons').update({ name, start_md: a, end_md: b }).eq('id', id).select().single();
+  else r = await sb.from('seasons').insert({ gym_id: gymId, name, start_md: a, end_md: b, sort: seasons.length + 1 }).select().single();
+  if (r.error) return m.textContent = r.error.message;
+  if (id) Object.assign(seasons.find(z => z.id === id), r.data); else { seasons.push(r.data); curSeasonId = r.data.id; ss.set('season', curSeasonId);
+    const from = $('se_copy').value;
+    if (from) { const src = allSlots.filter(z => slotSeason(z) === from); if (src.length) await saveSlots(src.map(z => ({ day: z.day, time: z.time, coach: z.coach }))); } }
+  $('seasonModal').classList.add('hidden'); renderSlots();
+}
+
+// ================= OPENINGS (port of 2.0 renderOpenings_ / renderWaitlistPanel_ / makeup text) =================
+const SHORT = { Monday:'Mon', Tuesday:'Tue', Wednesday:'Wed', Thursday:'Thu', Friday:'Fri', Saturday:'Sat', Sunday:'Sun' };
+const slotPast = (day, time) => { const d = dateFor(day); if (!d) return false; const t = new Date(d + 'T00:00:00'); t.setMinutes(timeVal(time)); return t < new Date(); };
+const ageOf = dob => { if (!dob) return ''; const b = new Date(dob + 'T00:00:00'), n = new Date(); let a = n.getFullYear() - b.getFullYear(); if (n < new Date(n.getFullYear(), b.getMonth(), b.getDate())) a--; return a; };
+const smsHref = (phone, body) => 'sms:' + String(phone || '').replace(/\D/g, '') + (body ? '?body=' + encodeURIComponent(body) : '');
+// Same rule as 2.0 countWaitlistMatchesForSlot_: open-to-anything, or preferred day + time listed; skip unsubscribed
+const matchesSlot = (w, day, time) => {
+  if ((w.extra || {}).Unsubscribed === 'Yes') return false;
+  if (w.open_to_anything) return true;
+  return String(w.preferred_days || '').toLowerCase().includes(day.toLowerCase()) && String(w.preferred_times || '').includes(time);
+};
+function computeOpenings() {
+  // Same slots the Schedule shows as Open or Away (nobody live in that slot this week), minus slots already past
+  const slots = slotsForWeek();
+  // A slot is taken only by a lesson with the same coach (lessons with no coach / TBD still block it)
+  const live = weekRows.filter(p => p.status !== 'Cancelled'), seen = new Set();
+  const taken = s => live.some(p => p.day === s.day && p.time === s.time && (!p.coach || p.coach === 'TBD' || !s.coach || p.coach === s.coach));
+  return slots.filter(s => { const k = s.day + '|' + s.time; if (seen.has(k) || slotPast(s.day, s.time) || taken(s)) return false; seen.add(k); return true; })
+    .sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || timeVal(a.time) - timeVal(b.time));
+}
+function renderOpen() {
+  openSlots = computeOpenings();
+  // Booked this week via a one-week lesson → hidden from the lists (same as 2.0 getWaitlist with weekStart)
+  const booked = new Set(weekEx.filter(e => e.type === 'Add').map(e => e.student_id));
+  const live = waitlist.filter(w => !(w.student_id && booked.has(w.student_id))); openLive = live;
+  $('openList').innerHTML = openSlots.length ? openSlots.map((o, i) => {
+    const d = weekDates().find(x => x.name === o.day), m = live.filter(w => matchesSlot(w, o.day, o.time));
+    return `<div class="arow"><div class="who"><b>${SHORT[o.day]} ${d.label} · ${esc(o.time)}</b><small>${esc(o.coach || '')}</small></div>
+      ${isExtraSlot(o) ? '<span class="tag t-summer">☀️ Summer</span>' : ''}
+      <button class="mbtn ${m.length ? 'on' : 'off'}" onclick="$('om${i}').classList.toggle('hidden')">${m.length ? '✓ ' + m.length + ' match' + (m.length === 1 ? '' : 'es') : 'No matches'}</button>
+      <button class="paybtn" style="background:var(--mint-soft);color:#1c7a5a" onclick="openAdd('${o.day}','${esc(o.time)}','${esc(o.coach || '')}',{scope:'week'})">Book Student</button>
+      <button class="paybtn" onclick="openSendOpen(${i})">📣 Send</button>
+      <div id="om${i}" class="mlist hidden">${m.length ? m.map(w => `<div>${esc(w.student_name)} <small style="color:#888">${esc(w.status)}</small> ·
+        ${w.parent_phone ? `<a href="${smsHref(w.parent_phone, 'Hi' + (w.parent_name ? ' ' + w.parent_name.split(' ')[0] : '') + '! A spot opened up ' + o.day + ' ' + d.label + ' at ' + o.time + ' for ' + (w.student_name || '').split(' ')[0] + '. Want it?')}">📱 Text</a>` : '<i>no phone</i>'}</div>`).join('') : 'No waitlist or drop-in families match this slot.'}</div></div>`;
+  }).join('') : '<div class="center">No openings this week</div>';
+  // Makeup picker
+  const prev = new Set([...document.querySelectorAll('#mkPick input:checked')].map(x => x.value));
+  $('mkPick').innerHTML = openSlots.length ? openSlots.map(o => { const k = o.day + '|' + o.time; return `<label><input type="checkbox" value="${esc(k)}"${prev.has(k) ? ' checked' : ''}>${SHORT[o.day]} ${esc(o.time)}</label>`; }).join('') : '<span style="color:#aaa;font-size:13px">No openings this week.</span>';
+  // Waitlist / Drop-In cards
+  const row = (w, i) => {
+    const prefs = w.open_to_anything ? '<span class="tag t-ex">Open to anything</span>' : (w.preferred_times || w.preferred_days ? `<small>${esc(w.preferred_times || w.preferred_days)}</small>` : '<small>No preference set</small>');
+    const age = ageOf(w.dob);
+    return `<div class="arow"><div class="who"><b>${i + 1}. ${esc(w.student_name || '—')}</b> <span style="font-size:11px;color:#888">${age !== '' ? 'Age ' + age : ''}${w.skill_level ? ' · ' + esc(w.skill_level) : ''}</span>
+      ${prefs}<small>${esc(w.parent_name || '')}${w.parent_phone ? ` · <a href="${smsHref(w.parent_phone)}">${esc(w.parent_phone)}</a>` : ''}${w.signup_date ? ' · signed up ' + esc(w.signup_date) : ''}</small></div>
+      <button class="paybtn" style="background:var(--mint);color:#fff" onclick="convertWl('${esc(w.id)}')">Convert →</button>
+      <button class="paybtn" style="background:#FCEBEB;color:#A32D2D" onclick="removeWl('${esc(w.id)}')">Remove</button></div>`;
+  };
+  const wl = live.filter(w => w.status !== 'Drop-In'), di = live.filter(w => w.status === 'Drop-In');
+  $('wlCount').textContent = wl.length ? wl.length + ' waiting' : ''; $('diCount').textContent = di.length ? di.length + ' drop-in' : '';
+  $('wlList').innerHTML = wl.length ? wl.map(row).join('') : '<div class="center">No one on the waitlist</div>';
+  $('diList').innerHTML = di.length ? di.map(row).join('') : '<div class="center">No drop-in families</div>';
+}
+function mkCopy() {
+  const pick = new Set([...document.querySelectorAll('#mkPick input:checked')].map(x => x.value));
+  if (!pick.size) return alert('Pick at least one slot.');
+  const lines = openSlots.filter(o => pick.has(o.day + '|' + o.time)).map(o => '• ' + SHORT[o.day] + ' ' + o.time);
+  const text = 'Hi! Here are our open makeup slots this week:\n\n' + lines.join('\n') + '\n\nLet me know if any of these work for you!';
+  navigator.clipboard.writeText(text).then(() => { $('mkCopy').textContent = '✓ Copied!'; setTimeout(() => $('mkCopy').textContent = '📋 Copy Text', 2500); }, () => prompt('Copy this text:', text));
+}
+function convertWl(id) {
+  const w = waitlist.find(x => x.id === id); if (!w) return;
+  if (!w.student_id || !students.find(s => s.id === w.student_id)) return alert(w.student_name + ' is not on the Students list yet — add them on the Students tab first.');
+  openAdd('', '', '', { scope: 'permanent', studentId: w.student_id, wl: w });
+}
+// ---- Add Drop-In ----
+function openDropIn() {
+  diPick = null; $('di_search').value = '';
+  $('di_any').checked = false; $('di_prefs').classList.remove('hidden'); $('di_notes').value = ''; $('di_info').textContent = ''; $('di_msg').textContent = '';
+  $('di_days').innerHTML = DAYS.filter(d => slotsForWeek().some(x => x.day === d)).map(d => `<label><input type="checkbox" class="di-day" value="${d}" onchange="diTimes()">${SHORT[d]}</label>`).join('');
+  $('di_times').innerHTML = '';
+  $('diModal').classList.remove('hidden');
+}
+let diPick = null;
+function diDD() {
+  const q = $('di_search').value.trim().toLowerCase(); diPick = null; $('di_info').textContent = '';
+  const list = students.filter(s => s.status === 'Active' && (!q || (s.first_name + ' ' + s.last_name + ' ' + (s.parent_name || '')).toLowerCase().includes(q)))
+    .sort((a, b) => (a.first_name || '').localeCompare(b.first_name || '')).slice(0, 30);
+  $('di_dd').innerHTML = list.map(s => `<div onmousedown="diSet('${esc(s.id)}')">${esc(s.first_name)} ${esc(s.last_name)} <small>${esc(s.skill_level || '')}${s.parent_name ? ' · ' + esc(s.parent_name) : ''}</small></div>`).join('') || '<div><small>No match</small></div>';
+  $('di_dd').classList.remove('hidden');
+}
+function diSet(id) { diPick = students.find(x => x.id === id); $('di_search').value = diPick.first_name + ' ' + diPick.last_name; $('di_dd').classList.add('hidden'); diInfo(); }
+function diInfo() {
+  const s = diPick;
+  $('di_info').textContent = s ? [s.parent_name && 'Parent: ' + s.parent_name, s.parent_phone, s.skill_level].filter(Boolean).join(' · ') : '';
+}
+function diTimes() {
+  const keep = new Set([...document.querySelectorAll('.di-time:checked')].map(x => x.value));
+  $('di_times').innerHTML = [...document.querySelectorAll('.di-day:checked')].map(c => {
+    const times = [...new Set(slotsForWeek().filter(x => x.day === c.value).map(x => x.time))].sort((a, b) => timeVal(a) - timeVal(b));
+    return `<label>${c.value} times</label><div class="slotpick">${times.map(t => { const k = c.value + ' ' + t; return `<label><input type="checkbox" class="di-time" value="${esc(k)}"${keep.has(k) ? ' checked' : ''}>${esc(t)}</label>`; }).join('')}</div>`;
+  }).join('');
+}
+async function saveDropIn() {
+  const s = diPick, m = $('di_msg'), any = $('di_any').checked;
+  m.className = 'msg err';
+  if (!s) return m.textContent = 'Search and pick a student from the list.';
+  const days = [...document.querySelectorAll('.di-day:checked')].map(x => x.value), times = [...document.querySelectorAll('.di-time:checked')].map(x => x.value);
+  if (!any && !days.length) return m.textContent = 'Check at least one preferred day, or "Open to any day/time".';
+  if (!any && !times.length) return m.textContent = 'Pick at least one time for the days you selected.';
+  // Already on the list?
+  const ex = await sb.from('waitlist').select('id,status').eq('student_id', s.id).in('status', ['Waiting','Waitlist','Drop-In']);
+  if (ex.error) return m.textContent = ex.error.message;
+  if (ex.data.length) return m.textContent = s.first_name + ' is already on the ' + (ex.data[0].status === 'Drop-In' ? 'Drop-In' : 'Waitlist') + ' list.';
+  $('di_save').disabled = true; m.className = 'msg'; m.textContent = 'Saving…';
+  const res = await sb.from('waitlist').insert({ gym_id: gymId, student_id: s.id, student_name: s.first_name + ' ' + s.last_name, dob: s.dob, parent_name: s.parent_name,
+    parent_phone: s.parent_phone, parent_email: s.parent_email, skill_level: s.skill_level, status: 'Drop-In', open_to_anything: any,
+    preferred_days: any ? null : days.join(', '), preferred_times: any ? null : times.join(', '), signup_date: ymd(new Date()), notes: $('di_notes').value.trim() || null }).select().single();
+  $('di_save').disabled = false;
+  if (res.error) { m.className = 'msg err'; return m.textContent = res.error.message; }
+  waitlist.push(res.data); $('diModal').classList.add('hidden'); renderOpen();
+}
+
+async function removeWl(id) {
+  const w = waitlist.find(x => x.id === id); if (!w || !confirm('Remove ' + w.student_name + ' from the ' + (w.status === 'Drop-In' ? 'drop-in' : 'waitlist') + ' list?')) return;
+  const res = await sb.from('waitlist').update({ status: 'Removed' }).eq('id', id);
+  if (res.error) return alert(res.error.message);
+  waitlist = waitlist.filter(x => x !== w); renderOpen();
+}
+
+// One-week fill sitting in a slot whose regular is Away → "covering for <name>"
+// ================= SEND OPENING (claim links, first tap wins) =================
+let openLive = [], soSlot = null, soShowAll = false, soPick = new Set(), recentClaims = [];
+function openSendOpen(i) {
+  const o = openSlots[i]; if (!o) return;
+  soSlot = o; soShowAll = false;
+  soPick = new Set(openLive.filter(w => w.parent_phone && matchesSlot(w, o.day, o.time)).map(w => w.id));
+  const d = weekDates().find(x => x.name === o.day);
+  $('so_title').textContent = 'Send opening · ' + SHORT[o.day] + ' ' + (d ? d.label : '') + ' · ' + o.time;
+  $('so_sub').textContent = (o.coach || '') + ' · this week only · first family to tap gets it';
+  $('so_msg').value = 'Hi {parent}! A spot opened ' + o.day + ' ' + (d ? d.label : '') + ' at ' + o.time + ' for {kid}. First to tap gets it: {link}';
+  $('so_res').textContent = ''; $('so_send').disabled = false; soRender(); $('soModal').classList.remove('hidden');
+}
+function soRender() {
+  const o = soSlot, rows = openLive.map(w => ({ w, m: matchesSlot(w, o.day, o.time) })).filter(x => soShowAll || x.m || soPick.has(x.w.id));
+  $('so_all').style.display = soShowAll ? 'none' : '';
+  $('so_list').innerHTML = rows.length ? rows.map(({ w, m }) => `<label class="arow" style="padding:6px 0;gap:8px;${w.parent_phone ? '' : 'opacity:.5'}">
+      <input type="checkbox" style="width:auto" ${soPick.has(w.id) ? 'checked' : ''} ${w.parent_phone ? '' : 'disabled'} onchange="this.checked ? soPick.add('${esc(w.id)}') : soPick.delete('${esc(w.id)}'); soCount()">
+      <span style="flex:1">${esc(w.student_name)} <small style="color:#888">${esc(w.status)}</small></span>
+      <span class="tag" style="${m ? 'background:#E1F5EE;color:#085041' : 'background:#eee;color:#888'}">${m ? 'match' : 'no match'}</span>
+      <small style="color:#888">${w.parent_phone ? 'Text' : 'no phone'}</small></label>`).join('') : '<div class="center">No matching families — tap "show all"</div>';
+  soCount();
+}
+function soCount() { $('so_send').textContent = 'Send to ' + soPick.size + ' famil' + (soPick.size === 1 ? 'y' : 'ies'); }
+const soToken = () => { const a = new Uint8Array(9); crypto.getRandomValues(a); return [...a].map(b => 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'[b % 57]).join(''); };
+async function sendOpening() {
+  const o = soSlot, picks = openLive.filter(w => soPick.has(w.id) && w.parent_phone), r = $('so_res');
+  if (!picks.length) { r.className = 'msg err'; r.textContent = 'Pick at least one family.'; return; }
+  const tpl = $('so_msg').value; if (!tpl.includes('{link}')) { r.className = 'msg err'; r.textContent = 'Keep {link} in the message so they can claim it.'; return; }
+  if (!confirm('Text this opening to ' + picks.length + ' famil' + (picks.length === 1 ? 'y' : 'ies') + '?')) return;
+  $('so_send').disabled = true; r.className = 'msg'; r.textContent = 'Sending…';
+  const batch = 'B' + Date.now(), date = dateFor(o.day), me = coachRows.find(c => c.name === mainCoach()) || {};
+  const links = picks.map(w => ({ token: soToken(), gym_id: gymId, batch_id: batch, waitlist_id: w.id, student_id: w.student_id, student_name: w.student_name, parent_phone: w.parent_phone,
+    day: o.day, time: o.time, coach: o.coach || mainCoach() || null, week_start: weekStartStr(), slot_date: date, price: priceFor('30 min', 'Solo'), alert_phone: me.phone || null }));
+  const ins = await sb.from('claim_links').insert(links);
+  if (ins.error) { $('so_send').disabled = false; r.className = 'msg err'; r.textContent = ins.error.message; return; }
+  const base = location.origin + location.pathname.replace(/[^/]*$/, '') + 'claim.html?t=';
+  const messages = links.map((l, k) => { const w = picks[k];
+    return { to: w.parent_phone, student_id: w.student_id, family: w.parent_name || w.student_name,
+      text: tpl.replace(/\{parent\}/g, (w.parent_name || '').split(' ')[0] || 'there').replace(/\{kid\}/g, (w.student_name || '').split(' ')[0]).replace(/\{link\}/g, base + l.token) }; });
+  const res = await sb.functions.invoke('sms-send', { body: { messages } });
+  if (res.error || (res.data && res.data.error)) { $('so_send').disabled = false; r.className = 'msg err'; r.textContent = 'Texts not sent: ' + ((res.data && res.data.error) || res.error.message); return; }
+  r.textContent = '✓ Sent ' + res.data.sent + (res.data.failed ? ' · ' + res.data.failed + ' failed' : '') + ' — you\'ll get a text when someone claims it';
+}
+
+// ================= PRINT SCHEDULE =================
+// This week as it really is (away kids off, fill-ins/moves on), own lessons only (other coaches left off), + class roster.
+let prFont = 12;
+const PR_BOXES = ['Coach Steve', 'SA', 'TA', 'Riana', 'Total', 'Tithe'];
+async function openPrint() {
+  $('printModal').classList.remove('hidden'); $('pContent').innerHTML = '<div style="padding:20px">Loading…</div>'; prScale();
+  const CS = await sb.from('class_schedule').select('*').eq('active', true);
+  const cls = (CS.data || []).sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || timeVal(a.time) - timeVal(b.time));
+  const CE = cls.length ? await sb.from('class_enrollments').select('*').in('schedule_id', cls.map(c => c.id)) : { data: [] };
+  const seen = new Set(), byDay = {};
+  weekRows.filter(p => p.status !== 'Cancelled' && !isOther(p)).forEach(p => {
+    const k = (p.student_id || p.student_name) + '|' + p.day + '|' + p.time; if (seen.has(k) || !p.day) return; seen.add(k);
+    (byDay[p.day] = byDay[p.day] || []).push(p);
+  });
+  const blocks = DAYS.filter(d => byDay[d]).map(d => ({ label: d, rows: byDay[d].sort((a, b) => timeVal(a.time) - timeVal(b.time)).map(p => [p.time, p.student_name]) }));
+  cls.forEach(c => {
+    const r = (CE.data || []).filter(e => e.schedule_id === c.id && !['Dropped','Waitlisted'].includes(e.status)).map(e => ['', e.student_name || '']).sort((a, b) => a[1].localeCompare(b[1]));
+    if (r.length) blocks.push({ label: (c.class_name || 'Group Class') + ' — ' + (c.day ? SHORT[c.day] + ' ' : '') + (c.time || ''), rows: r });
+  });
+  // Balance blocks over 3 columns (same as 2.0) so no column runs long
+  const cols = [[], [], []], tot = [0, 0, 0];
+  blocks.forEach(b => { const i = tot.indexOf(Math.min(...tot)); cols[i].push(b); tot[i] += b.rows.length + 1; });
+  const tbl = bs => `<table><thead><tr><th style="width:27%">Time</th><th>Student</th><th style="width:25%">Payment</th></tr></thead><tbody>${bs.map(b => `<tr><td colspan="3" class="ph">${esc(b.label)}</td></tr>` + b.rows.map(r => `<tr><td style="color:#555">${esc(r[0])}</td><td style="font-weight:600">${esc(r[1])}</td><td></td></tr>`).join('')).join('')}</tbody></table>`;
+  $('pContent').innerHTML = `<div style="font-weight:600;font-size:1.25em">${esc(gymTitle || 'Flip Lab')} · Week of ${esc(weekDates()[0].label)}</div>
+    <div style="margin:.5em 0 .7em;white-space:nowrap">${PR_BOXES.map(b => `${esc(b)}<span class="pb"></span>`).join('')}</div>
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.6em">${cols.map(c => '<div>' + tbl(c) + '</div>').join('')}</div>`;
+  let saved = 'auto'; try { saved = localStorage.getItem('fl3_printSize') || 'auto'; } catch (e) {}
+  if (saved === 'auto' || isNaN(+saved)) prAuto(false); else { prFont = +saved; prShow(); }
+}
+// Scale the real-size sheet down to fit the screen (printing uses it at full size)
+function prScale() { const w = $('psWrap').clientWidth || 300, k = Math.min(1, w / $('pSheet').offsetWidth); $('pSheet').style.transform = 'scale(' + k + ')'; $('psWrap').style.height = ($('pSheet').offsetHeight * k) + 'px'; }
+const prFits = () => $('pContent').scrollHeight <= $('pSheet').clientHeight;
+function prShow() {
+  $('pContent').style.fontSize = prFont + 'px'; $('prPct').textContent = Math.round(prFont / 12 * 100) + '%';
+  const ok = prFits(); $('pSheet').classList.toggle('over', !ok);
+  $('prFit').textContent = ok ? 'Fits on 1 page' : "Won't fit on 1 page"; $('prFit').style.cssText = ok ? 'background:#EAF3DE;color:#3B6D11' : 'background:#FCEBEB;color:#A32D2D';
+  prScale();
+}
+function prAuto(remember) { prFont = 20; prShow(); while (!prFits() && prFont > 5) { prFont -= 0.25; prShow(); } if (remember) try { localStorage.setItem('fl3_printSize', 'auto'); } catch (e) {} }
+function prSize(d) { prFont = Math.max(5, Math.min(24, prFont + d)); prShow(); try { localStorage.setItem('fl3_printSize', String(prFont)); } catch (e) {} }
+
+function coverNote(p) { if (!addExId(p.id)) return ''; const a = weekRows.find(r => r.status === 'Cancelled' && r.day === p.day && r.time === p.time); return a ? `<i style="font-size:11px;color:#999">covering for ${esc(a.student_name)}</i>` : ''; }
+// Tap an "Away" row → fill the slot for this week, or put the regular student back
+function openAway(id) {
+  const p = weekRows.find(r => r.id === id); if (!p) return;
+  const day = p.day, time = p.time, coach = p.coach || '', first = p.student_name.split(' ')[0];
+  const d = weekDates().find(x => x.name === day);
+  const booked = new Set(weekEx.filter(e => e.type === 'Add').map(e => e.student_id));
+  const m = waitlist.filter(w => w.student_id && !booked.has(w.student_id) && matchesSlot(w, day, time));
+  const go = (o) => { $('awayModal').classList.add('hidden'); openAdd(day, time, coach, Object.assign({ scope: 'week' }, o)); };
+  $('aw_title').textContent = day + ' ' + (d ? d.label + ' ' : '') + '· ' + time;
+  $('aw_sub').textContent = '🏖 ' + p.student_name + ' is out this week';
+  $('aw_matches').innerHTML = m.length ? m.map((w, i) => `<button class="paybtn" style="background:var(--mint-soft);color:#1c7a5a;margin:0 6px 6px 0" data-i="${i}">${esc(w.student_name)} <small style="color:#888">${esc(w.status)}</small></button>`).join('') : '<span style="color:#aaa;font-size:13px">No matches — use Fill with someone else.</span>';
+  $('aw_matches').querySelectorAll('button').forEach(b => b.onclick = () => { const w = m[+b.dataset.i]; go({ studentId: w.student_id, wl: w }); });
+  $('aw_fill').onclick = () => go({});
+  $('aw_back').textContent = '↩ Put ' + first + ' back this week';
+  $('aw_back').onclick = () => { $('awayModal').classList.add('hidden'); restoreLesson(id); };
+  $('awayModal').classList.remove('hidden');
+}
+// Undo this week's cancel/move
+async function restoreLesson(id) {
+  const p = weekRows.find(r => r.id === id), ex = weekEx.find(e => e.lesson_id === id && e.type !== 'Add');
+  if (!p || !ex) return;
+  if (!confirm('Put ' + p.student_name + ' back on ' + p.bday + ' ' + p.btime + ' this week?')) return;
+  const res = await sb.from('schedule_exceptions').update({ status: 'Deleted' }).eq('id', ex.id);
+  if (res.error) return alert(res.error.message);
+  loadWeek();
+}
+
+// ================= AUTO-REFRESH (Supabase realtime) =================
+// Another phone changes something → quietly reload the current tab (same tab / week / scroll). Waits while a pop-up is open.
+let rtTimer = null, rtPending = false, rtHiddenAt = null, rtChan = null;
+const modalOpen = () => [...document.querySelectorAll('.ovl')].some(o => !o.classList.contains('hidden'));
+function rtQueue() { rtPending = true; clearTimeout(rtTimer); rtTimer = setTimeout(rtRun, 1200); }
+async function rtRun() {
+  if (!rtPending || document.hidden || !gymId) return;
+  if (modalOpen()) { rtTimer = setTimeout(rtRun, 2000); return; }   // try again after the pop-up closes
+  rtPending = false;
+  const y = window.scrollY;
+  if (ss.get('tab', '') === 'student') return;                       // don't touch a student form you might be editing
+  if (curTab === 'slots') await loadSlots(true);
+  else if (curTab === 'students') { await loadStudents(true); render(); }
+  else await loadWeek(true);
+  window.scrollTo(0, y);
+}
+function rtStart() {
+  if (rtChan) return;
+  rtChan = sb.channel('fl3-admin');
+  ['private_lessons','schedule_exceptions','attendance','payments','students','waitlist','available_slots','class_attendance','class_enrollments','coaches']
+    .forEach(t => rtChan.on('postgres_changes', { event: '*', schema: 'public', table: t }, rtQueue));
+  rtChan.subscribe();
+}
+// Back to the app after a while → refresh once to catch anything missed
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { rtHiddenAt = Date.now(); return; }
+  if (rtPending || (rtHiddenAt && Date.now() - rtHiddenAt > 30000)) { rtPending = true; rtRun(); }
+  rtHiddenAt = null;
+});
 
 boot();
 </script>
