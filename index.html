@@ -173,7 +173,7 @@
     <div class="card" style="padding:0;overflow:hidden" id="openList"><div class="center">Loading…</div></div>
     <div class="sec">Waitlist <span id="wlCount" style="font-weight:400;font-size:12px;color:#888"></span></div>
     <div class="card" style="padding:0;overflow:hidden" id="wlList"></div>
-    <div class="sec">Drop-In <span id="diCount" style="font-weight:400;font-size:12px;color:#888"></span></div>
+    <div class="sec">Drop-In <span id="diCount" style="font-weight:400;font-size:12px;color:#888"></span><button class="paybtn" style="margin-left:auto;background:var(--mint);color:#fff" onclick="openDropIn()">+ Add Drop-In</button></div>
     <div class="card" style="padding:0;overflow:hidden" id="diList"></div>
   </section>
 
@@ -281,6 +281,24 @@
     <button class="btn" onclick="changePw()">Change password</button>
     <div id="pwMsg" class="msg"></div>
     <button class="btn ghost" style="margin-top:14px" onclick="$('acctModal').classList.add('hidden');signOut()">Sign out</button>
+  </div>
+</div>
+
+<!-- Add Drop-In (port of 2.0 modal-add-dropin) -->
+<div class="ovl hidden" id="diModal" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="mdl">
+    <div class="mh"><b>Add to Drop-In list</b><button class="x" onclick="$('diModal').classList.add('hidden')">✕</button></div>
+    <label>Student</label><select id="di_student" onchange="diInfo()"></select>
+    <div id="di_info" style="font-size:12px;color:#888;margin:-6px 0 10px"></div>
+    <div class="chk"><input type="checkbox" id="di_any" onchange="$('di_prefs').classList.toggle('hidden', this.checked)"><label for="di_any">Open to any day/time</label></div>
+    <div id="di_prefs">
+      <label>Preferred days</label>
+      <div class="slotpick" id="di_days"></div>
+      <div id="di_times"></div>
+    </div>
+    <label>Notes</label><textarea id="di_notes" rows="2"></textarea>
+    <button class="btn" id="di_save" onclick="saveDropIn()">Add to Drop-In</button>
+    <div id="di_msg" class="msg"></div>
   </div>
 </div>
 
@@ -950,6 +968,46 @@ function convertWl(id) {
   if (!w.student_id || !students.find(s => s.id === w.student_id)) return alert(w.student_name + ' is not on the Students list yet — add them on the Students tab first.');
   openAdd('', '', '', { scope: 'permanent', studentId: w.student_id, wl: w });
 }
+// ---- Add Drop-In ----
+function openDropIn() {
+  const list = students.filter(s => s.status === 'Active').sort((a, b) => (a.first_name || '').localeCompare(b.first_name || ''));
+  $('di_student').innerHTML = '<option value="">Select a student...</option>' + list.map(s => `<option value="${esc(s.id)}">${esc(s.first_name)} ${esc(s.last_name)}</option>`).join('');
+  $('di_any').checked = false; $('di_prefs').classList.remove('hidden'); $('di_notes').value = ''; $('di_info').textContent = ''; $('di_msg').textContent = '';
+  $('di_days').innerHTML = DAYS.filter(d => weekSlots.some(x => x.day === d && !x.is_summer)).map(d => `<label><input type="checkbox" class="di-day" value="${d}" onchange="diTimes()">${SHORT[d]}</label>`).join('');
+  $('di_times').innerHTML = '';
+  $('diModal').classList.remove('hidden');
+}
+function diInfo() {
+  const s = students.find(x => x.id === $('di_student').value);
+  $('di_info').textContent = s ? [s.parent_name && 'Parent: ' + s.parent_name, s.parent_phone, s.skill_level].filter(Boolean).join(' · ') : '';
+}
+function diTimes() {
+  const keep = new Set([...document.querySelectorAll('.di-time:checked')].map(x => x.value));
+  $('di_times').innerHTML = [...document.querySelectorAll('.di-day:checked')].map(c => {
+    const times = [...new Set(weekSlots.filter(x => x.day === c.value && !x.is_summer).map(x => x.time))].sort((a, b) => timeVal(a) - timeVal(b));
+    return `<label>${c.value} times</label><div class="slotpick">${times.map(t => { const k = c.value + ' ' + t; return `<label><input type="checkbox" class="di-time" value="${esc(k)}"${keep.has(k) ? ' checked' : ''}>${esc(t)}</label>`; }).join('')}</div>`;
+  }).join('');
+}
+async function saveDropIn() {
+  const s = students.find(x => x.id === $('di_student').value), m = $('di_msg'), any = $('di_any').checked;
+  m.className = 'msg err';
+  if (!s) return m.textContent = 'Please select a student.';
+  const days = [...document.querySelectorAll('.di-day:checked')].map(x => x.value), times = [...document.querySelectorAll('.di-time:checked')].map(x => x.value);
+  if (!any && !days.length) return m.textContent = 'Check at least one preferred day, or "Open to any day/time".';
+  if (!any && !times.length) return m.textContent = 'Pick at least one time for the days you selected.';
+  // Already on the list?
+  const ex = await sb.from('waitlist').select('id,status').eq('student_id', s.id).in('status', ['Waiting','Waitlist','Drop-In']);
+  if (ex.error) return m.textContent = ex.error.message;
+  if (ex.data.length) return m.textContent = s.first_name + ' is already on the ' + (ex.data[0].status === 'Drop-In' ? 'Drop-In' : 'Waitlist') + ' list.';
+  $('di_save').disabled = true; m.className = 'msg'; m.textContent = 'Saving…';
+  const res = await sb.from('waitlist').insert({ gym_id: gymId, student_id: s.id, student_name: s.first_name + ' ' + s.last_name, dob: s.dob, parent_name: s.parent_name,
+    parent_phone: s.parent_phone, parent_email: s.parent_email, skill_level: s.skill_level, status: 'Drop-In', open_to_anything: any,
+    preferred_days: any ? null : days.join(', '), preferred_times: any ? null : times.join(', '), signup_date: ymd(new Date()), notes: $('di_notes').value.trim() || null }).select().single();
+  $('di_save').disabled = false;
+  if (res.error) { m.className = 'msg err'; return m.textContent = res.error.message; }
+  waitlist.push(res.data); $('diModal').classList.add('hidden'); renderOpen();
+}
+
 async function removeWl(id) {
   const w = waitlist.find(x => x.id === id); if (!w || !confirm('Remove ' + w.student_name + ' from the ' + (w.status === 'Drop-In' ? 'drop-in' : 'waitlist') + ' list?')) return;
   const res = await sb.from('waitlist').update({ status: 'Removed' }).eq('id', id);
