@@ -602,7 +602,7 @@ async function boot() {
   if (error || !gyms || !gyms.length) { show('waitView'); return; }
   gymId = gyms[0].id; gymTitle = gyms[0].name; $('gymName').textContent = gyms[0].name + ' — Students';
   const SE = await sb.from('seasons').select('*').order('sort'); seasons = SE.data || [];
-  myEmail = (session.user.email || '').toLowerCase(); await loadCoaches();
+  myEmail = (session.user.email || '').toLowerCase(); await loadCoaches(); rtStart();
   await loadStudents();
   weekOffset = ss.get('week', 0); stuGroup = ss.get('group', 'priv'); attMode = ss.get('attMode', 'privates');
   if (attMode === 'classes') setAttModeButtons();
@@ -613,8 +613,8 @@ async function boot() {
 let curTab = 'schedule';
 function go(tab) { curTab = tab; ss.set('tab', tab); if (tab === 'slots') { show('slotsView'); return loadSlots(); } if (tab === 'students') { show('studentsView'); render(); if (!weekRows.length) loadWeek(); return; } show(tab + 'View'); loadWeek(); }
 
-async function loadStudents() {
-  $('list').innerHTML = '<div class="center">Loading…</div>';
+async function loadStudents(quiet) {
+  if (!quiet) $('list').innerHTML = '<div class="center">Loading…</div>';
   const { data, error } = await sb.from('students').select('*').order('last_name').order('first_name');
   if (error) { $('list').innerHTML = '<div class="msg err">' + esc(error.message) + '</div>'; return; }
   students = data;
@@ -835,10 +835,10 @@ function timeVal(t) {
 }
 function shiftWeek(n) { weekOffset = n === 0 ? 0 : weekOffset + n; ss.set('week', weekOffset); loadWeek(); }
 
-async function loadWeek() {
+async function loadWeek(quiet) {
   const wd = weekDates(), ws = ymd(wd[0].date), we = ymd(wd[6].date), my = ++weekLoading;
   $('wkLabel').textContent = $('attWkLabel').textContent = $('payWkLabel').textContent = $('openWkLabel').textContent = (weekOffset === 0 ? 'This week · ' : '') + wd[0].label + ' – ' + wd[6].label;
-  $('schedGrid').innerHTML = $('attList').innerHTML = $('balList').innerHTML = $('openList').innerHTML = '<div class="center">Loading…</div>';
+  if (!quiet) $('schedGrid').innerHTML = $('attList').innerHTML = $('balList').innerHTML = $('openList').innerHTML = '<div class="center">Loading…</div>';
   const att = curTab === 'attendance' || curTab === 'payments' || curTab === 'dashboard', mStart = ymd(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [L, X, S, A, P, M, C, W] = await Promise.all([
     sb.from('private_lessons').select('*').not('status', 'in', '("Cancelled","Dropped")'),
@@ -1536,8 +1536,8 @@ function seasonWindow(se) {
   const startY = se.start_md > md ? y : y + 1, endY = se.start_md <= se.end_md ? startY : startY + 1;
   return { from: startY + '-' + se.start_md, to: endY + '-' + se.end_md, now: false };
 }
-async function loadSlots() {
-  $('slotDays').innerHTML = '<div class="center">Loading…</div>';
+async function loadSlots(quiet) {
+  if (!quiet) $('slotDays').innerHTML = '<div class="center">Loading…</div>';
   const [S, L, C] = await Promise.all([sb.from('available_slots').select('*'), sb.from('private_lessons').select('id,student_name,day,time,start_date,end_date,status,lesson_type'), sb.from('coaches').select('name').eq('active', true)]);
   if (S.error || L.error) { $('slotDays').innerHTML = '<div class="msg err">' + esc((S.error || L.error).message) + '</div>'; return; }
   allSlots = S.data; slotLessons = L.data.filter(l => !['Cancelled','Dropped'].includes(l.status)); slotCoaches = (C.data || []).map(c => c.name);
@@ -1829,6 +1829,36 @@ async function restoreLesson(id) {
   if (res.error) return alert(res.error.message);
   loadWeek();
 }
+
+// ================= AUTO-REFRESH (Supabase realtime) =================
+// Another phone changes something → quietly reload the current tab (same tab / week / scroll). Waits while a pop-up is open.
+let rtTimer = null, rtPending = false, rtHiddenAt = null, rtChan = null;
+const modalOpen = () => [...document.querySelectorAll('.ovl')].some(o => !o.classList.contains('hidden'));
+function rtQueue() { rtPending = true; clearTimeout(rtTimer); rtTimer = setTimeout(rtRun, 1200); }
+async function rtRun() {
+  if (!rtPending || document.hidden || !gymId) return;
+  if (modalOpen()) { rtTimer = setTimeout(rtRun, 2000); return; }   // try again after the pop-up closes
+  rtPending = false;
+  const y = window.scrollY;
+  if (ss.get('tab', '') === 'student') return;                       // don't touch a student form you might be editing
+  if (curTab === 'slots') await loadSlots(true);
+  else if (curTab === 'students') { await loadStudents(true); render(); }
+  else await loadWeek(true);
+  window.scrollTo(0, y);
+}
+function rtStart() {
+  if (rtChan) return;
+  rtChan = sb.channel('fl3-admin');
+  ['private_lessons','schedule_exceptions','attendance','payments','students','waitlist','available_slots','class_attendance','class_enrollments','coaches']
+    .forEach(t => rtChan.on('postgres_changes', { event: '*', schema: 'public', table: t }, rtQueue));
+  rtChan.subscribe();
+}
+// Back to the app after a while → refresh once to catch anything missed
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { rtHiddenAt = Date.now(); return; }
+  if (rtPending || (rtHiddenAt && Date.now() - rtHiddenAt > 30000)) { rtPending = true; rtRun(); }
+  rtHiddenAt = null;
+});
 
 boot();
 </script>
