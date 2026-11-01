@@ -89,13 +89,17 @@
   .slotpick { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0; } .slotpick label { display:flex; align-items:center; gap:5px; background:#f3f5f7; border-radius:16px; padding:5px 10px; font-size:13px; color:var(--text); }
   .slotpick input { width:auto; margin:0; }
   #tabs { overflow-x:auto; }
-  @media (max-width:640px) { nav { flex-wrap:wrap; row-gap:8px; } #tabs { order:3; width:100%; flex-wrap:wrap; gap:4px; } #tabs button { flex:1 0 30%; padding:7px 4px; } }
+  @media (max-width:640px) { nav { flex-wrap:wrap; row-gap:8px; } #tabs { order:3; width:100%; flex-wrap:wrap; gap:4px; } #tabs button { flex:1 0 22%; padding:7px 2px; font-size:13px; } }
+  .schip { display:inline-flex; flex-direction:column; align-items:flex-start; border-radius:8px; padding:5px 9px; margin:3px; font-size:12px; border:1px solid transparent; cursor:pointer; min-width:84px; }
+  .schip b { font-size:13px; } .schip.open { background:#EAF3DE; color:#3B6D11; border-color:#cfe5b8; } .schip.booked { background:#f3f1f8; color:#555; }
+  .schip.off { background:#fff; color:#aaa; border:1px dashed #ccc; } .schip.add { background:#fff; color:#1c7a5a; border:1px dashed var(--mint); justify-content:center; align-items:center; }
+  .schip small { font-size:11px; max-width:150px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .paid { font-size:11px; padding:3px 8px; border-radius:10px; background:#EAF3DE; color:#3B6D11; font-weight:600; } .btn.red { background:var(--danger); }
 </style>
 </head>
 <body>
 <nav><b>Flip<span>Lab</span> 3.0</b>
-  <div id="tabs" class="hidden"><button id="tabBtn_dashboard" onclick="go('dashboard')">Dashboard</button><button id="tabBtn_schedule" onclick="go('schedule')">Schedule</button><button id="tabBtn_attendance" onclick="go('attendance')">Attendance</button><button id="tabBtn_openings" onclick="go('openings')">Openings</button><button id="tabBtn_payments" onclick="go('payments')">Payments</button><button id="tabBtn_students" onclick="go('students')">Students</button></div>
+  <div id="tabs" class="hidden"><button id="tabBtn_dashboard" onclick="go('dashboard')">Dashboard</button><button id="tabBtn_schedule" onclick="go('schedule')">Schedule</button><button id="tabBtn_attendance" onclick="go('attendance')">Attendance</button><button id="tabBtn_openings" onclick="go('openings')">Openings</button><button id="tabBtn_payments" onclick="go('payments')">Payments</button><button id="tabBtn_students" onclick="go('students')">Students</button><button id="tabBtn_slots" onclick="go('slots')">Slots</button></div>
   <button id="outBtn" class="hidden" onclick="openAcct()">⚙ Account</button></nav>
 <main>
 
@@ -205,6 +209,15 @@
     <div class="card" style="padding:0;overflow:hidden" id="wlList"></div>
     <div class="sec">Drop-In <span id="diCount" style="font-weight:400;font-size:12px;color:#888"></span><button class="paybtn" style="margin-left:auto;background:var(--mint);color:#fff" onclick="openDropIn()">+ Add Drop-In</button></div>
     <div class="card" style="padding:0;overflow:hidden" id="diList"></div>
+  </section>
+
+  <!-- Slots (seasons + weekly time slots; replaces 2.0 v-slots + Summer slots) -->
+  <section id="slotsView" class="hidden">
+    <div class="stabs" id="seasonTabs" style="margin-top:4px"></div>
+    <div id="seasonInfo" style="font-size:13px;color:#666;margin-bottom:8px"></div>
+    <div class="qa"><button class="pri" onclick="openBulkSlots()">+ Bulk add</button><button onclick="openSeason(null)">+ New season</button><button id="seasonEditBtn" onclick="openSeason(curSeasonId)">✎ Edit season</button></div>
+    <div id="slotDays"><div class="center">Loading…</div></div>
+    <div style="font-size:12px;color:#888;margin:10px 2px">🟢 Open = no weekly lesson in it, so it's open for new signups. One-week cancellations don't count — those only show on Openings for drop-ins. Tap a slot to turn it off or remove it.<br>The signup page and website still read 2.0 until booking moves to 3.0.</div>
   </section>
 
   <!-- Payments (port of 2.0 v-payments / getOutstandingBalances) -->
@@ -361,6 +374,40 @@
   </div>
 </div>
 
+<!-- Slot actions -->
+<div class="ovl hidden" id="slotModal" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="mdl">
+    <div class="mh"><b id="sm_title">Slot</b><button class="x" onclick="$('slotModal').classList.add('hidden')">✕</button></div>
+    <div id="sm_body"></div>
+    <div id="sm_msg" class="msg"></div>
+  </div>
+</div>
+<!-- Bulk add slots (port of 2.0 modal-bulk-slots) -->
+<div class="ovl hidden" id="bulkModal" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="mdl">
+    <div class="mh"><b id="bk_title">Bulk add slots</b><button class="x" onclick="$('bulkModal').classList.add('hidden')">✕</button></div>
+    <label>Days</label><div class="slotpick" id="bk_days"></div>
+    <label>Coach</label><select id="bk_coach"></select>
+    <div class="row2"><div><label>Start time</label><select id="bk_start" onchange="bkPreview()"></select></div><div><label>End time</label><select id="bk_end" onchange="bkPreview()"></select></div></div>
+    <label>Interval between slots</label><select id="bk_int" onchange="bkPreview()"><option value="30">Every 30 minutes</option><option value="45">Every 45 minutes</option><option value="60">Every hour</option><option value="90">Every 90 minutes</option></select>
+    <div id="bk_prev" style="font-size:12px;color:#888;margin-bottom:10px;padding:8px 10px;background:#fffdf7;border:1px solid #f0ddb8;border-radius:8px"></div>
+    <button class="btn" onclick="saveBulk()">Create slots</button>
+    <div id="bk_msg" class="msg"></div>
+  </div>
+</div>
+<!-- Season edit -->
+<div class="ovl hidden" id="seasonModal" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="mdl">
+    <div class="mh"><b id="se_title">Season</b><button class="x" onclick="$('seasonModal').classList.add('hidden')">✕</button></div>
+    <label>Name</label><input id="se_name" placeholder="e.g. Winter break">
+    <div class="row2"><div><label>Starts (every year)</label><input type="date" id="se_start"></div><div><label>Ends (every year)</label><input type="date" id="se_end"></div></div>
+    <div style="font-size:11px;color:#888;margin:-6px 0 10px">Only the month and day are used — the season repeats every year.</div>
+    <div id="se_copyWrap"><label>Start it with the times from</label><select id="se_copy"></select></div>
+    <button class="btn" onclick="saveSeason()">Save season</button>
+    <div id="se_msg" class="msg"></div>
+  </div>
+</div>
+
 <!-- Quick pay (port of 2.0 modal-quick-pay) -->
 <div class="ovl hidden" id="payModal" onclick="if(event.target===this)this.classList.add('hidden')">
   <div class="mdl">
@@ -412,10 +459,10 @@ const $ = id => document.getElementById(id);
 const ss = { get(k, d) { try { const v = sessionStorage.getItem('fl3_' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
              set(k, v) { try { sessionStorage.setItem('fl3_' + k, JSON.stringify(v)); } catch (e) {} } };
 function show(view) {
-  ['loginView','waitView','studentsView','editView','scheduleView','attendanceView','paymentsView','openingsView','dashboardView'].forEach(v => $(v).classList.toggle('hidden', v !== view));
+  ['loginView','waitView','studentsView','editView','scheduleView','attendanceView','paymentsView','openingsView','dashboardView','slotsView'].forEach(v => $(v).classList.toggle('hidden', v !== view));
   $('outBtn').classList.toggle('hidden', view === 'loginView');
   $('tabs').classList.toggle('hidden', !gymId);
-  ['dashboard','schedule','attendance','openings','payments','students'].forEach(t => $('tabBtn_' + t).classList.toggle('on', view === t + 'View'));
+  ['dashboard','schedule','attendance','openings','payments','students','slots'].forEach(t => $('tabBtn_' + t).classList.toggle('on', view === t + 'View'));
 }
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
@@ -462,15 +509,16 @@ async function boot() {
   const { data: gyms, error } = await sb.from('gyms').select('id,name').limit(1);
   if (error || !gyms || !gyms.length) { show('waitView'); return; }
   gymId = gyms[0].id; $('gymName').textContent = gyms[0].name + ' — Students';
+  const SE = await sb.from('seasons').select('*').order('sort'); seasons = SE.data || [];
   await loadStudents();
   weekOffset = ss.get('week', 0); stuGroup = ss.get('group', 'priv'); attMode = ss.get('attMode', 'privates');
   if (attMode === 'classes') setAttModeButtons();
   const tab = ss.get('tab', 'dashboard'), sid = ss.get('student', null);
   if (tab === 'student' && sid && students.find(x => x.id === sid)) { curTab = 'students'; openEdit(sid); if (!weekRows.length) loadWeek(); }
-  else go(['dashboard','schedule','attendance','openings','payments','students'].includes(tab) ? tab : 'dashboard');
+  else go(['dashboard','schedule','attendance','openings','payments','students','slots'].includes(tab) ? tab : 'dashboard');
 }
 let curTab = 'schedule';
-function go(tab) { curTab = tab; ss.set('tab', tab); if (tab === 'students') { show('studentsView'); render(); if (!weekRows.length) loadWeek(); return; } show(tab + 'View'); loadWeek(); }
+function go(tab) { curTab = tab; ss.set('tab', tab); if (tab === 'slots') { show('slotsView'); return loadSlots(); } if (tab === 'students') { show('studentsView'); render(); if (!weekRows.length) loadWeek(); return; } show(tab + 'View'); loadWeek(); }
 
 async function loadStudents() {
   $('list').innerHTML = '<div class="center">Loading…</div>';
@@ -666,6 +714,14 @@ function renderSdPanel(t) {
 }
 
 // ================= SCHEDULE (port of 2.0 getPrivates + applyExceptionsToPrivates_ + renderDynScheduleList_) =================
+// ---- Seasons: each slot belongs to a season; the season whose dates cover a week's Monday supplies that week's slots ----
+let seasons = [];
+const mdIn = (md, a, b) => a <= b ? md >= a && md <= b : md >= a || md <= b;   // handles seasons that wrap past Dec 31
+// When seasons overlap, the newer one (higher sort) wins, e.g. a Winter break inside the School year
+const seasonFor = dateStr => { const md = String(dateStr).slice(5, 10); return seasons.filter(x => mdIn(md, x.start_md, x.end_md)).sort((a, b) => (b.sort || 0) - (a.sort || 0))[0] || seasons[0] || null; };
+const slotSeason = sl => sl.season_id || (sl.is_summer ? 'fliplab:summer' : 'fliplab:school');
+function slotsForWeek() { const se = seasonFor(weekStartStr()); return weekSlots.filter(sl => !se || slotSeason(sl) === se.id); }
+const isExtraSlot = sl => { const se = seasons.find(x => x.id === slotSeason(sl)); return !!se && /summer/i.test(se.name) && !(sl.extra || {}).copied_from_school_year; };
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 let attMode = 'privates', clsSched = [], clsRoster = [], clsAtt = [];
 let allLessons = [];
@@ -751,14 +807,9 @@ function applyExceptions(lessons, exs) {
 function renderWeek() {
   const wd = weekDates(), ws = ymd(wd[0].date), md = ws.slice(5);
   const coach = $('coachFilter').value, q = $('schedSearch').value.trim().toLowerCase();
-  const isSummer = md >= '05-25' && md <= '08-31';
   const todayName = weekOffset === 0 ? DAYS[(new Date().getDay() + 6) % 7] : '';
   const live = weekRows.filter(p => p.status !== 'Cancelled' && (!coach || p.coach === coach) && (!q || (p.student_name || '').toLowerCase().includes(q)));
-  let slots = weekSlots.filter(s => !s.is_summer && (!coach || s.coach === coach));
-  if (isSummer) {
-    const have = new Set(slots.map(s => s.day + '|' + s.time));
-    weekSlots.filter(s => s.is_summer && (!coach || s.coach === coach) && !have.has(s.day + '|' + s.time)).forEach(s => slots.push(s));
-  }
+  const slots = slotsForWeek().filter(s => !coach || s.coach === coach);
   const photo = {}; students.forEach(s => photo[s.id] = (s.extra || {}).PhotoPermission || '');
   const pills = p => (p.lesson_type === 'Shared' && !p.pair_id ? '<span class="tag t-shared">Shared</span>' : '')
     + (photo[p.student_id] === 'No' ? '<span class="tag t-nophoto">No Photo</span>' : photo[p.student_id] === 'Yes' ? '<span class="tag t-photo">Photo OK</span>' : '')
@@ -770,7 +821,7 @@ function renderWeek() {
     const byTime = {};
     live.forEach(p => { if (p.day === d.name) (byTime[p.time] = byTime[p.time] || []).push(p); });
     const times = {};
-    slots.filter(s => s.day === d.name).forEach(s => { if (s.time) times[s.time] = { time: s.time, coach: s.coach || '', summer: !!s.is_summer }; });
+    slots.filter(s => s.day === d.name).forEach(s => { if (s.time) times[s.time] = { time: s.time, coach: s.coach || '', summer: isExtraSlot(s) }; });
     Object.keys(byTime).forEach(t => { if (!times[t]) times[t] = { time: t, coach: '' }; });
     const list = Object.values(times).sort((a, b) => timeVal(a.time) - timeVal(b.time));
     html += `<div class="dayhd${d.name === todayName ? ' today' : ''}">${d.name}<span>${d.label}</span></div><div class="card" style="padding:0;margin-bottom:6px;border-radius:0 0 10px 10px;overflow:hidden">`;
@@ -1366,6 +1417,125 @@ async function loadDashHist() {
   if (curTab === 'dashboard') renderDash();
 }
 
+// ================= SLOTS =================
+let allSlots = [], slotLessons = [], curSeasonId = null, slotCoaches = [];
+const seasonLabel = se => { const f = md => new Date('2026-' + md + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); return f(se.start_md) + ' – ' + f(se.end_md); };
+// Window of the season's current (or next) run, used to decide which weekly lessons fill its slots
+function seasonWindow(se) {
+  const t = new Date(), y = t.getFullYear(), today = ymd(t), md = today.slice(5);
+  if (mdIn(md, se.start_md, se.end_md)) {   // in season now: today → end
+    const endY = se.start_md <= se.end_md || md <= se.end_md ? y : y + 1;
+    return { from: today, to: endY + '-' + se.end_md, now: true };
+  }
+  const startY = se.start_md > md ? y : y + 1, endY = se.start_md <= se.end_md ? startY : startY + 1;
+  return { from: startY + '-' + se.start_md, to: endY + '-' + se.end_md, now: false };
+}
+async function loadSlots() {
+  $('slotDays').innerHTML = '<div class="center">Loading…</div>';
+  const [S, L, C] = await Promise.all([sb.from('available_slots').select('*'), sb.from('private_lessons').select('id,student_name,day,time,start_date,end_date,status,lesson_type'), sb.from('coaches').select('name').eq('active', true)]);
+  if (S.error || L.error) { $('slotDays').innerHTML = '<div class="msg err">' + esc((S.error || L.error).message) + '</div>'; return; }
+  allSlots = S.data; slotLessons = L.data.filter(l => !['Cancelled','Dropped'].includes(l.status)); slotCoaches = (C.data || []).map(c => c.name);
+  if (!curSeasonId || !seasons.find(x => x.id === curSeasonId)) curSeasonId = ss.get('season', (seasonFor(ymd(new Date())) || {}).id);
+  renderSlots();
+}
+function renderSlots() {
+  const now = seasonFor(ymd(new Date()));
+  $('seasonTabs').innerHTML = seasons.map(se => `<button class="${se.id === curSeasonId ? 'on' : ''}" onclick="curSeasonId='${esc(se.id)}';ss.set('season',curSeasonId);renderSlots()">${esc(se.name)}${now && se.id === now.id ? ' <span style="font-size:10px;background:var(--mint);color:#fff;border-radius:8px;padding:1px 6px">now</span>' : ''}</button>`).join('');
+  const se = seasons.find(x => x.id === curSeasonId); if (!se) { $('slotDays').innerHTML = '<div class="center">No seasons yet</div>'; return; }
+  const win = seasonWindow(se);
+  // Weekly lessons that run during this season's window fill its slots (one-week cancellations don't matter here)
+  const les = slotLessons.filter(l => (!l.end_date || l.end_date > win.from) && (!l.start_date || l.start_date <= win.to));
+  const mine = allSlots.filter(x => slotSeason(x) === se.id);
+  const who = sl => les.filter(l => l.day === sl.day && l.time === sl.time);
+  const open = mine.filter(x => x.active !== false && !who(x).length).length, booked = mine.filter(x => who(x).length).length;
+  $('seasonInfo').innerHTML = `<b>${esc(se.name)}</b> · ${seasonLabel(se)} · ${win.now ? 'running now' : 'next starts ' + new Date(win.from + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}<br>${mine.length} slots · <b style="color:#3B6D11">${open} open for signup</b> · ${booked} booked${mine.some(x => x.active === false) ? ' · ' + mine.filter(x => x.active === false).length + ' off' : ''}`;
+  // Lesson times with no slot (shown so nothing is hidden)
+  $('slotDays').innerHTML = DAYS.map(d => {
+    const ds = mine.filter(x => x.day === d), extraTimes = [...new Set(les.filter(l => l.day === d && !ds.some(x => x.time === l.time)).map(l => l.time))];
+    const items = ds.map(x => ({ t: timeVal(x.time), h: (() => { const w = who(x), off = x.active === false;
+      return `<div class="schip ${w.length ? 'booked' : off ? 'off' : 'open'}" onclick="slotTap('${esc(x.id)}')"><b>${esc(x.time)}</b><small>${w.length ? esc(w.map(l => l.student_name.split(' ')[0]).join(', ')) : off ? 'Off' : 'Open'}${isExtraSlot(x) ? ' ☀️' : ''}</small></div>`; })() }))
+      .concat(extraTimes.map(t => ({ t: timeVal(t), h: `<div class="schip booked" style="border:1px dashed #d8b4b4" onclick="addSlotAt('${d}','${esc(t)}')"><b>${esc(t)}</b><small>${esc(les.filter(l => l.day === d && l.time === t).map(l => l.student_name.split(' ')[0]).join(', '))} · no slot</small></div>` })))
+      .sort((a, b) => a.t - b.t);
+    return `<div class="dayhd">${d}<span>${ds.length} slot${ds.length === 1 ? '' : 's'}</span></div><div class="card" style="border-radius:0 0 10px 10px;padding:8px;margin-bottom:6px">${items.map(x => x.h).join('')}<div class="schip add" onclick="addSlotAt('${d}','')"><b>+ Add</b></div></div>`;
+  }).join('');
+}
+function slotTap(id) {
+  const x = allSlots.find(z => z.id === id); if (!x) return;
+  const se = seasons.find(z => z.id === slotSeason(x)), win = seasonWindow(se);
+  const w = slotLessons.filter(l => l.day === x.day && l.time === x.time && (!l.end_date || l.end_date > win.from) && (!l.start_date || l.start_date <= win.to));
+  $('sm_title').textContent = x.day + ' ' + x.time + ' · ' + se.name; $('sm_msg').textContent = '';
+  $('sm_body').innerHTML = `<div style="font-size:14px;margin-bottom:10px">${w.length ? 'Booked every week: <b>' + esc(w.map(l => l.student_name).join(', ')) + '</b>' : x.active === false ? 'Turned off — not offered to new families.' : '<span style="color:#3B6D11;font-weight:600">Open for signup</span>'}</div>
+    <label>Coach</label><select id="sm_coach" onchange="slotSet('${esc(id)}',{coach:this.value})">${opts(slotCoaches.concat('TBD'), x.coach || 'TBD')}</select>
+    <div class="btnrow"><button class="btn ghost" style="flex:1" onclick="slotSet('${esc(id)}',{active:${x.active === false}})">${x.active === false ? 'Turn on' : 'Turn off'}</button>
+    <button class="btn red" style="flex:1" onclick="slotRemove('${esc(id)}')">Remove slot</button></div>
+    <div style="font-size:11px;color:#888;margin-top:8px">Turning off or removing a slot never touches lessons already in it.</div>`;
+  $('slotModal').classList.remove('hidden');
+}
+async function slotSet(id, ch) {
+  const r = await sb.from('available_slots').update(ch).eq('id', id); if (r.error) { $('sm_msg').className = 'msg err'; $('sm_msg').textContent = r.error.message; return; }
+  Object.assign(allSlots.find(z => z.id === id), ch); $('slotModal').classList.add('hidden'); renderSlots();
+}
+async function slotRemove(id) {
+  const x = allSlots.find(z => z.id === id); if (!x || !confirm('Remove the ' + x.day + ' ' + x.time + ' slot from ' + (seasons.find(z => z.id === slotSeason(x)) || {}).name + '?')) return;
+  const r = await sb.from('available_slots').delete().eq('id', id); if (r.error) return alert(r.error.message);
+  allSlots = allSlots.filter(z => z !== x); $('slotModal').classList.add('hidden'); renderSlots();
+}
+function addSlotAt(day, time) {
+  $('sm_title').textContent = 'Add slot · ' + day; $('sm_msg').textContent = '';
+  $('sm_body').innerHTML = `<label>Time</label><select id="as_time">${opts(TIMES, time || '4:00 PM')}</select><label>Coach</label><select id="as_coach">${opts(slotCoaches.concat('TBD'), slotCoaches[0] || 'TBD')}</select>
+    <button class="btn" onclick="saveSlots([{day:'${day}',time:$('as_time').value,coach:$('as_coach').value}]).then(n=>{if(n!==null)$('slotModal').classList.add('hidden')})">Add slot</button>`;
+  $('slotModal').classList.remove('hidden');
+}
+// Insert slots into the current season, skipping day+times it already has; returns how many were added
+async function saveSlots(list) {
+  const have = new Set(allSlots.filter(z => slotSeason(z) === curSeasonId).map(z => z.day + '|' + z.time));
+  const add = list.filter(x => !have.has(x.day + '|' + x.time)).map(x => ({ ...x, gym_id: gymId, season_id: curSeasonId, is_summer: /summer/i.test((seasons.find(z => z.id === curSeasonId) || {}).name || ''), active: true, booked: false }));
+  if (!add.length) { alert('Those times are already in this season.'); return 0; }
+  const r = await sb.from('available_slots').insert(add).select(); if (r.error) { alert(r.error.message); return null; }
+  allSlots = allSlots.concat(r.data); renderSlots(); return r.data.length;
+}
+function openBulkSlots() {
+  const se = seasons.find(z => z.id === curSeasonId); $('bk_title').textContent = 'Bulk add slots · ' + (se ? se.name : '');
+  $('bk_days').innerHTML = DAYS.map(d => `<label><input type="checkbox" class="bk-day" value="${d}" onchange="bkPreview()">${SHORT[d]}</label>`).join('');
+  $('bk_coach').innerHTML = opts(slotCoaches.concat('TBD'), slotCoaches[0] || 'TBD');
+  $('bk_start').innerHTML = opts(TIMES, '4:00 PM'); $('bk_end').innerHTML = opts(TIMES, '8:00 PM'); $('bk_msg').textContent = '';
+  bkPreview(); $('bulkModal').classList.remove('hidden');
+}
+function bkTimes() { const a = timeVal($('bk_start').value), b = timeVal($('bk_end').value), step = +$('bk_int').value, out = []; for (let m = a; m <= b; m += step) out.push(TIMES.find(t => timeVal(t) === m) || ''); return out.filter(Boolean); }
+function bkPreview() {
+  const days = [...document.querySelectorAll('.bk-day:checked')].map(x => x.value), t = bkTimes();
+  $('bk_prev').textContent = days.length && t.length ? days.length * t.length + ' slots: ' + days.map(d => SHORT[d]).join(', ') + ' at ' + t.join(', ') + ' (any that already exist are skipped)' : 'Pick days and times to preview how many slots will be created.';
+}
+async function saveBulk() {
+  const days = [...document.querySelectorAll('.bk-day:checked')].map(x => x.value), t = bkTimes(), coach = $('bk_coach').value;
+  if (!days.length || !t.length) { $('bk_msg').className = 'msg err'; $('bk_msg').textContent = 'Pick at least one day and a time range.'; return; }
+  const n = await saveSlots(days.flatMap(d => t.map(time => ({ day: d, time, coach }))));
+  if (n) $('bulkModal').classList.add('hidden');
+}
+function openSeason(id) {
+  const se = seasons.find(z => z.id === id), y = new Date().getFullYear();
+  $('se_title').textContent = se ? 'Edit season' : 'New season'; $('se_msg').textContent = '';
+  $('se_name').value = se ? se.name : ''; $('se_start').value = se ? y + '-' + se.start_md : ''; $('se_end').value = se ? y + '-' + se.end_md : '';
+  $('se_copyWrap').classList.toggle('hidden', !!se);
+  $('se_copy').innerHTML = '<option value="">Start empty</option>' + seasons.map(z => `<option value="${esc(z.id)}">${esc(z.name)}</option>`).join('');
+  $('seasonModal').dataset.id = id || ''; $('seasonModal').classList.remove('hidden');
+}
+async function saveSeason() {
+  const id = $('seasonModal').dataset.id, name = $('se_name').value.trim(), a = $('se_start').value.slice(5), b = $('se_end').value.slice(5), m = $('se_msg');
+  m.className = 'msg err';
+  if (!name || !a || !b) return m.textContent = 'Name, start and end are required.';
+  const overlap = seasons.filter(z => z.id !== id && (mdIn(a, z.start_md, z.end_md) || mdIn(b, z.start_md, z.end_md)));
+  if (overlap.length && !confirm('These dates overlap ' + overlap.map(z => z.name).join(', ') + '.\n\nFor those weeks the newest season is used. Save anyway?')) return;
+  let r;
+  if (id) r = await sb.from('seasons').update({ name, start_md: a, end_md: b }).eq('id', id).select().single();
+  else r = await sb.from('seasons').insert({ gym_id: gymId, name, start_md: a, end_md: b, sort: seasons.length + 1 }).select().single();
+  if (r.error) return m.textContent = r.error.message;
+  if (id) Object.assign(seasons.find(z => z.id === id), r.data); else { seasons.push(r.data); curSeasonId = r.data.id; ss.set('season', curSeasonId);
+    const from = $('se_copy').value;
+    if (from) { const src = allSlots.filter(z => slotSeason(z) === from); if (src.length) await saveSlots(src.map(z => ({ day: z.day, time: z.time, coach: z.coach }))); } }
+  $('seasonModal').classList.add('hidden'); renderSlots();
+}
+
 // ================= OPENINGS (port of 2.0 renderOpenings_ / renderWaitlistPanel_ / makeup text) =================
 const SHORT = { Monday:'Mon', Tuesday:'Tue', Wednesday:'Wed', Thursday:'Thu', Friday:'Fri', Saturday:'Sat', Sunday:'Sun' };
 const slotPast = (day, time) => { const d = dateFor(day); if (!d) return false; const t = new Date(d + 'T00:00:00'); t.setMinutes(timeVal(time)); return t < new Date(); };
@@ -1379,9 +1549,7 @@ const matchesSlot = (w, day, time) => {
 };
 function computeOpenings() {
   // Same slots the Schedule shows as Open or Away (nobody live in that slot this week), minus slots already past
-  const md = weekStartStr().slice(5), isSummer = md >= '05-25' && md <= '08-31';
-  let slots = weekSlots.filter(s => !s.is_summer);
-  if (isSummer) { const have = new Set(slots.map(s => s.day + '|' + s.time)); weekSlots.filter(s => s.is_summer && !have.has(s.day + '|' + s.time)).forEach(s => slots.push(s)); }
+  const slots = slotsForWeek();
   const busy = new Set(weekRows.filter(p => p.status !== 'Cancelled').map(p => p.day + '|' + p.time)), seen = new Set();
   return slots.filter(s => { const k = s.day + '|' + s.time; if (busy.has(k) || seen.has(k) || slotPast(s.day, s.time)) return false; seen.add(k); return true; })
     .sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || timeVal(a.time) - timeVal(b.time));
@@ -1394,7 +1562,7 @@ function renderOpen() {
   $('openList').innerHTML = openSlots.length ? openSlots.map((o, i) => {
     const d = weekDates().find(x => x.name === o.day), m = live.filter(w => matchesSlot(w, o.day, o.time));
     return `<div class="arow"><div class="who"><b>${SHORT[o.day]} ${d.label} · ${esc(o.time)}</b><small>${esc(o.coach || '')}</small></div>
-      ${o.is_summer ? '<span class="tag t-summer">☀️ Summer</span>' : ''}
+      ${isExtraSlot(o) ? '<span class="tag t-summer">☀️ Summer</span>' : ''}
       <button class="mbtn ${m.length ? 'on' : 'off'}" onclick="$('om${i}').classList.toggle('hidden')">${m.length ? '✓ ' + m.length + ' match' + (m.length === 1 ? '' : 'es') : 'No matches'}</button>
       <button class="paybtn" style="background:var(--mint-soft);color:#1c7a5a" onclick="openAdd('${o.day}','${esc(o.time)}','${esc(o.coach || '')}',{scope:'week'})">Book Student</button>
       <div id="om${i}" class="mlist hidden">${m.length ? m.map(w => `<div>${esc(w.student_name)} <small style="color:#888">${esc(w.status)}</small> ·
@@ -1433,7 +1601,7 @@ function convertWl(id) {
 function openDropIn() {
   diPick = null; $('di_search').value = '';
   $('di_any').checked = false; $('di_prefs').classList.remove('hidden'); $('di_notes').value = ''; $('di_info').textContent = ''; $('di_msg').textContent = '';
-  $('di_days').innerHTML = DAYS.filter(d => weekSlots.some(x => x.day === d && !x.is_summer)).map(d => `<label><input type="checkbox" class="di-day" value="${d}" onchange="diTimes()">${SHORT[d]}</label>`).join('');
+  $('di_days').innerHTML = DAYS.filter(d => slotsForWeek().some(x => x.day === d)).map(d => `<label><input type="checkbox" class="di-day" value="${d}" onchange="diTimes()">${SHORT[d]}</label>`).join('');
   $('di_times').innerHTML = '';
   $('diModal').classList.remove('hidden');
 }
@@ -1453,7 +1621,7 @@ function diInfo() {
 function diTimes() {
   const keep = new Set([...document.querySelectorAll('.di-time:checked')].map(x => x.value));
   $('di_times').innerHTML = [...document.querySelectorAll('.di-day:checked')].map(c => {
-    const times = [...new Set(weekSlots.filter(x => x.day === c.value && !x.is_summer).map(x => x.time))].sort((a, b) => timeVal(a) - timeVal(b));
+    const times = [...new Set(slotsForWeek().filter(x => x.day === c.value).map(x => x.time))].sort((a, b) => timeVal(a) - timeVal(b));
     return `<label>${c.value} times</label><div class="slotpick">${times.map(t => { const k = c.value + ' ' + t; return `<label><input type="checkbox" class="di-time" value="${esc(k)}"${keep.has(k) ? ' checked' : ''}>${esc(t)}</label>`; }).join('')}</div>`;
   }).join('');
 }
