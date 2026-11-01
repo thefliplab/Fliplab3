@@ -423,7 +423,7 @@ function applyExceptions(lessons, exs) {
       attached[ex.id] = true;
       return out.push({ ...p, day: ex.new_day || p.day, time: ex.new_time || p.time, coach: ex.new_coach || p.coach, exType: 'Move' });
     }
-    if (ex.type === 'PriceOverride') return out.push({ ...p, lesson_type: ex.lesson_type || 'Solo', exType: 'PriceOverride' });
+    if (ex.type === 'PriceOverride') return out.push({ ...p, lesson_type: ex.lesson_type || 'Solo', price: priceFor(p.duration || '30 min', ex.lesson_type || 'Solo'), exType: 'PriceOverride' });
     if (ex.type === 'Add') {
       out.push(p); attached[ex.id] = true;
       return out.push({ ...p, id: p.id + '_EX_' + ex.id, day: ex.new_day || p.day, time: ex.new_time || p.time, coach: ex.new_coach || p.coach, exType: 'Add' });
@@ -439,7 +439,8 @@ function applyExceptions(lessons, exs) {
   // Auto "Shared" when 2+ active lessons share a day+time (unless a PriceOverride kept it Solo)
   const cnt = {};
   out.forEach(p => { if (p.status !== 'Cancelled') { const k = p.day + '|' + p.time; cnt[k] = (cnt[k] || 0) + 1; } });
-  out.forEach(p => { if (p.status !== 'Cancelled' && p.exType !== 'PriceOverride' && cnt[p.day + '|' + p.time] >= 2) p.lesson_type = 'Shared'; });
+  // Same as 2.0 getPrivates: a shared slot always uses the Shared price (stored price is ignored)
+  out.forEach(p => { if (p.status !== 'Cancelled' && p.exType !== 'PriceOverride' && cnt[p.day + '|' + p.time] >= 2) { p.lesson_type = 'Shared'; p.price = priceFor(p.duration || '30 min', 'Shared'); } });
   return out;
 }
 
