@@ -280,10 +280,6 @@
         <div><label>Parent email</label><input id="f_parent_email" type="email"></div>
       </div>
       <div class="row2">
-        <div><label>Emergency contact</label><input id="f_emergency_name"></div>
-        <div><label>Emergency phone</label><input id="f_emergency_phone" type="tel" inputmode="numeric" placeholder="(513) 555-1234" oninput="this.value=typingPhone(this.value)"></div>
-      </div>
-      <div class="row2">
         <div><label>School</label><input id="x_School"></div>
         <div><label>Photo permission</label><select id="x_PhotoPermission"><option value=""></option><option>Yes</option><option>No</option></select></div>
       </div>
@@ -470,7 +466,7 @@ const sb = supabase.createClient('https://angmtyojkwlrefxpcgoa.supabase.co', 'sb
 // Phone layout: (513) 555-1234. 10 digits (or 11 starting with 1) get formatted; anything else is left as typed.
 function fmtPhone(v) { v = String(v || '').trim(); let d = v.replace(/\D/g, ''); if (d.length === 11 && d[0] === '1') d = d.slice(1); return d.length === 10 ? '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6) : v; }
 function typingPhone(v) { let d = v.replace(/\D/g, ''); if (d.length > 10) return v; return !d ? '' : d.length < 4 ? '(' + d : d.length < 7 ? '(' + d.slice(0, 3) + ') ' + d.slice(3) : '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6); }
-const FIELDS = ['first_name','last_name','dob','skill_level','parent_name','parent_phone','parent_email','emergency_name','emergency_phone','notes'];
+const FIELDS = ['first_name','last_name','dob','skill_level','parent_name','parent_phone','parent_email','notes'];
 const OFF = ['Inactive','Dropped'];
 const isOn = s => !OFF.includes(s.status);
 let mode = 'in', gymId = null, students = [], editingId = null;
