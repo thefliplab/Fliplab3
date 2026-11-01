@@ -827,7 +827,9 @@ function renderWeek() {
   const pills = p => (p.lesson_type === 'Shared' && !p.pair_id ? '<span class="tag t-shared">Shared</span>' : '')
     + (photo[p.student_id] === 'No' ? '<span class="tag t-nophoto">No Photo</span>' : photo[p.student_id] === 'Yes' ? '<span class="tag t-photo">Photo OK</span>' : '')
     + (p.exType === 'Move' ? '<span class="tag t-ex">Moved</span>' : p.exType === 'Add' ? '<span class="tag t-ex">This week</span>' : '');
-  const row = (p, showTime) => `<div class="srow tap" onclick="openLesson('${esc(p.id)}')"><div class="tm">${showTime ? esc(p.time) : ''}</div><div class="nm"><b>${esc(p.student_name)}</b>${pills(p)}</div><div class="co">${esc(p.coach || 'TBD')}</div></div>`;
+  const row = (p, showTime) => `<div class="srow tap" onclick="openLesson('${esc(p.id)}')"><div class="tm">${showTime ? esc(p.time) : ''}</div><div class="nm"><b>${esc(p.student_name)}</b>${pills(p)}${covering(p)}</div><div class="co">${esc(p.coach || 'TBD')}</div></div>`;
+  // One-week fill sitting in a slot whose regular is Away → "covering for <name>"
+  const covering = p => { if (!addExId(p.id)) return ''; const a = weekRows.find(r => r.status === 'Cancelled' && r.day === p.day && r.time === p.time); return a ? `<i style="font-size:11px;color:#999">covering for ${esc(a.student_name)}</i>` : ''; };
 
   let html = '';
   wd.forEach(d => {
