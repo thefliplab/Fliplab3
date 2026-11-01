@@ -45,4 +45,8 @@ where lesson_type = 'Shared' and price = '$40' and coalesce(duration, '30 min') 
 -- 3. One waitlist status: "Waiting" → "Waitlist"
 update waitlist set status = 'Waitlist' where status = 'Waiting';
 
+-- 4. Active but never coming back (Steve, Oct 31): Stella Turner, Lily Braun → Inactive
+--    (Lilah Grace, Emma Ohmer, Riley Stahl stay Active with no lesson booked)
+update students set status = 'Inactive', active = false where id in ('STU019', 'STU1775432882917_4') and status = 'Active';
+
 commit;
