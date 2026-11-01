@@ -71,4 +71,7 @@ delete from schedule_exceptions where lesson_id = 'PL-1788970282640';
 delete from private_lessons where id = 'PL-1788970282640';
 delete from coaches where id = 'C1789822214285';
 
+-- 8. Old coaches (Steve, Nov 1): Coach Lexi and test coach — no lessons
+delete from coaches where id in ('C1773883432705', 'C1774599806937');
+
 commit;

@@ -519,7 +519,7 @@ const mainCoach = () => (coachRows.find(c => c.active && c.email && c.email.toLo
 function renderCoaches() {
   $('co_name').value = $('co_phone').value = $('co_spec').value = ''; $('coMsg').textContent = '';
   $('coachList').innerHTML = coachRows.map(c => `<div class="arow" style="padding:6px 0"><div class="who"><b style="${c.active ? '' : 'color:#aaa'}">${esc(c.name)}</b><small>${esc([c.specialties, c.phone].filter(Boolean).join(' · '))}</small></div>
-    <button class="paybtn" style="${c.active ? 'background:var(--mint-soft);color:#1c7a5a' : 'background:#eee;color:#888'}" onclick="toggleCoach('${esc(c.id)}')">${c.active ? 'Active' : 'Inactive'}</button></div>`).join('') || '<small style="color:#aaa">No coaches yet</small>';
+    <button class="paybtn" style="${c.active ? 'background:var(--mint-soft);color:#1c7a5a' : 'background:#eee;color:#888'}" onclick="toggleCoach('${esc(c.id)}')">${c.active ? 'Active' : 'Inactive'}</button><button class="paybtn" style="background:#FCEBEB;color:#A32D2D;margin-left:6px" title="Delete" onclick="deleteCoach('${esc(c.id)}')">🗑</button></div>`).join('') || '<small style="color:#aaa">No coaches yet</small>';
 }
 async function addCoach() {
   const name = $('co_name').value.trim(), m = $('coMsg'); m.className = 'msg err';
@@ -528,6 +528,18 @@ async function addCoach() {
   const r = await sb.from('coaches').insert({ id: 'C' + Date.now(), gym_id: gymId, name, phone: $('co_phone').value.trim() || null, specialties: $('co_spec').value.trim() || null, active: true });
   if (r.error) return m.textContent = r.error.message;
   await loadCoaches(); renderCoaches(); $('coMsg').className = 'msg'; $('coMsg').textContent = '✓ ' + name + ' added';
+}
+async function deleteCoach(id) {
+  const c = coachRows.find(x => x.id === id); if (!c) return;
+  // Never leave lessons pointing at a coach that no longer exists
+  const r = await sb.from('private_lessons').select('day,time,student_name,end_date').eq('coach', c.name);
+  if (r.error) return alert(r.error.message);
+  const today = ymd(new Date()), live = (r.data || []).filter(l => !l.end_date || l.end_date > today);
+  if (live.length) return alert(c.name + ' still has ' + live.length + ' lesson' + (live.length === 1 ? '' : 's') + ':\n' + live.slice(0, 5).map(l => '• ' + l.student_name + ' ' + l.day + ' ' + l.time).join('\n') + '\n\nMove or cancel them first, or mark ' + c.name + ' Inactive instead.');
+  if (!confirm('Delete ' + c.name + '?')) return;
+  const d = await sb.from('coaches').delete().eq('id', id);
+  if (d.error) return alert(d.error.message);
+  coachRows = coachRows.filter(x => x !== c); renderCoaches();
 }
 async function toggleCoach(id) {
   const c = coachRows.find(x => x.id === id); if (!c) return;
