@@ -355,6 +355,7 @@
       <div class="row2"><div><label>Other coaches' color</label><select id="cs_color"></select></div>
         <div><label>&nbsp;</label><label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="cs_class" style="width:auto"> Classes on calendar</label></div></div>
       <button class="btn" onclick="saveCal()">Save calendar settings</button>
+      <button class="btn ghost" style="margin-top:8px" onclick="testText()">📱 Send test text to my phone</button>
       <div id="cs_msg" class="msg"></div>
     </div>
     <div style="border-top:1px solid #eee;margin-top:14px;padding-top:10px"><b>Coaches</b>
@@ -592,6 +593,14 @@ async function loadCal() {
   $('cs_color').innerHTML = GCOLORS.map(([v, n]) => `<option value="${v}"${v === (c.other_color || '4') ? ' selected' : ''}>${n}</option>`).join('');
   $('cs_class').checked = c.class_on !== false;
   $('cs_msg').className = 'msg'; $('cs_msg').textContent = c.last_result ? 'Last sync ' + new Date(c.last_run_at).toLocaleString() + ': ' + c.last_result : (c.mode && c.mode !== 'off' ? 'Waiting for the first sync…' : '');
+}
+async function testText() {
+  const me = coachRows.find(c => c.name === mainCoach()) || {}, m = $('cs_msg');
+  const to = prompt('Send a test text to:', me.phone || ''); if (!to) return;
+  m.className = 'msg'; m.textContent = 'Sending test text…';
+  const r = await sb.functions.invoke('sms-send', { body: { messages: [{ to, text: 'FlipLab 3.0 test text ✓', family: 'Test' }] } });
+  const err = r.error ? ((r.data && r.data.error) || r.error.message) : r.data.failed ? r.data.results[0].error : '';
+  m.className = err ? 'msg err' : 'msg'; m.textContent = err ? 'Not sent: ' + err : '✓ Handed to your phone — the text should arrive in a few seconds';
 }
 async function saveCal() {
   const mode = $('cs_mode').value, m = $('cs_msg');

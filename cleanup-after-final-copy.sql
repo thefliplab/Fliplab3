@@ -87,4 +87,7 @@ update waitlist set parent_phone = pg_temp.fmt_phone(parent_phone) where parent_
 --     Runs after step 2, so its $40 → $30 shared change is undone here.
 update private_lessons set lesson_type = 'Solo', share_type = 'No', price = '$40' where id = 'PL-1788970306229';
 
+-- 11. Coach Steve's cell is (234) 817-7491 (Steve, Nov 1) — used for claim alerts and test texts.
+update coaches set phone = '(234) 817-7491' where id = 'C1773883337653';
+
 commit;
