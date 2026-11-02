@@ -20,7 +20,7 @@ function applyExceptions(lessons, exs) {
       out.push({ ...p, status: 'Cancelled', exType: 'MoveOrigin' });
       attached[ex.id] = true;
       // A one-week move can also change the lesson type (e.g. Shared → Solo when filling an empty slot) — price follows unless ★ special
-      const t = ex.lesson_type, typ = t ? { lesson_type: t, ...(isSpecial(p) ? {} : { price: priceFor(p.duration || '30 min', t) }) } : {};
+      const t = ex.lesson_type, typ = t ? { lesson_type: t, typeSet: true, ...(isSpecial(p) ? {} : { price: priceFor(p.duration || '30 min', t) }) } : {};
       return out.push({ ...p, day: ex.new_day || p.day, time: ex.new_time || p.time, coach: ex.new_coach || p.coach, ...typ, exType: 'Move' });
     }
     if (ex.type === 'PriceOverride') return out.push({ ...p, lesson_type: ex.lesson_type || 'Solo', price: priceFor(p.duration || '30 min', ex.lesson_type || 'Solo'), exType: 'PriceOverride' });
@@ -41,6 +41,11 @@ function applyExceptions(lessons, exs) {
   out.forEach(p => { if (p.status !== 'Cancelled') { const k = p.day + '|' + p.time + '|' + (p.coach || ''); cnt[k] = (cnt[k] || 0) + 1; } });
   // Same as 2.0 getPrivates: a shared slot always uses the Shared price (stored price is ignored)
   out.forEach(p => { if (p.status !== 'Cancelled' && p.exType !== 'PriceOverride' && cnt[p.day + '|' + p.time + '|' + (p.coach || '')] >= 2) { p.lesson_type = 'Shared'; if (!isSpecial(p)) p.price = priceFor(p.duration || '30 min', 'Shared'); } });
+  // Split pair → Solo price: a Shared lesson left alone in its slot (Steve moved one kid out, or the partner's lesson ended) bills as Solo.
+  // A partner's one-week Cancel still holds their seat (stays Shared); a type picked in the pop-up (PriceOverride / Move type) wins.
+  const held = {};
+  out.forEach(p => { if (p.status !== 'Cancelled' || p.exType === 'Cancel') { const k = p.day + '|' + p.time + '|' + (p.coach || ''); held[k] = (held[k] || 0) + 1; } });
+  out.forEach(p => { if (p.status !== 'Cancelled' && p.lesson_type === 'Shared' && p.exType !== 'PriceOverride' && !p.typeSet && held[p.day + '|' + p.time + '|' + (p.coach || '')] === 1) { p.lesson_type = 'Solo'; if (!isSpecial(p)) p.price = priceFor(p.duration || '30 min', 'Solo'); } });
   return out;
 }
 
