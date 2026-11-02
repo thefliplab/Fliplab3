@@ -99,7 +99,7 @@
 </head>
 <body>
 <nav><b>Flip<span>Lab</span> 3.0</b>
-  <div id="tabs" class="hidden"><button id="tabBtn_dashboard" onclick="go('dashboard')">Dashboard</button><button id="tabBtn_schedule" onclick="go('schedule')">Schedule</button><button id="tabBtn_attendance" onclick="go('attendance')">Attendance</button><button id="tabBtn_openings" onclick="go('openings')">Openings</button><button id="tabBtn_payments" onclick="go('payments')">Payments</button><button id="tabBtn_students" onclick="go('students')">Students</button><button id="tabBtn_slots" onclick="go('slots')">Slots</button></div>
+  <div id="tabs" class="hidden"><button id="tabBtn_dashboard" onclick="go('dashboard')">Dashboard</button><button id="tabBtn_schedule" onclick="go('schedule')">Schedule</button><button id="tabBtn_attendance" onclick="go('attendance')">Attendance</button><button id="tabBtn_openings" onclick="go('openings')">Openings</button><button id="tabBtn_pairings" onclick="go('pairings')">Pairings</button><button id="tabBtn_payments" onclick="go('payments')">Payments</button><button id="tabBtn_students" onclick="go('students')">Students</button><button id="tabBtn_slots" onclick="go('slots')">Slots</button></div>
   <button id="outBtn" class="hidden" onclick="openAcct()">⚙ Account</button></nav>
 <main>
 
@@ -210,6 +210,23 @@
     <div class="card" style="padding:0;overflow:hidden" id="wlList"></div>
     <div class="sec">Drop-In <span id="diCount" style="font-weight:400;font-size:12px;color:#888"></span><button class="paybtn" style="margin-left:auto;background:var(--mint);color:#fff" onclick="openDropIn()">+ Add Drop-In</button></div>
     <div class="card" style="padding:0;overflow:hidden" id="diList"></div>
+  </section>
+
+  <!-- Pairings: current solo students + waitlist who could share a lesson -->
+  <section id="pairingsView" class="hidden">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:4px 0 10px">
+      <div class="card" style="margin:0;padding:10px 12px"><small style="color:#888">Matches ready</small><div id="pr_ready" style="font-size:22px;font-weight:600;color:#3B6D11">—</div></div>
+      <div class="card" style="margin:0;padding:10px 12px;cursor:pointer" onclick="prNeedsOpen=!prNeedsOpen;renderPairings()"><small style="color:#888">Need level or birthdate</small><div style="font-size:22px;font-weight:600;color:#A32D2D"><span id="pr_needs">—</span> <span style="font-size:12px;color:#185FA5;font-weight:400">Fix ▾</span></div></div>
+    </div>
+    <div id="pr_needsList"></div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px"><input id="pr_q" placeholder="Search student" oninput="renderPairings()" style="flex:1;margin:0"><label style="display:flex;gap:4px;align-items:center;font-size:12px;color:#666;margin:0;white-space:nowrap"><input type="checkbox" id="pr_close" onchange="renderPairings()" style="width:auto;margin:0">Close levels</label></div>
+    <div class="sec">Waitlist into a solo <span id="pr_c1" style="font-weight:400;font-size:12px;color:#888"></span></div>
+    <div style="font-size:12px;color:#888;margin:-4px 2px 6px">Waitlist kid can make the solo's time. +$20/wk, no extra time.</div>
+    <div class="card" style="padding:0;overflow:hidden" id="pr_list1"><div class="center">Loading…</div></div>
+    <div class="sec">Two solos together <span id="pr_c2" style="font-weight:400;font-size:12px;color:#888"></span></div>
+    <div style="font-size:12px;color:#888;margin:-4px 2px 6px">One kid moves to the other's time, which frees a slot.</div>
+    <div class="card" style="padding:0;overflow:hidden" id="pr_list2"></div>
+    <div style="font-size:12px;color:#888;margin:10px 2px">Same level (or 1 apart with Close levels), ages within 2 years. Already-paired kids, drop-ins and other coaches' lessons are left out.</div>
   </section>
 
   <!-- Slots (seasons + weekly time slots; replaces 2.0 v-slots + Summer slots) -->
@@ -555,10 +572,10 @@ const $ = id => document.getElementById(id);
 const ss = { get(k, d) { try { const v = sessionStorage.getItem('fl3_' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
              set(k, v) { try { sessionStorage.setItem('fl3_' + k, JSON.stringify(v)); } catch (e) {} } };
 function show(view) {
-  ['loginView','waitView','studentsView','editView','scheduleView','attendanceView','paymentsView','openingsView','dashboardView','slotsView'].forEach(v => $(v).classList.toggle('hidden', v !== view));
+  ['loginView','waitView','studentsView','editView','scheduleView','attendanceView','paymentsView','openingsView','dashboardView','slotsView','pairingsView'].forEach(v => $(v).classList.toggle('hidden', v !== view));
   $('outBtn').classList.toggle('hidden', view === 'loginView');
   $('tabs').classList.toggle('hidden', !gymId);
-  ['dashboard','schedule','attendance','openings','payments','students','slots'].forEach(t => $('tabBtn_' + t).classList.toggle('on', view === t + 'View'));
+  ['dashboard','schedule','attendance','openings','pairings','payments','students','slots'].forEach(t => $('tabBtn_' + t).classList.toggle('on', view === t + 'View'));
 }
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
@@ -586,6 +603,61 @@ async function openAcct() {
   $('acctEmail').textContent = user ? 'Signed in as ' + user.email : '';
   $('pw1').value = $('pw2').value = ''; $('pwMsg').textContent = '';
   renderCoaches(); loadCal(); $('acctModal').classList.remove('hidden');
+}
+
+// ================= PAIRINGS: current solo students + waitlist who could share a lesson =================
+// Pool: live solo lessons (main coach, not already sharing a slot) + Waiting/Waitlist entries (no drop-ins).
+let prSolos = [], prWait = [], prNeedsOpen = false;
+const prLv = v => { const m = String(v || '').match(/^L(\d)/i); return m ? +m[1] : null; };
+const prYrs = d => d ? (Date.now() - new Date(d + 'T00:00:00')) / 31557600000 : null;
+async function loadPairings() {
+  const today = ymd(new Date());
+  const [L, W] = await Promise.all([
+    sb.from('private_lessons').select('id,student_id,student_name,coach,day,time,duration,lesson_type,pair_id,start_date,end_date,status').not('status', 'in', '("Cancelled","Dropped")').or('end_date.is.null,end_date.gt.' + today),
+    sb.from('waitlist').select('*').in('status', ['Waiting','Waitlist']).order('signup_date')
+  ]);
+  if (L.error || W.error) { $('pr_list1').innerHTML = '<div class="center">Could not load: ' + esc((L.error || W.error).message) + '</div>'; return; }
+  const live = (L.data || []).filter(l => (!l.start_date || l.start_date <= today) && !isOther(l));
+  const cnt = {}; live.forEach(l => { const k = l.day + '|' + l.time; cnt[k] = (cnt[k] || 0) + 1; });
+  const byId = Object.fromEntries(students.map(s => [s.id, s]));
+  prSolos = live.filter(l => !l.pair_id && l.lesson_type !== 'Shared' && cnt[l.day + '|' + l.time] === 1).map(l => {
+    const s = byId[l.student_id] || {};
+    return { key: 'S' + l.id, id: l.student_id, name: l.student_name, l, lv: prLv(s.skill_level), dob: s.dob, skill: s.skill_level };
+  }).filter(x => !byId[x.id] || isOn(byId[x.id]));
+  const hasLesson = new Set(live.map(l => l.student_id));
+  prWait = (W.data || []).filter(w => (w.extra || {}).Unsubscribed !== 'Yes' && !hasLesson.has(w.student_id)).map(w => {
+    const s = byId[w.student_id] || {};
+    return { key: 'W' + w.id, id: w.student_id, name: w.student_name || ((s.first_name || '') + ' ' + (s.last_name || '')).trim(), w, lv: prLv(s.skill_level || w.skill_level), dob: s.dob || w.dob, skill: s.skill_level || w.skill_level };
+  });
+  renderPairings();
+}
+function prMatch(a, b, close) {
+  if (a.lv == null || b.lv == null || !a.dob || !b.dob) return null;
+  const gap = Math.abs(a.lv - b.lv); if (gap > (close ? 1 : 0)) return null;
+  const ag = Math.abs(prYrs(a.dob) - prYrs(b.dob)); if (ag > 2) return null;
+  return { gap, ag };
+}
+function prWho(x) { const age = ageOf(x.dob); return (x.skill ? esc(String(x.skill).split('-')[0]) : 'No level') + (age !== '' ? ' · age ' + age : ''); }
+function prRow(a, b, f, note, extra) {
+  return `<div class="arow"><div class="who"><b>${esc(a.name)} + ${esc(b.name)}</b><small>${esc(a.name.split(' ')[0])}: ${note[0]}</small><small>${esc(b.name.split(' ')[0])}: ${note[1]}</small>${extra || ''}</div><span class="tag ${f.gap ? 't-away' : 't-photo'}">${f.gap ? 'Close level' : 'Same level'}</span></div>`;
+}
+function renderPairings() {
+  if (curTab !== 'pairings') return;
+  const close = $('pr_close').checked, q = $('pr_q').value.trim().toLowerCase();
+  const hit = (...xs) => !q || xs.some(x => String(x.name || '').toLowerCase().includes(q));
+  const m1 = [], m2 = [];
+  prSolos.forEach(s => prWait.forEach(w => { const f = prMatch(s, w, close); if (f && matchesSlot(w.w, s.l.day, s.l.time) && hit(s, w)) m1.push({ s, w, f }); }));
+  prSolos.forEach((a, i) => prSolos.slice(i + 1).forEach(b => { const f = prMatch(a, b, close); if (f && a.id !== b.id && (a.l.coach || '') === (b.l.coach || '') && hit(a, b)) m2.push({ a, b, f }); }));
+  const by = (x, y) => x.f.gap - y.f.gap || x.f.ag - y.f.ag;
+  m1.sort(by); m2.sort(by);
+  const prefs = w => w.open_to_anything ? 'open to anything' : esc([w.preferred_days, w.preferred_times].filter(Boolean).join(' ') || 'no times set');
+  $('pr_list1').innerHTML = m1.map(({ s, w, f }) => prRow(s, w, f, [`${prWho(s)} · Solo ${esc(s.l.day)} ${esc(s.l.time)}`, `${prWho(w)} · Waitlist · ${prefs(w.w)}`], '<small style="color:#3B6D11;font-weight:600">+$20/wk</small>')).join('') || '<div class="center">No waitlist matches right now</div>';
+  $('pr_list2').innerHTML = m2.map(({ a, b, f }) => prRow(a, b, f, [`${prWho(a)} · Solo ${esc(a.l.day)} ${esc(a.l.time)}`, `${prWho(b)} · Solo ${esc(b.l.day)} ${esc(b.l.time)}`], `<small style="color:#92400E">Frees ${esc(a.l.day.slice(0, 3))} ${esc(a.l.time)} or ${esc(b.l.day.slice(0, 3))} ${esc(b.l.time)}</small>`)).join('') || '<div class="center">No solo matches right now</div>';
+  $('pr_c1').textContent = m1.length ? '(' + m1.length + ')' : ''; $('pr_c2').textContent = m2.length ? '(' + m2.length + ')' : '';
+  $('pr_ready').textContent = m1.length + m2.length;
+  const needs = prSolos.concat(prWait).filter(x => x.lv == null || !x.dob);
+  $('pr_needs').textContent = needs.length;
+  $('pr_needsList').innerHTML = prNeedsOpen ? `<div class="card" style="padding:0;overflow:hidden;margin-bottom:10px">${needs.map(x => `<div class="arow"${x.id && students.find(s => s.id === x.id) ? ` style="cursor:pointer" onclick="ss.set('tab','pairings');openEdit('${esc(x.id)}')"` : ''}><div class="who"><b>${esc(x.name)}</b><small>${x.w ? 'Waitlist' : 'Solo'} · missing ${[x.lv == null && 'level', !x.dob && 'birthdate'].filter(Boolean).join(' and ')}</small></div>${x.id && students.find(s => s.id === x.id) ? '<small style="color:#185FA5">Fix ›</small>' : ''}</div>`).join('') || '<div class="center">Everyone has a level and birthdate</div>'}</div>` : '';
 }
 // ================= CALENDAR SYNC SETTINGS (edge function cal-sync does the work) =================
 const GCOLORS = [['1','Lavender'],['2','Sage'],['3','Grape'],['4','Flamingo (pink)'],['5','Banana'],['6','Tangerine'],['7','Peacock'],['8','Graphite'],['9','Blueberry'],['10','Basil'],['11','Tomato']];
@@ -686,10 +758,10 @@ async function boot() {
   if (attMode === 'classes') setAttModeButtons();
   const tab = ss.get('tab', 'dashboard'), sid = ss.get('student', null);
   if (tab === 'student' && sid && students.find(x => x.id === sid)) { curTab = 'students'; openEdit(sid); if (!weekRows.length) loadWeek(); }
-  else go(['dashboard','schedule','attendance','openings','payments','students','slots'].includes(tab) ? tab : 'dashboard');
+  else go(['dashboard','schedule','attendance','openings','pairings','payments','students','slots'].includes(tab) ? tab : 'dashboard');
 }
 let curTab = 'schedule';
-function go(tab) { curTab = tab; ss.set('tab', tab); if (tab === 'slots') { show('slotsView'); return loadSlots(); } if (tab === 'students') { show('studentsView'); render(); if (!weekRows.length) loadWeek(); return; } show(tab + 'View'); loadWeek(); }
+function go(tab) { curTab = tab; ss.set('tab', tab); if (tab === 'pairings') { show('pairingsView'); return loadPairings(); } if (tab === 'slots') { show('slotsView'); return loadSlots(); } if (tab === 'students') { show('studentsView'); render(); if (!weekRows.length) loadWeek(); return; } show(tab + 'View'); loadWeek(); }
 
 async function loadStudents(quiet) {
   if (!quiet) $('list').innerHTML = '<div class="center">Loading…</div>';
