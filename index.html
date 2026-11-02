@@ -607,13 +607,13 @@ async function openAcct() {
 
 // ================= PAIRINGS: current solo students + waitlist who could share a lesson =================
 // Pool: live solo lessons (main coach, not already sharing a slot) + Waiting/Waitlist entries (no drop-ins).
-let prSolos = [], prWait = [], prNeedsOpen = false;
+let prSolos = [], prWait = [], prNeedsOpen = false, prM = { 1: [], 2: [] }, prOpen = null;
 const prLv = v => { const m = String(v || '').match(/^L(\d)/i); return m ? +m[1] : null; };
 const prYrs = d => d ? (Date.now() - new Date(d + 'T00:00:00')) / 31557600000 : null;
 async function loadPairings() {
   const today = ymd(new Date());
   const [L, W] = await Promise.all([
-    sb.from('private_lessons').select('id,student_id,student_name,coach,day,time,duration,lesson_type,pair_id,start_date,end_date,status').not('status', 'in', '("Cancelled","Dropped")').or('end_date.is.null,end_date.gt.' + today),
+    sb.from('private_lessons').select('id,student_id,student_name,coach,day,time,duration,lesson_type,pair_id,start_date,end_date,status,extra').not('status', 'in', '("Cancelled","Dropped")').or('end_date.is.null,end_date.gt.' + today),
     sb.from('waitlist').select('*').in('status', ['Waiting','Waitlist']).order('signup_date')
   ]);
   if (L.error || W.error) { $('pr_list1').innerHTML = '<div class="center">Could not load: ' + esc((L.error || W.error).message) + '</div>'; return; }
@@ -638,8 +638,47 @@ function prMatch(a, b, close) {
   return { gap, ag };
 }
 function prWho(x) { const age = ageOf(x.dob); return (x.skill ? esc(String(x.skill).split('-')[0]) : 'No level') + (age !== '' ? ' · age ' + age : ''); }
-function prRow(a, b, f, note, extra) {
-  return `<div class="arow"><div class="who"><b>${esc(a.name)} + ${esc(b.name)}</b><small>${esc(a.name.split(' ')[0])}: ${note[0]}</small><small>${esc(b.name.split(' ')[0])}: ${note[1]}</small>${extra || ''}</div><span class="tag ${f.gap ? 't-away' : 't-photo'}">${f.gap ? 'Close level' : 'Same level'}</span></div>`;
+function prRow(a, b, f, note, extra, k) {
+  return `<div class="arow"><div class="who"><b>${esc(a.name)} + ${esc(b.name)}</b><small>${esc(a.name.split(' ')[0])}: ${note[0]}</small><small>${esc(b.name.split(' ')[0])}: ${note[1]}</small>${extra || ''}</div><span class="tag ${f.gap ? 't-away' : 't-photo'}">${f.gap ? 'Close level' : 'Same level'}</span><button class="paybtn" onclick="prOpen=prOpen==='${k}'?null:'${k}';renderPairings()">Pair</button></div>${prOpen === k ? prConfirm(k) : ''}`;
+}
+// Inline confirm: pick the time (two-solo matches: who moves) and the start week
+function prConfirm(k) {
+  const [sec, i] = k.split('-'), m = prM[sec][+i], mon = mondayOf(ymd(new Date())), nx = new Date(mon + 'T00:00:00'); nx.setDate(nx.getDate() + 7);
+  const wk = d => new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const t = x => esc(x.l.day + ' ' + x.l.time);
+  const time = sec === '1' ? `<small>Time: ${t(m.s)} (${esc(m.s.name)}'s time)</small>`
+    : `<label style="display:flex;gap:6px;align-items:center;margin:4px 0;font-weight:400"><input type="radio" name="pr_mv" value="b" checked style="width:auto;margin:0">${esc(m.b.name)} moves to ${t(m.a)}</label><label style="display:flex;gap:6px;align-items:center;margin:4px 0;font-weight:400"><input type="radio" name="pr_mv" value="a" style="width:auto;margin:0">${esc(m.a.name)} moves to ${t(m.b)}</label>`;
+  return `<div style="background:#f6f8f7;padding:10px 12px;border-bottom:1px solid #f0f0f0;font-size:13px">${time}
+    <label style="margin-top:6px">Starts</label><select id="pr_start" style="margin:2px 0 6px"><option value="${mon}">Week of ${wk(mon)} (this week)</option><option value="${ymd(nx)}">Week of ${wk(ymd(nx))}</option></select>
+    <small style="color:#666;display:block;margin-bottom:8px">Both become Shared (${priceFor('30 min', 'Shared')} each for 30 min) and show as one card. Earlier weeks stay as they were.${sec === '1' ? ' ' + esc(m.w.name) + ' comes off the waitlist.' : ''}</small>
+    <div style="display:flex;gap:8px"><button class="btn ghost" style="flex:1" onclick="prOpen=null;renderPairings()">Cancel</button><button class="btn" id="pr_go" style="flex:2" onclick="prPair('${k}')">Pair them</button></div><div id="pr_msg" class="msg"></div></div>`;
+}
+async function prPair(k) {
+  const [sec, i] = k.split('-'), m = prM[sec][+i], start = $('pr_start').value, pairId = 'PAIR' + Date.now();
+  // anchor = lesson that keeps its time; other = kid joining it
+  let anchor, other;
+  if (sec === '1') { anchor = m.s; other = m.w; } else { const bMoves = (document.querySelector('input[name="pr_mv"]:checked') || {}).value !== 'a'; anchor = bMoves ? m.a : m.b; other = bMoves ? m.b : m.a; }
+  const shared = (x, partner) => ({ lesson_type: 'Shared', share_type: 'Matched', pair_id: pairId, matched_with: partner, friend_name: partner, ...(isSpecial(x.l || {}) ? {} : { price: priceFor((x.l && x.l.duration) || anchor.l.duration || '30 min', 'Shared') }) });
+  $('pr_go').disabled = true; $('pr_msg').className = 'msg'; $('pr_msg').textContent = 'Pairing…';
+  const fail = e => { $('pr_go').disabled = false; $('pr_msg').className = 'msg err'; $('pr_msg').textContent = e.message || String(e); };
+  // 1) the kid who keeps the time: becomes Shared from the start week (earlier weeks untouched)
+  let r = await permanentChange(anchor.l, shared(anchor, other.name), start);
+  if (r.error) return fail(r.error);
+  if (sec === '1') {
+    // 2a) waitlist kid: new weekly lesson in the anchor's slot, student Active, waitlist entry Converted
+    const st = students.find(x => x.id === other.id) || {};
+    r = await sb.from('private_lessons').insert({ gym_id: gymId, student_id: other.id, student_name: other.name, coach: anchor.l.coach, day: anchor.l.day, time: anchor.l.time,
+      duration: anchor.l.duration || '30 min', focus: other.skill || null, status: 'Confirmed', booked_date: ymd(new Date()), paid: 'Unpaid', start_date: start, extra: {},
+      ...shared({ l: { duration: anchor.l.duration } }, anchor.name) });
+    if (r.error) return fail(r.error);
+    if (['Waitlist','Drop-In','Inactive'].includes(st.status)) { await sb.from('students').update({ status: 'Active', active: true }).eq('id', other.id); st.status = 'Active'; }
+    await sb.from('waitlist').update({ status: 'Converted' }).eq('id', other.w.id);
+  } else {
+    // 2b) the kid who moves: permanent move into the anchor's day/time/coach from the start week
+    r = await permanentChange(other.l, { day: anchor.l.day, time: anchor.l.time, coach: anchor.l.coach, ...shared(other, anchor.name) }, start);
+    if (r.error) return fail(r.error);
+  }
+  prOpen = null; weekRows = []; loadPairings();
 }
 function renderPairings() {
   if (curTab !== 'pairings') return;
@@ -651,8 +690,9 @@ function renderPairings() {
   const by = (x, y) => x.f.gap - y.f.gap || x.f.ag - y.f.ag;
   m1.sort(by); m2.sort(by);
   const prefs = w => w.open_to_anything ? 'open to anything' : esc([w.preferred_days, w.preferred_times].filter(Boolean).join(' ') || 'no times set');
-  $('pr_list1').innerHTML = m1.map(({ s, w, f }) => prRow(s, w, f, [`${prWho(s)} · Solo ${esc(s.l.day)} ${esc(s.l.time)}`, `${prWho(w)} · Waitlist · ${prefs(w.w)}`], '<small style="color:#3B6D11;font-weight:600">+$20/wk</small>')).join('') || '<div class="center">No waitlist matches right now</div>';
-  $('pr_list2').innerHTML = m2.map(({ a, b, f }) => prRow(a, b, f, [`${prWho(a)} · Solo ${esc(a.l.day)} ${esc(a.l.time)}`, `${prWho(b)} · Solo ${esc(b.l.day)} ${esc(b.l.time)}`], `<small style="color:#92400E">Frees ${esc(a.l.day.slice(0, 3))} ${esc(a.l.time)} or ${esc(b.l.day.slice(0, 3))} ${esc(b.l.time)}</small>`)).join('') || '<div class="center">No solo matches right now</div>';
+  prM = { 1: m1, 2: m2 };
+  $('pr_list1').innerHTML = m1.map(({ s, w, f }, i) => prRow(s, w, f, [`${prWho(s)} · Solo ${esc(s.l.day)} ${esc(s.l.time)}`, `${prWho(w)} · Waitlist · ${prefs(w.w)}`], '<small style="color:#3B6D11;font-weight:600">+$20/wk</small>', '1-' + i)).join('') || '<div class="center">No waitlist matches right now</div>';
+  $('pr_list2').innerHTML = m2.map(({ a, b, f }, i) => prRow(a, b, f, [`${prWho(a)} · Solo ${esc(a.l.day)} ${esc(a.l.time)}`, `${prWho(b)} · Solo ${esc(b.l.day)} ${esc(b.l.time)}`], `<small style="color:#92400E">Frees ${esc(a.l.day.slice(0, 3))} ${esc(a.l.time)} or ${esc(b.l.day.slice(0, 3))} ${esc(b.l.time)}</small>`, '2-' + i)).join('') || '<div class="center">No solo matches right now</div>';
   $('pr_c1').textContent = m1.length ? '(' + m1.length + ')' : ''; $('pr_c2').textContent = m2.length ? '(' + m2.length + ')' : '';
   $('pr_ready').textContent = m1.length + m2.length;
   const needs = prSolos.concat(prWait).filter(x => x.lv == null || !x.dob);
