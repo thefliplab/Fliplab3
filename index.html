@@ -143,13 +143,13 @@
       <div class="metric"><small>Unpaid this week</small><b id="d_unpaid" style="color:#854F0B">—</b></div>
       <div class="metric"><small>Waitlist</small><b id="d_wl">—</b></div>
     </div>
-    <div class="sec" id="d_todayHead">Today's schedule</div>
+    <div class="sec" style="cursor:pointer;user-select:none" onclick="dashFold('sched')"><span><span id="dfa_sched">▾</span> <span id="d_todayHead">Today's schedule</span></span> <span id="dfs_sched" style="font-weight:400;font-size:12px;color:#888"></span></div>
     <div class="card" style="padding:0;overflow:hidden" id="d_sched"></div>
-    <div class="sec">Needs attention</div>
+    <div class="sec" style="cursor:pointer;user-select:none" onclick="dashFold('attn')"><span><span id="dfa_attn">▾</span> Needs attention</span> <span id="dfs_attn" style="font-weight:400;font-size:12px;color:#888"></span></div>
     <div class="card" style="padding:0;overflow:hidden" id="d_attn"></div>
     <div class="sec" style="cursor:pointer;user-select:none" onclick="toggleDashWl()"><span><span id="d_wlArrow">▸</span> Waitlist</span> <span id="d_wlSub" style="font-weight:400;font-size:12px;color:#888"></span></div>
     <div class="card" style="padding:0;overflow:hidden" id="d_wlist"></div>
-    <div class="sec">🎂 Birthdays this week</div>
+    <div class="sec" style="cursor:pointer;user-select:none" onclick="dashFold('bday')"><span><span id="dfa_bday">▾</span> 🎂 Birthdays this week</span> <span id="dfs_bday" style="font-weight:400;font-size:12px;color:#888"></span></div>
     <div class="card" style="padding:0;overflow:hidden" id="d_bday"></div>
   </section>
 
@@ -1987,11 +1987,19 @@ function renderDash() {
   }).join('') : '<div class="center">No one on the waitlist</div>';
   // Birthdays this week (Mon–Sun)
   const b = students.filter(x => isOn(x) && x.dob).map(x => { const d = wk.find(d => d.date.getMonth() + 1 === +x.dob.slice(5, 7) && d.date.getDate() === +x.dob.slice(8, 10)); return d ? { x, d } : null; }).filter(Boolean);
+  $('dfs_sched').textContent = (showTomorrow ? 'tomorrow' : today.length + ' lesson' + (today.length === 1 ? '' : 's')) + (unpaid.length ? ' · ' + unpaid.length + ' unpaid' : '');
+  $('dfs_attn').textContent = alerts.length ? '(' + alerts.length + ')' : ''; $('dfs_bday').textContent = b.length ? '(' + b.length + ')' : '';
+  dashFoldApply();
   $('d_bday').innerHTML = b.length ? b.map(({ x, d }) => `<div class="arow"><div class="who"><b>${esc(x.first_name)} ${esc(x.last_name)}</b><small>${d.name}, ${d.label} · turns ${d.date.getFullYear() - +x.dob.slice(0, 4)}</small></div></div>`).join('') : '<div class="center">No birthdays this week</div>';
 }
 
 // Tomorrow = next Monday (when today is Sunday): build next week's Monday from the lessons + next week's exceptions
 let dashNextMon = null, dashHist = null;
+// Collapsible Dashboard sections — open/closed remembered on this device
+const DFOLD = { sched: 'd_sched', attn: 'd_attn', bday: 'd_bday' };
+const dfGet = k => { try { return localStorage.getItem('fl3_fold_' + k) === '1'; } catch (e) { return false; } };
+function dashFold(k) { try { localStorage.setItem('fl3_fold_' + k, dfGet(k) ? '0' : '1'); } catch (e) {} dashFoldApply(); }
+function dashFoldApply() { Object.entries(DFOLD).forEach(([k, id]) => { const c = dfGet(k); $(id).classList.toggle('hidden', c); $('dfa_' + k).textContent = c ? '▸' : '▾'; $('dfs_' + k).style.display = c ? '' : 'none'; }); }
 // ================= MISSING INFO (birthdate / level) =================
 const MI_LV = ['L1-Foundations','L2-Rising','L3-Building','L4-Progressing','L5-Advanced','L6-Elite'];
 function miKids() {
