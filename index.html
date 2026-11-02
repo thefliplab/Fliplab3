@@ -99,7 +99,7 @@
 </head>
 <body>
 <nav><b>Flip<span>Lab</span> 3.0</b>
-  <div id="tabs" class="hidden"><button id="tabBtn_dashboard" onclick="go('dashboard')">Dashboard</button><button id="tabBtn_schedule" onclick="go('schedule')">Schedule</button><button id="tabBtn_attendance" onclick="go('attendance')">Attendance</button><button id="tabBtn_openings" onclick="go('openings')">Openings</button><button id="tabBtn_pairings" onclick="go('pairings')">Pairings</button><button id="tabBtn_payments" onclick="go('payments')">Payments</button><button id="tabBtn_students" onclick="go('students')">Students</button><button id="tabBtn_slots" onclick="go('slots')">Slots</button></div>
+  <div id="tabs" class="hidden"><button id="tabBtn_dashboard" onclick="go('dashboard')">Dashboard</button><button id="tabBtn_schedule" onclick="go('schedule')">Schedule</button><button id="tabBtn_attendance" onclick="go('attendance')">Attendance</button><button id="tabBtn_openings" onclick="go('openings')">Openings</button><button id="tabBtn_pairings" onclick="go('pairings')">Pairings</button><button id="tabBtn_comm" onclick="go('comm')">Communicate</button><button id="tabBtn_payments" onclick="go('payments')">Payments</button><button id="tabBtn_students" onclick="go('students')">Students</button><button id="tabBtn_slots" onclick="go('slots')">Slots</button></div>
   <button id="outBtn" class="hidden" onclick="openAcct()">⚙ Account</button></nav>
 <main>
 
@@ -230,6 +230,24 @@
     <div class="card" style="padding:0;overflow:hidden" id="pr_list2"></div>
     <div id="pr_hidden"></div>
     <div style="font-size:12px;color:#888;margin:10px 2px">Same level (or 1 apart with Close levels), ages within 2 years. Already-paired kids, drop-ins and other coaches' lessons are left out.</div>
+  </section>
+
+  <!-- Communicate: text blasts (email later) -->
+  <section id="commView" class="hidden">
+    <div class="sec" style="margin-top:4px">Send to</div>
+    <div class="card"><div id="cm_aud" style="display:flex;flex-wrap:wrap;gap:6px"></div><div id="cm_sub" style="margin-top:8px"></div></div>
+    <div class="sec">Families <span id="cm_cnt" style="font-weight:400;font-size:12px;color:#888"></span><a href="#" onclick="cmAll();return false" style="font-weight:400;font-size:12px;color:#185FA5;text-decoration:none">All / none</a></div>
+    <div class="card" style="padding:0;overflow:hidden" id="cm_fam"><div class="center">Loading…</div></div>
+    <div class="sec">Message <select id="cm_saved" onchange="cmUseSaved()"><option value="">Saved messages…</option></select></div>
+    <div class="card">
+      <textarea id="cm_msg" rows="4" placeholder="Hi {parent}! …"></textarea>
+      <small style="color:#888;display:block;margin:4px 0 8px">{parent} and {kid} fill in for each family. A family with two kids gets one text. <a href="#" onclick="cmSaveMsg();return false" style="color:#185FA5">Save this message</a> · <a href="#" onclick="cmDelSaved();return false" style="color:#A32D2D">Delete saved</a></small>
+      <label style="display:flex;gap:6px;align-items:center;font-size:13px;margin:0 0 6px;font-weight:400;color:#92400E"><input type="checkbox" id="cm_test" onchange="ss.set('prTest',this.checked);cmCount()" style="width:auto;margin:0">Test mode: send to this number only</label>
+      <input id="cm_testTo" placeholder="Test phone, e.g. (513) 555-1234" onchange="this.value=fmtPhone(this.value);ss.set('prTestTo',this.value)" style="margin:0 0 10px;max-width:260px">
+      <button class="btn" id="cm_send" onclick="cmSend()">Send</button><div id="cm_res" class="msg"></div>
+    </div>
+    <div class="sec">Recent sends</div>
+    <div class="card" style="padding:0;overflow:hidden" id="cm_hist"></div>
   </section>
 
   <!-- Slots (seasons + weekly time slots; replaces 2.0 v-slots + Summer slots) -->
@@ -581,10 +599,10 @@ const $ = id => document.getElementById(id);
 const ss = { get(k, d) { try { const v = sessionStorage.getItem('fl3_' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
              set(k, v) { try { sessionStorage.setItem('fl3_' + k, JSON.stringify(v)); } catch (e) {} } };
 function show(view) {
-  ['loginView','waitView','studentsView','editView','scheduleView','attendanceView','paymentsView','openingsView','dashboardView','slotsView','pairingsView'].forEach(v => $(v).classList.toggle('hidden', v !== view));
+  ['loginView','waitView','studentsView','editView','scheduleView','attendanceView','paymentsView','openingsView','dashboardView','slotsView','pairingsView','commView'].forEach(v => $(v).classList.toggle('hidden', v !== view));
   $('outBtn').classList.toggle('hidden', view === 'loginView');
   $('tabs').classList.toggle('hidden', !gymId);
-  ['dashboard','schedule','attendance','openings','pairings','payments','students','slots'].forEach(t => $('tabBtn_' + t).classList.toggle('on', view === t + 'View'));
+  ['dashboard','schedule','attendance','openings','pairings','comm','payments','students','slots'].forEach(t => $('tabBtn_' + t).classList.toggle('on', view === t + 'View'));
 }
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
@@ -805,6 +823,97 @@ async function openLevels() {
     return `<details style="border-bottom:1px solid #f0f0f0;padding:8px 2px"><summary style="cursor:pointer"><b>${esc(l.code.split('-')[0])}</b> · ${esc(l.name)} <small style="color:#888">${list.length ? list.length + ' skills' : ''}</small></summary>
       ${list.length ? '<ul style="margin:6px 0 2px 18px;padding:0;font-size:13px">' + list.map(x => '<li>' + esc(x.name) + '</li>').join('') + '</ul>' : '<small style="color:#888;display:block;margin-top:4px">Skills not copied to 3.0 yet (run export3Skills).</small>'}</details>`; }).join('');
 }
+// ================= COMMUNICATE: text blasts to a group (dedup by parent phone, skip unsubscribed) =================
+const CM_AUD = [['active','Everyone active'],['day','A day'],['class','A class'],['wl','Waitlist'],['di','Drop-In'],['pick','Pick kids']];
+let cmAud = 'active', cmData = null, cmFams = [], cmOn = new Set(), cmPicked = [], cmSaved = [], cmSkipped = 0;
+async function loadComm() {
+  const today = ymd(new Date());
+  const [L, C, E, W, S, H] = await Promise.all([
+    sb.from('private_lessons').select('student_id,day,start_date,end_date,status').not('status', 'in', '("Cancelled","Dropped")').or('end_date.is.null,end_date.gt.' + today),
+    sb.from('class_schedule').select('id,class_name,day,time').eq('active', true),
+    sb.from('class_enrollments').select('student_id,schedule_id,status').not('status', 'in', '("Dropped","Waitlisted")'),
+    sb.from('waitlist').select('*').in('status', ['Waiting','Waitlist','Drop-In']),
+    sb.from('saved_messages').select('*').order('title'),
+    sb.from('blasts').select('*').order('created_at', { ascending: false }).limit(10)]);
+  cmData = { L: (L.data || []).filter(l => !l.start_date || l.start_date <= today), C: C.data || [], E: E.data || [], W: W.data || [] };
+  cmSaved = S.data || [];
+  $('cm_saved').innerHTML = '<option value="">Saved messages…</option>' + cmSaved.map(m => `<option value="${esc(m.id)}">${esc(m.title)}</option>`).join('');
+  $('cm_test').checked = ss.get('prTest', true); $('cm_testTo').value = ss.get('prTestTo', '');
+  $('cm_hist').innerHTML = (H.data || []).map(b => `<div class="arow"><div class="who"><b>${esc(b.audience)} · ${b.families} famil${b.families === 1 ? 'y' : 'ies'}${b.test ? ' (test)' : ''}</b><small>${new Date(b.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · "${esc(String(b.body || '').slice(0, 50))}…"</small></div><small style="color:#666">${b.sent} sent${b.failed ? ' · ' + b.failed + ' failed' : ''}</small></div>`).join('') || '<div class="center">Nothing sent yet</div>';
+  cmSetAud(cmAud);
+}
+function cmSetAud(a) {
+  cmAud = a;
+  $('cm_aud').innerHTML = CM_AUD.map(([k, n]) => `<button class="paybtn" style="${k === a ? 'background:var(--mint);color:#fff' : 'background:#eef0f2;color:#555'}" onclick="cmSetAud('${k}')">${n}</button>`).join('');
+  const days = [...new Set(cmData.L.map(l => l.day).concat(cmData.C.map(c => c.day)))].sort((x, y) => DAYS.indexOf(x) - DAYS.indexOf(y));
+  $('cm_sub').innerHTML = a === 'day' ? `<select id="cm_day" onchange="cmBuild()">${days.map(d => `<option>${esc(d)}</option>`).join('')}</select>`
+    : a === 'class' ? `<select id="cm_cls" onchange="cmBuild()">${cmData.C.map(c => `<option value="${esc(c.id)}">${esc(c.class_name)} · ${esc(c.day)} ${esc(c.time)}</option>`).join('') || '<option value="">No classes</option>'}</select>`
+    : a === 'pick' ? `<input id="cm_q" placeholder="Search a student to add" oninput="cmSearch()" autocomplete="off"><div id="cm_dd" class="card" style="padding:0;margin:4px 0 0"></div>` : '';
+  cmBuild();
+}
+function cmSearch() {
+  const q = $('cm_q').value.trim().toLowerCase();
+  $('cm_dd').innerHTML = q ? students.filter(s => ((s.first_name || '') + ' ' + (s.last_name || '')).toLowerCase().includes(q) && !cmPicked.includes(s.id)).slice(0, 6)
+    .map(s => `<div class="arow" style="cursor:pointer" onclick="cmPicked.push('${esc(s.id)}');$('cm_q').value='';$('cm_dd').innerHTML='';cmBuild()"><div class="who"><b>${esc(s.first_name)} ${esc(s.last_name)}</b><small>${esc(s.status || '')}</small></div></div>`).join('') : '';
+}
+function cmBuild() {
+  const d = cmData, byId = Object.fromEntries(students.map(s => [s.id, s]));
+  let kids = []; // { phone, parent, kid, sid, unsub }
+  const fromStu = id => { const s = byId[id]; if (s) kids.push({ phone: s.parent_phone, parent: s.parent_name, kid: s.first_name, sid: s.id, unsub: !!s.unsubscribed }); };
+  const fromWl = w => { const s = byId[w.student_id] || {}; kids.push({ phone: s.parent_phone || w.parent_phone, parent: s.parent_name || w.parent_name, kid: s.first_name || (w.student_name || '').split(' ')[0], sid: w.student_id, unsub: !!s.unsubscribed || (w.extra || {}).Unsubscribed === 'Yes' }); };
+  if (cmAud === 'active') students.filter(s => isOn(s) && (grp.priv.has(s.id) || grp.cls.has(s.id))).forEach(s => fromStu(s.id));
+  else if (cmAud === 'day') { const day = $('cm_day') && $('cm_day').value, cls = new Set(d.C.filter(c => c.day === day).map(c => c.id));
+    new Set(d.L.filter(l => l.day === day).map(l => l.student_id).concat(d.E.filter(e => cls.has(e.schedule_id)).map(e => e.student_id))).forEach(fromStu); }
+  else if (cmAud === 'class') { const id = $('cm_cls') && $('cm_cls').value; new Set(d.E.filter(e => e.schedule_id === id).map(e => e.student_id)).forEach(fromStu); }
+  else if (cmAud === 'wl') d.W.filter(w => w.status !== 'Drop-In').forEach(fromWl);
+  else if (cmAud === 'di') d.W.filter(w => w.status === 'Drop-In').forEach(fromWl);
+  else cmPicked.forEach(fromStu);
+  cmSkipped = kids.filter(k => k.unsub).length;
+  const fam = {};
+  kids.filter(k => !k.unsub).forEach(k => { const key = String(k.phone || '').replace(/\D/g, '').slice(-10) || 'none:' + k.sid;
+    const f = fam[key] = fam[key] || { key, phone: k.phone, parent: k.parent, kids: [], sid: k.sid }; if (!f.kids.includes(k.kid)) f.kids.push(k.kid); });
+  cmFams = Object.values(fam).sort((a, b) => String(a.parent || '').localeCompare(String(b.parent || '')));
+  cmOn = new Set(cmFams.filter(f => !f.key.startsWith('none:')).map(f => f.key));
+  cmRender();
+}
+function cmRender() {
+  $('cm_fam').innerHTML = cmFams.map(f => { const no = f.key.startsWith('none:');
+    return `<label class="arow" style="font-weight:400;margin:0;cursor:pointer"><input type="checkbox" ${cmOn.has(f.key) ? 'checked' : ''} ${no ? 'disabled' : ''} onchange="cmOn.has('${f.key}')?cmOn.delete('${f.key}'):cmOn.add('${f.key}');cmCount()" style="width:auto;margin:0"><div class="who"><b>${esc(f.parent || 'Parent')}</b><small>${esc(f.kids.join(' and '))} · ${no ? 'no phone' : esc(fmtPhone(f.phone))}</small></div></label>`; }).join('')
+    + (cmSkipped ? `<div class="center" style="font-size:12px">${cmSkipped} unsubscribed left out</div>` : '') || '<div class="center">' + (cmAud === 'pick' ? 'Search above to add kids' : 'No families') + '</div>';
+  cmCount();
+}
+function cmCount() { const n = cmOn.size; $('cm_cnt').textContent = '(' + n + ' of ' + cmFams.length + ')'; $('cm_send').textContent = ($('cm_test').checked ? 'Test send (' + n + ')' : 'Send to ' + n + ' famil' + (n === 1 ? 'y' : 'ies')); }
+function cmAll() { const all = cmFams.filter(f => !f.key.startsWith('none:')); cmOn = cmOn.size === all.length ? new Set() : new Set(all.map(f => f.key)); cmRender(); }
+function cmUseSaved() { const m = cmSaved.find(x => x.id === $('cm_saved').value); if (m) $('cm_msg').value = m.body; }
+async function cmSaveMsg() {
+  const body = $('cm_msg').value.trim(); if (!body) return alert('Type a message first.');
+  const title = prompt('Name for this message (e.g. Gym closed):'); if (!title) return;
+  const r = await sb.from('saved_messages').insert({ gym_id: gymId, title: title.trim(), body }); if (r.error) return alert(r.error.message);
+  loadComm();
+}
+async function cmDelSaved() {
+  const m = cmSaved.find(x => x.id === $('cm_saved').value); if (!m) return alert('Pick a saved message first.');
+  if (!confirm('Delete saved message "' + m.title + '"?')) return;
+  const r = await sb.from('saved_messages').delete().eq('id', m.id); if (r.error) return alert(r.error.message); loadComm();
+}
+async function cmSend() {
+  const tpl = $('cm_msg').value.trim(), r = $('cm_res'), picks = cmFams.filter(f => cmOn.has(f.key)), test = $('cm_test').checked, to = $('cm_testTo').value.trim();
+  r.className = 'msg err';
+  if (!tpl) return r.textContent = 'Type a message.';
+  if (!picks.length) return r.textContent = 'Pick at least one family.';
+  if (test && !to) return r.textContent = 'Test mode is on. Type a test phone number first.';
+  const label = CM_AUD.find(a => a[0] === cmAud)[1].replace('A day', ($('cm_day') || {}).value || 'Day').replace('A class', ($('cm_cls') && $('cm_cls').selectedOptions[0] ? $('cm_cls').selectedOptions[0].text.split(' · ')[0] : 'Class'));
+  const fill = f => tpl.replace(/\{parent\}/g, (f.parent || '').split(' ')[0] || 'there').replace(/\{kid\}/g, f.kids.join(' and '));
+  const list = test ? picks.slice(0, 3) : picks;
+  if (!confirm(test ? 'TEST: send ' + list.length + ' sample text(s) to ' + to + '?' : 'Text ' + picks.length + ' famil' + (picks.length === 1 ? 'y' : 'ies') + ' for real?')) return;
+  $('cm_send').disabled = true; r.className = 'msg'; r.textContent = 'Sending…';
+  const res = await sb.functions.invoke('sms-send', { body: { messages: list.map(f => ({ to: test ? to : f.phone, student_id: test ? null : f.sid, family: test ? 'Test' : f.parent, text: (test ? '[TEST for ' + (f.parent || 'family') + '] ' : '') + fill(f) })) } });
+  $('cm_send').disabled = false;
+  if (res.error || (res.data && res.data.error)) { r.className = 'msg err'; r.textContent = 'Not sent: ' + ((res.data && res.data.error) || res.error.message); return; }
+  await sb.from('blasts').insert({ gym_id: gymId, audience: label, body: tpl, families: list.length, sent: res.data.sent || 0, failed: res.data.failed || 0, test });
+  r.textContent = '✓ Sent ' + res.data.sent + (res.data.failed ? ' · ' + res.data.failed + ' failed' : '') + (test ? ' to your test number (first 3 families as samples)' : '');
+  loadComm();
+}
 // ================= CALENDAR SYNC SETTINGS (edge function cal-sync does the work) =================
 const GCOLORS = [['1','Lavender'],['2','Sage'],['3','Grape'],['4','Flamingo (pink)'],['5','Banana'],['6','Tangerine'],['7','Peacock'],['8','Graphite'],['9','Blueberry'],['10','Basil'],['11','Tomato']];
 let calRow = null;
@@ -904,10 +1013,10 @@ async function boot() {
   if (attMode === 'classes') setAttModeButtons();
   const tab = ss.get('tab', 'dashboard'), sid = ss.get('student', null);
   if (tab === 'student' && sid && students.find(x => x.id === sid)) { curTab = 'students'; openEdit(sid); if (!weekRows.length) loadWeek(); }
-  else go(['dashboard','schedule','attendance','openings','pairings','payments','students','slots'].includes(tab) ? tab : 'dashboard');
+  else go(['dashboard','schedule','attendance','openings','pairings','comm','payments','students','slots'].includes(tab) ? tab : 'dashboard');
 }
 let curTab = 'schedule';
-function go(tab) { curTab = tab; ss.set('tab', tab); if (tab === 'pairings') { show('pairingsView'); return loadPairings(); } if (tab === 'slots') { show('slotsView'); return loadSlots(); } if (tab === 'students') { show('studentsView'); render(); if (!weekRows.length) loadWeek(); return; } show(tab + 'View'); loadWeek(); }
+function go(tab) { curTab = tab; ss.set('tab', tab); if (tab === 'pairings') { show('pairingsView'); return loadPairings(); } if (tab === 'comm') { show('commView'); return loadComm(); } if (tab === 'slots') { show('slotsView'); return loadSlots(); } if (tab === 'students') { show('studentsView'); render(); if (!weekRows.length) loadWeek(); return; } show(tab + 'View'); loadWeek(); }
 
 async function loadStudents(quiet) {
   if (!quiet) $('list').innerHTML = '<div class="center">Loading…</div>';
