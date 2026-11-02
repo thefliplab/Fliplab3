@@ -219,7 +219,7 @@
       <div class="card" style="margin:0;padding:10px 12px;cursor:pointer" onclick="prNeedsOpen=!prNeedsOpen;renderPairings()"><small style="color:#888">Need level or birthdate</small><div style="font-size:22px;font-weight:600;color:#A32D2D"><span id="pr_needs">—</span> <span style="font-size:12px;color:#185FA5;font-weight:400">Fix ▾</span></div></div>
     </div>
     <div id="pr_needsList"></div>
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px"><input id="pr_q" placeholder="Search student" oninput="renderPairings()" style="flex:1;margin:0"><label style="display:flex;gap:4px;align-items:center;font-size:12px;color:#666;margin:0;white-space:nowrap"><input type="checkbox" id="pr_close" onchange="renderPairings()" style="width:auto;margin:0">Close levels</label></div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px"><input id="pr_q" placeholder="Search student" oninput="renderPairings()" style="flex:1;margin:0"><button class="paybtn" style="background:#E6F1FB;color:#185FA5;white-space:nowrap" onclick="openLevels()">ⓘ Levels</button><label style="display:flex;gap:4px;align-items:center;font-size:12px;color:#666;margin:0;white-space:nowrap"><input type="checkbox" id="pr_close" onchange="renderPairings()" style="width:auto;margin:0">Close levels</label></div>
     <label style="display:flex;gap:6px;align-items:center;font-size:13px;margin:0 2px 6px;font-weight:400;color:#92400E"><input type="checkbox" id="pr_test" onchange="ss.set('prTest',this.checked)" style="width:auto;margin:0">Test mode: offer texts go to this number, not the family</label>
     <input id="pr_testTo" placeholder="Test phone, e.g. (513) 555-1234" onchange="this.value=fmtPhone(this.value);ss.set('prTestTo',this.value)" style="margin:0 0 8px;max-width:260px">
     <div class="sec">Waitlist into a solo <span id="pr_c1" style="font-weight:400;font-size:12px;color:#888"></span></div>
@@ -293,7 +293,7 @@
       </div>
       <div class="row2">
         <div><label>Birthday</label><input id="f_dob" type="date"></div>
-        <div><label>Skill level</label>
+        <div><label>Skill level <a href="#" onclick="openLevels();return false" style="font-weight:400;font-size:12px;color:#185FA5;text-decoration:none">ⓘ Levels</a></label>
           <select id="f_skill_level"></select>
         </div>
       </div>
@@ -363,6 +363,12 @@
   </div>
 </div>
 <!-- Account: change password + sign out -->
+<div class="ovl hidden" id="lvModal" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="mdl">
+    <div class="mh"><b>Skill levels</b><button class="x" onclick="$('lvModal').classList.add('hidden')">✕</button></div>
+    <div id="lvBody"><div class="center">Loading…</div></div>
+  </div>
+</div>
 <div class="ovl hidden" id="acctModal" onclick="if(event.target===this)this.classList.add('hidden')">
   <div class="mdl">
     <div class="mh"><b>Account</b><button class="x" onclick="$('acctModal').classList.add('hidden')">✕</button></div>
@@ -788,6 +794,16 @@ function renderPairings() {
   const needs = prSolos.concat(prWait).filter(x => x.lv == null || !x.dob);
   $('pr_needs').textContent = needs.length;
   $('pr_needsList').innerHTML = prNeedsOpen ? `<div class="card" style="padding:0;overflow:hidden;margin-bottom:10px">${needs.map(x => `<div class="arow"${x.id && students.find(s => s.id === x.id) ? ` style="cursor:pointer" onclick="ss.set('tab','pairings');openEdit('${esc(x.id)}')"` : ''}><div class="who"><b>${esc(x.name)}</b><small>${x.w ? 'Waitlist' : 'Solo'} · missing ${[x.lv == null && 'level', !x.dob && 'birthdate'].filter(Boolean).join(' and ')}</small></div>${x.id && students.find(s => s.id === x.id) ? '<small style="color:#185FA5">Fix ›</small>' : ''}</div>`).join('') || '<div class="center">Everyone has a level and birthdate</div>'}</div>` : '';
+}
+// ================= LEVELS REFERENCE (skill_levels + skills) =================
+async function openLevels() {
+  $('lvModal').classList.remove('hidden');
+  const [L, S] = await Promise.all([sb.from('skill_levels').select('*').order('sort'), sb.from('skills').select('level_id,name,sort,active').order('sort')]);
+  if (L.error) { $('lvBody').innerHTML = '<div class="center">' + esc(L.error.message) + '</div>'; return; }
+  const sk = (S.data || []).filter(x => x.active !== false);
+  $('lvBody').innerHTML = (L.data || []).map(l => { const list = sk.filter(x => x.level_id === l.id);
+    return `<details style="border-bottom:1px solid #f0f0f0;padding:8px 2px"><summary style="cursor:pointer"><b>${esc(l.code.split('-')[0])}</b> · ${esc(l.name)} <small style="color:#888">${list.length ? list.length + ' skills' : ''}</small></summary>
+      ${list.length ? '<ul style="margin:6px 0 2px 18px;padding:0;font-size:13px">' + list.map(x => '<li>' + esc(x.name) + '</li>').join('') + '</ul>' : '<small style="color:#888;display:block;margin-top:4px">Skills not copied to 3.0 yet (run export3Skills).</small>'}</details>`; }).join('');
 }
 // ================= CALENDAR SYNC SETTINGS (edge function cal-sync does the work) =================
 const GCOLORS = [['1','Lavender'],['2','Sage'],['3','Grape'],['4','Flamingo (pink)'],['5','Banana'],['6','Tangerine'],['7','Peacock'],['8','Graphite'],['9','Blueberry'],['10','Basil'],['11','Tomato']];
