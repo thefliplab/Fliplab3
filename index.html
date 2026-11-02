@@ -1258,7 +1258,7 @@ function renderPay() {
     const c = clsSched.find(x => x.id === a.schedule_id) || { id: a.schedule_id, class_name: a.class_name, day: a.day, time: '' };
     return { ...clsObj(c, { student_id: a.student_id, student_name: a.student_name }), cls: c.class_name || 'Class' };
   });
-  const bals = weekRows.filter(p => p.status !== 'Cancelled' && !noCharge(p) && !skip.has(attKey(p))).concat(clsItems).map(p => {
+  const bals = weekRows.filter(p => p.status !== 'Cancelled' && !noCharge(p) && (!skip.has(attKey(p)) || paidOf(p).amt > 0)).concat(clsItems).map(p => {
     const paid = paidOf(p), owed = paid.adj ? paid.amt : priceNum(p);
     return { p, owed, paid: paid.amt, method: paid.method, adj: paid.adj, bal: owed - paid.amt };
   }).sort((a, b) => DAYS.indexOf(a.p.day) - DAYS.indexOf(b.p.day) || (b.bal > 0) - (a.bal > 0) || timeVal(a.p.time) - timeVal(b.p.time));
@@ -1282,7 +1282,7 @@ function renderPay() {
     const remind = 'Hi' + (s.parent_name ? ' ' + s.parent_name.split(' ')[0] : '') + '! Just a friendly reminder that ' + (p.student_name || '').split(' ')[0] + "'s " + what + ' this week (' + money(b.bal) + ') is still open. Cash, Venmo or Zelle all work. Thank you!';
     const pk = p.cls ? `clsObjFor('${k}')` : `'${k}'`;
     const phone = s.parent_phone ? `<a href="${smsHref(s.parent_phone, remind)}">📱 Remind</a> <span style="font-size:11px;color:#888">${esc(s.parent_phone)}</span>` : '';
-    return hdr + `<div class="arow"><div class="who"><b>${esc(p.student_name)}</b><small>${p.cls ? '🤸 ' + esc(p.cls) + ' · ' : ''}${esc(p.day)} ${esc(p.time)} · owed ${money(b.owed)}${b.paid ? ' · paid ' + money(b.paid) : ''}</small>${b.bal > 0 ? phone : ''}</div>
+    return hdr + `<div class="arow"><div class="who"><b>${esc(p.student_name)}</b><small>${p.cls ? '🤸 ' + esc(p.cls) + ' · ' : ''}${esc(p.day)} ${esc(p.time)}${!p.cls && skip.has(attKey(p)) ? ' · <b style="color:#854F0B">' + esc((attOf(p) || {}).status || 'Absent') + ' · paid anyway</b>' : ''} · owed ${money(b.owed)}${b.paid ? ' · paid ' + money(b.paid) : ''}</small>${b.bal > 0 ? phone : ''}</div>
       ${b.bal > 0 ? `<div class="bal">${money(b.bal)} due</div><button class="paybtn" onclick="openPay(${pk})">$ Record Payment</button>${b.paid && !p.cls ? `<button class="paybtn" style="background:#EFE7FF;color:#3C3489" onclick="markSpecial('${k}')">★ Special price</button>` : ''}`
         : `<span class="paid" style="cursor:pointer" title="Tap to edit" onclick="${p.cls ? `clsUndoPayId('${k}')` : `undoPay('${k}')`}">✓ Paid ${money(b.paid)}${b.method ? ' · ' + esc(b.method) : ''}${b.adj ? ' · ★ special' : ''}</span>`}</div>`;
   }).join('') : '<div class="center">No lessons this week</div>';
