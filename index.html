@@ -1302,7 +1302,7 @@ async function loadWeek(quiet) {
     att ? sb.from('payments').select('*').eq('week_start', ws) : { data: [] },
     curTab === 'payments' ? sb.from('payments').select('amount').gte('date', mStart) : { data: [] },
     (curTab === 'attendance' && attMode === 'classes') || curTab === 'payments' || curTab === 'dashboard' ? Promise.all([sb.from('class_schedule').select('*').eq('active', true), sb.from('class_enrollments').select('*').not('status', 'in', '("Dropped","Waitlisted")'), sb.from('class_attendance').select('*').eq('week_start', ws), sb.from('class_week_off').select('schedule_id').eq('week_start', ws)]) : null,
-    curTab === 'openings' || curTab === 'dashboard' ? sb.from('waitlist').select('*').in('status', ['Waiting','Waitlist','Drop-In']).order('signup_date') : { data: [] }
+    curTab === 'openings' || curTab === 'dashboard' || curTab === 'schedule' ? sb.from('waitlist').select('*').in('status', ['Waiting','Waitlist','Drop-In']).order('signup_date') : { data: [] }
   ]);
   if (my !== weekLoading) return;
   const err = L.error || X.error || S.error || A.error || P.error || M.error || W.error;
@@ -1336,8 +1336,9 @@ function renderWeek() {
   // Fill counts (main coach's slots only) + waitlist matches on open rows
   const wlOn = waitlist.filter(w => (w.extra || {}).Unsubscribed !== 'Yes'), fill = {};
   const mine = slot => slot.coach && (!mc || slot.coach === mc);
-  const openRow = (d, slot) => { if (mine(slot)) fill[d.name].open++; const n = wlOn.filter(w => matchesSlot(w, d.name, slot.time)).length;
-    return `<div class="srow open tap${slot.summer ? ' summer' : ''}" onclick="openAdd('${d.name}','${esc(slot.time)}','${esc(slot.coach)}')"><div class="tm">${esc(slot.time)}</div><div class="nm"><span class="tag ${slot.summer ? 't-summer' : 't-open'}">${slot.summer ? '☀️ Summer Open' : 'Open'}</span>${n ? `<span class="tag" style="background:#E6F1FB;color:#185FA5;cursor:pointer" onclick="event.stopPropagation();go('openings')">${n} waitlist match${n === 1 ? '' : 'es'} ›</span>` : ''}</div><div class="co" style="color:#bbb">${esc(slot.coach)}</div></div>`; };
+  const mTag = n => n ? `<span class="tag" style="background:#E6F1FB;color:#185FA5;cursor:pointer" onclick="event.stopPropagation();go('openings')">${n} match${n === 1 ? '' : 'es'} ›</span>` : '';
+  const openRow = (d, slot) => { if (mine(slot)) fill[d.name].open++; const n = wlOn.filter(w => w.status !== 'Drop-In' && matchesSlot(w, d.name, slot.time)).length;
+    return `<div class="srow open tap${slot.summer ? ' summer' : ''}" onclick="openAdd('${d.name}','${esc(slot.time)}','${esc(slot.coach)}')"><div class="tm">${esc(slot.time)}</div><div class="nm"><span class="tag ${slot.summer ? 't-summer' : 't-open'}">${slot.summer ? '☀️ Summer Open' : 'Open'}</span>${mTag(n)}</div><div class="co" style="color:#bbb">${esc(slot.coach)}</div></div>`; };
   const oc = p => p.coach && mc && p.coach !== mc ? ' oc' : '';  // another coach's lesson → pink row
   const row = (p, showTime) => `<div class="srow tap${oc(p)}" onclick="openLesson('${esc(p.id)}')"><div class="tm">${showTime ? esc(p.time) : ''}</div><div class="nm"><b>${esc(p.student_name)}</b>${pills(p)}${covering(p)}</div><div class="co">${esc(p.coach || 'TBD')}</div></div>`;
   // One-week fill sitting in a slot whose regular is Away → "covering for <name>"
@@ -1351,7 +1352,7 @@ function renderWeek() {
     slots.filter(s => s.day === d.name).forEach(s => { if (s.time) times[s.time] = { time: s.time, coach: s.coach || '', summer: isExtraSlot(s) }; });
     Object.keys(byTime).forEach(t => { if (!times[t]) times[t] = { time: t, coach: '' }; });
     const list = Object.values(times).sort((a, b) => timeVal(a.time) - timeVal(b.time));
-    fill[d.name] = { total: list.filter(mine).length, open: 0 };
+    fill[d.name] = { total: list.filter(mine).length, open: 0, away: 0 };
     html += `<div class="dayhd${d.name === todayName ? ' today' : ''}">${d.name}<span>${d.label}</span>{{FILL_${d.name}}}</div><div class="card" style="padding:0;margin-bottom:6px;border-radius:0 0 10px 10px;overflow:hidden">`;
     if (!list.length) html += '<div class="srow" style="color:#aaa;font-style:italic">No slots configured</div>';
     list.forEach(slot => {
@@ -1368,16 +1369,17 @@ function renderWeek() {
         if (slot.coach && !ls.some(p => !p.coach || p.coach === 'TBD' || p.coach === slot.coach)) html += openRow(d, slot);
       } else {
         const away = weekRows.find(p => p.day === d.name && p.time === slot.time && p.status === 'Cancelled');
-        if (away) html += `<div class="srow away tap" onclick="openAway('${esc(away.id)}')"><div class="tm">${esc(slot.time)}</div><div class="nm"><span class="tag t-away">🏖 Away</span><b style="color:#92400E">${esc(away.student_name)}</b><i style="font-size:11px;color:#B45309">out this week</i></div><div class="co">${esc(away.coach || slot.coach)}</div></div>`;
+        if (away && mine(slot)) fill[d.name].away++;
+        if (away) html += `<div class="srow away tap" onclick="openAway('${esc(away.id)}')"><div class="tm">${esc(slot.time)}</div><div class="nm"><span class="tag t-away">🏖 Away</span><b style="color:#92400E">${esc(away.student_name)}</b><i style="font-size:11px;color:#B45309">out this week</i>${mTag(wlOn.filter(w => matchesSlot(w, d.name, slot.time)).length)}</div><div class="co">${esc(away.coach || slot.coach)}</div></div>`;
         else html += openRow(d, slot);
       }
     });
     html += '</div>';
   });
-  let T = 0, O = 0;
-  wd.forEach(d => { const f = fill[d.name] || { total: 0, open: 0 }; T += f.total; O += f.open;
-    html = html.replace('{{FILL_' + d.name + '}}', f.total ? `<span style="float:right">${f.total - f.open}/${f.total} filled</span>` : ''); });
-  $('schedGrid').innerHTML = (T ? `<div style="font-size:13px;color:#555;margin:4px 2px 2px"><b>${T - O} of ${T}</b> slots filled (${Math.round((T - O) / T * 100)}%) · <span style="color:${O ? '#1c9a73' : '#888'}">${O} open</span></div>` : '') + html;
+  let T = 0, O = 0, A = 0;
+  wd.forEach(d => { const f = fill[d.name] || { total: 0, open: 0, away: 0 }; T += f.total; O += f.open; A += f.away;
+    html = html.replace('{{FILL_' + d.name + '}}', f.total ? `<span style="float:right">${f.total - f.open}/${f.total} filled${f.away ? ' · ' + f.away + ' away' : ''}</span>` : ''); });
+  $('schedGrid').innerHTML = (T ? `<div style="font-size:13px;color:#555;margin:4px 2px 2px"><b>${T - O} of ${T}</b> slots filled (${Math.round((T - O) / T * 100)}%) · <span style="color:${O ? '#1c9a73' : '#888'}">${O} open</span>${A ? ` · <span style="color:#B45309">${A} away this week</span>` : ''}</div>` : '') + html;
 }
 
 // ================= EDIT LESSON (port of 2.0 openMoveLesson / saveMoveLesson / cancelFromSchedule) =================
