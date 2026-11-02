@@ -42,11 +42,9 @@ function applyExceptions(lessons, exs) {
   out.forEach(p => { if (p.status !== 'Cancelled') { const k = p.day + '|' + p.time + '|' + (p.coach || ''); cnt[k] = (cnt[k] || 0) + 1; } });
   // Same as 2.0 getPrivates: a shared slot always uses the Shared price (stored price is ignored)
   out.forEach(p => { if (p.status !== 'Cancelled' && p.exType !== 'PriceOverride' && cnt[p.day + '|' + p.time + '|' + (p.coach || '')] >= 2) { p.lesson_type = 'Shared'; if (!isSpecial(p)) p.price = priceFor(p.duration || '30 min', 'Shared'); } });
-  // Split pair → Solo price: a Shared lesson left alone in its slot (Steve moved one kid out, or the partner's lesson ended) bills as Solo.
-  // A partner's one-week Cancel still holds their seat (stays Shared); a type picked in the pop-up (PriceOverride / Move type) wins.
-  const held = {};
-  out.forEach(p => { if (p.status !== 'Cancelled' || p.exType === 'Cancel') { const k = p.day + '|' + p.time + '|' + (p.coach || ''); held[k] = (held[k] || 0) + 1; } });
-  out.forEach(p => { if (p.status !== 'Cancelled' && p.lesson_type === 'Shared' && p.exType !== 'PriceOverride' && !p.typeSet && held[p.day + '|' + p.time + '|' + (p.coach || '')] === 1) { p.lesson_type = 'Solo'; if (!isSpecial(p)) p.price = priceFor(p.duration || '30 min', 'Solo'); } });
+  // Alone in the slot → Solo price: a Shared lesson left by itself (partner cancelled, moved, or dropped) always bills as Solo.
+  // Only a type picked in the pop-up (PriceOverride / Move type) overrides this.
+  out.forEach(p => { if (p.status !== 'Cancelled' && p.lesson_type === 'Shared' && p.exType !== 'PriceOverride' && !p.typeSet && cnt[p.day + '|' + p.time + '|' + (p.coach || '')] === 1) { p.lesson_type = 'Solo'; if (!isSpecial(p)) p.price = priceFor(p.duration || '30 min', 'Solo'); } });
   return out;
 }
 
