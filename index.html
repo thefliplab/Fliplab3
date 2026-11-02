@@ -762,6 +762,7 @@ async function prOffer(k, how) {
     if (res.error || (res.data && res.data.error)) { m.className = 'msg err'; m.textContent = 'Not sent: ' + ((res.data && res.data.error) || res.error.message); return; }
     if (test) { m.textContent = '✓ Test sent to ' + me + ' (offer not marked as sent).'; return; }
     m.textContent = '✓ Sent ' + res.data.sent + (res.data.failed ? ' · ' + res.data.failed + ' failed' : '') + '. Replies come to your phone.';
+    if (!res.data.sent) { m.className = 'msg err'; m.textContent = 'Not sent: ' + ((res.data.results || [])[0] || {}).error; return; }
   }
   const d = ymd(new Date());
   await prSetExtra(a.id, e => ({ ...e, PairOffer: { ...(e.PairOffer || {}), [b.id]: d } }));
@@ -841,8 +842,22 @@ async function loadComm() {
   cmSaved = S.data || [];
   $('cm_saved').innerHTML = '<option value="">Saved messages…</option>' + cmSaved.map(m => `<option value="${esc(m.id)}">${esc(m.title)}</option>`).join('');
   $('cm_test').checked = ss.get('prTest', true); $('cm_testTo').value = ss.get('prTestTo', '');
-  $('cm_hist').innerHTML = (H.data || []).map(b => `<div class="arow"><div class="who"><b>${esc(b.audience)} · ${b.families} famil${b.families === 1 ? 'y' : 'ies'}${b.test ? ' (test)' : ''}</b><small>${new Date(b.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · "${esc(String(b.body || '').slice(0, 50))}…"</small></div><small style="color:#666">${b.sent} sent${b.failed ? ' · ' + b.failed + ' failed' : ''}</small></div>`).join('') || '<div class="center">Nothing sent yet</div>';
+  $('cm_hist').innerHTML = (H.data || []).map(b => `<div class="arow"><div class="who"><b>${esc(b.audience)} · ${b.families} famil${b.families === 1 ? 'y' : 'ies'}${b.test ? ' (test)' : ''}</b><small>${new Date(b.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · "${esc(String(b.body || '').slice(0, 50))}…"</small><small id="cmf_${b.id}" style="color:#A32D2D"></small></div><small id="cms_${b.id}" style="color:#666;text-align:right">${b.sent} sent${b.failed ? ' · ' + b.failed + ' failed' : ''}</small></div>`).join('') || '<div class="center">Nothing sent yet</div>';
   cmSetAud(cmAud);
+  cmCheck(H.data || []);
+}
+// Ask the gateway how recent texts did, then show delivered / sending / failed per send (texts saved before Nov 1 have no status)
+async function cmCheck(bl) {
+  if (!bl.length) return;
+  await sb.functions.invoke('sms-send', { body: { check: true } }).catch(() => {});
+  const r = await sb.from('text_log').select('status,family_name,batch:extra->>batch').in('extra->>batch', bl.map(b => b.id));
+  const by = {}; (r.data || []).forEach(t => (by[t.batch] = by[t.batch] || []).push(t));
+  bl.forEach(b => {
+    const t = by[b.id], el = $('cms_' + b.id); if (!t || !el) return;
+    const n = s => t.filter(x => s.includes(x.status)).length, d = n(['Delivered']), sn = n(['Sent']), w = n(['Queued', 'Pending', 'Processed']), f = t.filter(x => x.status === 'Failed');
+    el.innerHTML = [d ? '✓ ' + d + ' delivered' : '', sn ? sn + ' sent' : '', w ? w + ' sending' : '', f.length ? '<span style="color:#A32D2D;font-weight:600">' + f.length + ' failed</span>' : ''].filter(Boolean).join(' · ');
+    if (f.length) $('cmf_' + b.id).textContent = 'Failed: ' + f.map(x => x.family_name || '?').join(', ');
+  });
 }
 function cmSetAud(a) {
   cmAud = a;
@@ -926,14 +941,14 @@ async function cmSend() {
   if (!confirm(test ? 'TEST: send ' + list.length + ' sample text(s) to ' + to + '?' : 'Text ' + picks.length + ' famil' + (picks.length === 1 ? 'y' : 'ies') + ' for real?')) return;
   $('cm_send').disabled = true; r.className = 'msg'; r.textContent = 'Sending…';
   const msgs = list.map(f => ({ to: test ? to : f.phone, student_id: test ? null : f.sid, family: test ? 'Test' : f.parent, text: (test ? '[TEST for ' + (f.parent || 'family') + '] ' : '') + fill(f) }));
-  const res = { data: { sent: 0, failed: 0 } };
+  const res = { data: { sent: 0, failed: 0 } }, batch = crypto.randomUUID();
   for (let i = 0; i < msgs.length; i += 50) {   // sms-send takes up to 60 per call
-    const part = await sb.functions.invoke('sms-send', { body: { messages: msgs.slice(i, i + 50) } });
+    const part = await sb.functions.invoke('sms-send', { body: { messages: msgs.slice(i, i + 50), batch } });
     if (part.error || (part.data && part.data.error)) { $('cm_send').disabled = false; r.className = 'msg err'; r.textContent = 'Not sent' + (i ? ' after ' + i : '') + ': ' + ((part.data && part.data.error) || part.error.message); return; }
     res.data.sent += part.data.sent || 0; res.data.failed += part.data.failed || 0;
   }
   $('cm_send').disabled = false;
-  await sb.from('blasts').insert({ gym_id: gymId, audience: label, body: tpl, families: list.length, sent: res.data.sent || 0, failed: res.data.failed || 0, test });
+  await sb.from('blasts').insert({ id: batch, gym_id: gymId, audience: label, body: tpl, families: list.length, sent: res.data.sent || 0, failed: res.data.failed || 0, test });
   r.textContent = '✓ Sent ' + res.data.sent + (res.data.failed ? ' · ' + res.data.failed + ' failed' : '') + (test ? ' to your test number (first 3 families as samples)' : '');
   loadComm();
 }
