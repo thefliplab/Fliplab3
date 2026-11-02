@@ -240,7 +240,9 @@
     <div class="card" style="padding:0;overflow:hidden" id="cm_fam"><div class="center">Loading…</div></div>
     <div class="sec">Message <select id="cm_saved" onchange="cmUseSaved()"><option value="">Saved messages…</option></select></div>
     <div class="card">
-      <textarea id="cm_msg" rows="4" placeholder="Hi {parent}! …"></textarea>
+      <div style="display:flex;gap:6px;margin-bottom:6px"><input id="cm_idea" placeholder="✨ What do you want to say? e.g. gym closed Thu for Thanksgiving" style="flex:1;margin:0"><button class="paybtn" style="background:#EEEDFE;color:#3C3489;white-space:nowrap" onclick="cmAI('draft')">✨ Write it</button></div>
+      <textarea id="cm_msg" rows="4" placeholder="Hi {parent}! …" oninput="cmLen()"></textarea>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin:4px 0"><button class="paybtn" style="background:#EEEDFE;color:#3C3489" onclick="cmAI('shorter')">Shorter</button><button class="paybtn" style="background:#EEEDFE;color:#3C3489" onclick="cmAI('friendlier')">Friendlier</button><button class="paybtn" style="background:#EEEDFE;color:#3C3489" onclick="cmAI('professional')">More professional</button><button class="paybtn" style="background:#EEEDFE;color:#3C3489" onclick="cmAI('onetext')">Fit in 1 text</button><small id="cm_len" style="margin-left:auto;color:#888"></small></div><div id="cm_ai" class="msg"></div>
       <small style="color:#888;display:block;margin:4px 0 8px">{parent} and {kid} fill in for each family. A family with two kids gets one text. <a href="#" onclick="cmSaveMsg();return false" style="color:#185FA5">Save this message</a> · <a href="#" onclick="cmDelSaved();return false" style="color:#A32D2D">Delete saved</a></small>
       <label style="display:flex;gap:6px;align-items:center;font-size:13px;margin:0 0 6px;font-weight:400;color:#92400E"><input type="checkbox" id="cm_test" onchange="ss.set('prTest',this.checked);cmCount()" style="width:auto;margin:0">Test mode: send to this number only</label>
       <input id="cm_testTo" placeholder="Test phone, e.g. (513) 555-1234" onchange="this.value=fmtPhone(this.value);ss.set('prTestTo',this.value)" style="margin:0 0 10px;max-width:260px">
@@ -884,7 +886,23 @@ function cmRender() {
 }
 function cmCount() { const n = cmOn.size; $('cm_cnt').textContent = '(' + n + ' of ' + cmFams.length + ')'; $('cm_send').textContent = ($('cm_test').checked ? 'Test send (' + n + ')' : 'Send to ' + n + ' famil' + (n === 1 ? 'y' : 'ies')); }
 function cmAll() { const all = cmFams.filter(f => !f.key.startsWith('none:')); cmOn = cmOn.size === all.length ? new Set() : new Set(all.map(f => f.key)); cmRender(); }
-function cmUseSaved() { const m = cmSaved.find(x => x.id === $('cm_saved').value); if (m) $('cm_msg').value = m.body; }
+function cmUseSaved() { const m = cmSaved.find(x => x.id === $('cm_saved').value); if (m) { $('cm_msg').value = m.body; cmLen(); } }
+// Length with {parent}/{kid} counted as ~8 letters; 160 fits in one text
+function cmLen() { const n = $('cm_msg').value.replace(/\{parent\}|\{kid\}/g, 'xxxxxxxx').length; $('cm_len').textContent = n ? n + ' chars · ' + (n <= 160 ? '1 text' : Math.ceil(n / 153) + ' texts') : ''; }
+let cmPrev = '';
+function cmUndo() { $('cm_msg').value = cmPrev; cmLen(); $('cm_ai').textContent = ''; }
+async function cmAI(mode) {
+  const m = $('cm_ai'), text = $('cm_msg').value.trim(), idea = $('cm_idea').value.trim();
+  m.className = 'msg err';
+  if (mode === 'draft' ? !idea : !text) { m.textContent = mode === 'draft' ? 'Type what you want to say first.' : 'Write or draft a message first.'; return; }
+  m.className = 'msg'; m.textContent = '✨ Writing…';
+  const aud = CM_AUD.find(a => a[0] === cmAud)[1];
+  const res = await sb.functions.invoke('ai-write', { body: { mode, idea, text, audience: aud === 'Everyone active' ? 'all current families' : aud + ' families' } });
+  const err = (res.data && res.data.error) || (res.error && res.error.message);
+  if (err || !res.data || !res.data.text) { m.className = 'msg err'; m.textContent = 'AI: ' + (err || 'no answer'); return; }
+  cmPrev = $('cm_msg').value; $('cm_msg').value = res.data.text; cmLen();
+  m.innerHTML = '✓ Drafted. Edit anything before sending.' + (cmPrev ? ' <a href="#" onclick="cmUndo();return false" style="color:#185FA5">Undo</a>' : '');
+}
 async function cmSaveMsg() {
   const body = $('cm_msg').value.trim(); if (!body) return alert('Type a message first.');
   const title = prompt('Name for this message (e.g. Gym closed):'); if (!title) return;
@@ -907,9 +925,14 @@ async function cmSend() {
   const list = test ? picks.slice(0, 3) : picks;
   if (!confirm(test ? 'TEST: send ' + list.length + ' sample text(s) to ' + to + '?' : 'Text ' + picks.length + ' famil' + (picks.length === 1 ? 'y' : 'ies') + ' for real?')) return;
   $('cm_send').disabled = true; r.className = 'msg'; r.textContent = 'Sending…';
-  const res = await sb.functions.invoke('sms-send', { body: { messages: list.map(f => ({ to: test ? to : f.phone, student_id: test ? null : f.sid, family: test ? 'Test' : f.parent, text: (test ? '[TEST for ' + (f.parent || 'family') + '] ' : '') + fill(f) })) } });
+  const msgs = list.map(f => ({ to: test ? to : f.phone, student_id: test ? null : f.sid, family: test ? 'Test' : f.parent, text: (test ? '[TEST for ' + (f.parent || 'family') + '] ' : '') + fill(f) }));
+  const res = { data: { sent: 0, failed: 0 } };
+  for (let i = 0; i < msgs.length; i += 50) {   // sms-send takes up to 60 per call
+    const part = await sb.functions.invoke('sms-send', { body: { messages: msgs.slice(i, i + 50) } });
+    if (part.error || (part.data && part.data.error)) { $('cm_send').disabled = false; r.className = 'msg err'; r.textContent = 'Not sent' + (i ? ' after ' + i : '') + ': ' + ((part.data && part.data.error) || part.error.message); return; }
+    res.data.sent += part.data.sent || 0; res.data.failed += part.data.failed || 0;
+  }
   $('cm_send').disabled = false;
-  if (res.error || (res.data && res.data.error)) { r.className = 'msg err'; r.textContent = 'Not sent: ' + ((res.data && res.data.error) || res.error.message); return; }
   await sb.from('blasts').insert({ gym_id: gymId, audience: label, body: tpl, families: list.length, sent: res.data.sent || 0, failed: res.data.failed || 0, test });
   r.textContent = '✓ Sent ' + res.data.sent + (res.data.failed ? ' · ' + res.data.failed + ' failed' : '') + (test ? ' to your test number (first 3 families as samples)' : '');
   loadComm();
