@@ -641,7 +641,7 @@ function prMatch(a, b, close) {
 }
 function prWho(x) { const age = ageOf(x.dob); return (x.skill ? esc(String(x.skill).split('-')[0]) : 'No level') + (age !== '' ? ' · age ' + age : ''); }
 function prRow(a, b, f, note, extra, k) {
-  return `<div class="arow"><div class="who"><b>${esc(a.name)} + ${esc(b.name)}</b><small>${esc(a.name.split(' ')[0])}: ${note[0]}</small><small>${esc(b.name.split(' ')[0])}: ${note[1]}</small>${extra || ''}</div><span class="tag ${f.gap ? 't-away' : 't-photo'}">${f.gap ? 'Close level' : 'Same level'}</span><div style="display:flex;gap:4px;flex-wrap:wrap"><button class="paybtn" onclick="prOpen=prOpen==='${k}'?null:'${k}';renderPairings()">Pair</button><button class="paybtn" style="background:#eef0f2;color:#555" onclick="prNo('${k}')">Said no</button><button class="paybtn" style="background:#eef0f2;color:#555" onclick="prSolo('${k}')">Solo only</button></div></div>${prOpen === k ? prConfirm(k) : ''}`;
+  return `<div class="arow"><div class="who"><b>${esc(a.name)} + ${esc(b.name)}</b><small>${esc(a.name.split(' ')[0])}: ${note[0]}</small><small>${esc(b.name.split(' ')[0])}: ${note[1]}</small>${extra || ''}${prOffered(a.id, b.id)}</div><span class="tag ${f.gap ? 't-away' : 't-photo'}">${f.gap ? 'Close level' : 'Same level'}</span><div style="display:flex;gap:4px;flex-wrap:wrap"><button class="paybtn" style="background:#E6F1FB;color:#185FA5" onclick="prOpen=prOpen==='o${k}'?null:'o${k}';renderPairings()">Offer</button><button class="paybtn" onclick="prOpen=prOpen==='${k}'?null:'${k}';renderPairings()">Pair</button><button class="paybtn" style="background:#eef0f2;color:#555" onclick="prNo('${k}')">Said no</button><button class="paybtn" style="background:#eef0f2;color:#555" onclick="prSolo('${k}')">Solo only</button></div></div>${prOpen === k ? prConfirm(k) : prOpen === 'o' + k ? prOfferBox(k) : ''}`;
 }
 // Inline confirm: pick the time (two-solo matches: who moves) and the start week
 function prConfirm(k) {
@@ -695,6 +695,44 @@ function prHidden() {
   return `<details style="margin:10px 2px"><summary style="font-size:13px;color:#185FA5;cursor:pointer">Hidden: ${solo.length} solo only · ${no.length} said no</summary><div class="card" style="padding:0;overflow:hidden;margin-top:6px">
     ${solo.map(s => `<div class="arow"><div class="who"><b>${nm(s)}</b><small>Solo only</small></div><button class="paybtn" onclick="prUnhide('solo','${esc(s.id)}')">Undo</button></div>`).join('')}
     ${no.map(([x, y]) => `<div class="arow"><div class="who"><b>${nm(x)} + ${nm(y)}</b><small>Said no</small></div><button class="paybtn" onclick="prUnhide('no','${esc(x.id)}','${esc(y.id)}')">Undo</button></div>`).join('')}</div></details>`;
+}
+// Offer: text (sms-send, replies come to Steve's phone) or email (opens your mail app). Saved as extra.PairOffer = { otherId: date }.
+const prFam = x => { const st = prStu(x.id) || {}, w = x.w || {}; return { phone: st.parent_phone || w.parent_phone, email: st.parent_email || w.parent_email, parent: ((st.parent_name || w.parent_name || '').split(' ')[0]) || 'there', kid: x.name.split(' ')[0] }; };
+function prOffered(a, b) { const d = (((prStu(a) || {}).extra || {}).PairOffer || {})[b] || (((prStu(b) || {}).extra || {}).PairOffer || {})[a]; return d ? `<small style="color:#185FA5;font-weight:600">Offer sent ${esc(d.slice(5).replace('-', '/'))}</small>` : ''; }
+function prOfferMsg(k) {
+  const [sec] = k.split('-'), [a, b] = prPairOf(k);
+  return sec === '1' ? `Hi {parent}! A spot opened for {kid} to share a lesson with another athlete at the same level on ${a.l.day} at ${a.l.time}. Shared lessons are $30 instead of $40. Interested? Reply YES.`
+    : `Hi {parent}! Would {kid} like to share a weekly lesson with another athlete at the same level? Shared lessons are $30 instead of $40. Reply YES and I'll work out the time.`;
+}
+function prOfferBox(k) {
+  const [sec] = k.split('-'), [a, b] = prPairOf(k), who = sec === '1' ? [b] : [a, b];
+  return `<div style="background:#f6f8f7;padding:10px 12px;border-bottom:1px solid #f0f0f0;font-size:13px">
+    ${who.map((x, j) => { const f = prFam(x); return `<label style="display:flex;gap:6px;align-items:center;margin:2px 0;font-weight:400"><input type="checkbox" class="pr_to" data-j="${j}" ${f.phone || f.email ? 'checked' : 'disabled'} style="width:auto;margin:0">${esc(x.name)}'s family <small style="color:#888">${esc(f.phone || f.email || 'no phone or email')}</small></label>`; }).join('')}
+    <textarea id="pr_txt" rows="4" style="margin:6px 0">${esc(prOfferMsg(k))}</textarea><small style="color:#888;display:block;margin-bottom:8px">{parent} and {kid} fill in for each family.</small>
+    <div style="display:flex;gap:8px"><button class="btn ghost" style="flex:1" onclick="prOffer('${k}','email')">✉ Email</button><button class="btn" id="pr_send" style="flex:2" onclick="prOffer('${k}','text')">📱 Send text</button></div><div id="pr_omsg" class="msg"></div></div>`;
+}
+async function prOffer(k, how) {
+  const [sec] = k.split('-'), [a, b] = prPairOf(k), who = sec === '1' ? [b] : [a, b], tpl = $('pr_txt').value, m = $('pr_omsg');
+  const picks = [...document.querySelectorAll('.pr_to')].filter(c => c.checked).map(c => who[+c.dataset.j]);
+  const fill = x => { const f = prFam(x); return tpl.replace(/\{parent\}/g, f.parent).replace(/\{kid\}/g, f.kid); };
+  if (!picks.length) { m.className = 'msg err'; m.textContent = 'Pick a family.'; return; }
+  if (how === 'email') {
+    const e = picks.filter(x => prFam(x).email);
+    if (!e.length) { m.className = 'msg err'; m.textContent = 'No email on file.'; return; }
+    m.className = 'msg'; m.innerHTML = e.map(x => `<a class="paybtn" style="text-decoration:none;display:inline-block;margin:2px" href="mailto:${esc(prFam(x).email)}?subject=${encodeURIComponent('Shared lesson spot')}&body=${encodeURIComponent(fill(x))}">✉ Open email to ${esc(x.name.split(' ')[0])}'s family</a>`).join('');
+  } else {
+    const t = picks.filter(x => prFam(x).phone);
+    if (!t.length) { m.className = 'msg err'; m.textContent = 'No phone on file.'; return; }
+    $('pr_send').disabled = true; m.className = 'msg'; m.textContent = 'Sending…';
+    const res = await sb.functions.invoke('sms-send', { body: { messages: t.map(x => ({ to: prFam(x).phone, student_id: x.id, family: (prStu(x.id) || {}).parent_name || x.name, text: fill(x) })) } });
+    $('pr_send').disabled = false;
+    if (res.error || (res.data && res.data.error)) { m.className = 'msg err'; m.textContent = 'Not sent: ' + ((res.data && res.data.error) || res.error.message); return; }
+    m.textContent = '✓ Sent ' + res.data.sent + (res.data.failed ? ' · ' + res.data.failed + ' failed' : '') + '. Replies come to your phone.';
+  }
+  const d = ymd(new Date());
+  await prSetExtra(a.id, e => ({ ...e, PairOffer: { ...(e.PairOffer || {}), [b.id]: d } }));
+  await prSetExtra(b.id, e => ({ ...e, PairOffer: { ...(e.PairOffer || {}), [a.id]: d } }));
+  if (how === 'text') setTimeout(() => { prOpen = null; renderPairings(); }, 1800);
 }
 async function prPair(k) {
   const [sec, i] = k.split('-'), m = prM[sec][+i], start = $('pr_start').value, pairId = 'PAIR' + Date.now();
