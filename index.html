@@ -1047,7 +1047,14 @@ async function permanentChange(p, ch, startMonday) {
   const e1 = await sb.from('private_lessons').update({ end_date: startMonday }).eq('id', p.id);
   if (e1.error) return e1;
   const { id, created_at, ...copy } = src;
-  return sb.from('private_lessons').insert({ ...copy, ...ch, extra: { ...(src.extra || {}), ...(ch.extra || {}) }, status: 'Confirmed', paid: 'Unpaid', start_date: startMonday, end_date: null });
+  const ins = await sb.from('private_lessons').insert({ ...copy, ...ch, extra: { ...(src.extra || {}), ...(ch.extra || {}) }, status: 'Confirmed', paid: 'Unpaid', start_date: startMonday, end_date: null }).select().single();
+  if (ins.error) return ins;
+  // Carry this week's (and later) payments + attendance over to the new lesson, so they don't show as unpaid / unmarked
+  for (const t of ['payments', 'attendance']) {
+    const r = await sb.from(t).update({ lesson_id: ins.data.id }).eq('lesson_id', p.id).gte('week_start', startMonday);
+    if (r.error) return r;
+  }
+  return ins;
 }
 
 async function saveLesson() {
