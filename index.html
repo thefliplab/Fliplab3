@@ -226,6 +226,7 @@
     <div class="sec">Two solos together <span id="pr_c2" style="font-weight:400;font-size:12px;color:#888"></span></div>
     <div style="font-size:12px;color:#888;margin:-4px 2px 6px">One kid moves to the other's time, which frees a slot.</div>
     <div class="card" style="padding:0;overflow:hidden" id="pr_list2"></div>
+    <div id="pr_hidden"></div>
     <div style="font-size:12px;color:#888;margin:10px 2px">Same level (or 1 apart with Close levels), ages within 2 years. Already-paired kids, drop-ins and other coaches' lessons are left out.</div>
   </section>
 
@@ -623,15 +624,16 @@ async function loadPairings() {
   prSolos = live.filter(l => !l.pair_id && l.lesson_type !== 'Shared' && cnt[l.day + '|' + l.time] === 1).map(l => {
     const s = byId[l.student_id] || {};
     return { key: 'S' + l.id, id: l.student_id, name: l.student_name, l, lv: prLv(s.skill_level), dob: s.dob, skill: s.skill_level };
-  }).filter(x => !byId[x.id] || isOn(byId[x.id]));
+  }).filter(x => (!byId[x.id] || isOn(byId[x.id])) && !prSoloOnly(x.id));
   const hasLesson = new Set(live.map(l => l.student_id));
-  prWait = (W.data || []).filter(w => (w.extra || {}).Unsubscribed !== 'Yes' && !hasLesson.has(w.student_id)).map(w => {
+  prWait = (W.data || []).filter(w => (w.extra || {}).Unsubscribed !== 'Yes' && !hasLesson.has(w.student_id) && !prSoloOnly(w.student_id)).map(w => {
     const s = byId[w.student_id] || {};
     return { key: 'W' + w.id, id: w.student_id, name: w.student_name || ((s.first_name || '') + ' ' + (s.last_name || '')).trim(), w, lv: prLv(s.skill_level || w.skill_level), dob: s.dob || w.dob, skill: s.skill_level || w.skill_level };
   });
   renderPairings();
 }
 function prMatch(a, b, close) {
+  if (prSaidNo(a.id, b.id)) return null;
   if (a.lv == null || b.lv == null || !a.dob || !b.dob) return null;
   const gap = Math.abs(a.lv - b.lv); if (gap > (close ? 1 : 0)) return null;
   const ag = Math.abs(prYrs(a.dob) - prYrs(b.dob)); if (ag > 2) return null;
@@ -639,7 +641,7 @@ function prMatch(a, b, close) {
 }
 function prWho(x) { const age = ageOf(x.dob); return (x.skill ? esc(String(x.skill).split('-')[0]) : 'No level') + (age !== '' ? ' · age ' + age : ''); }
 function prRow(a, b, f, note, extra, k) {
-  return `<div class="arow"><div class="who"><b>${esc(a.name)} + ${esc(b.name)}</b><small>${esc(a.name.split(' ')[0])}: ${note[0]}</small><small>${esc(b.name.split(' ')[0])}: ${note[1]}</small>${extra || ''}</div><span class="tag ${f.gap ? 't-away' : 't-photo'}">${f.gap ? 'Close level' : 'Same level'}</span><button class="paybtn" onclick="prOpen=prOpen==='${k}'?null:'${k}';renderPairings()">Pair</button></div>${prOpen === k ? prConfirm(k) : ''}`;
+  return `<div class="arow"><div class="who"><b>${esc(a.name)} + ${esc(b.name)}</b><small>${esc(a.name.split(' ')[0])}: ${note[0]}</small><small>${esc(b.name.split(' ')[0])}: ${note[1]}</small>${extra || ''}</div><span class="tag ${f.gap ? 't-away' : 't-photo'}">${f.gap ? 'Close level' : 'Same level'}</span><div style="display:flex;gap:4px;flex-wrap:wrap"><button class="paybtn" onclick="prOpen=prOpen==='${k}'?null:'${k}';renderPairings()">Pair</button><button class="paybtn" style="background:#eef0f2;color:#555" onclick="prNo('${k}')">Said no</button><button class="paybtn" style="background:#eef0f2;color:#555" onclick="prSolo('${k}')">Solo only</button></div></div>${prOpen === k ? prConfirm(k) : ''}`;
 }
 // Inline confirm: pick the time (two-solo matches: who moves) and the start week
 function prConfirm(k) {
@@ -652,6 +654,47 @@ function prConfirm(k) {
     <label style="margin-top:6px">Starts</label><select id="pr_start" style="margin:2px 0 6px"><option value="${mon}">Week of ${wk(mon)} (this week)</option><option value="${ymd(nx)}">Week of ${wk(ymd(nx))}</option></select>
     <small style="color:#666;display:block;margin-bottom:8px">Both become Shared (${priceFor('30 min', 'Shared')} each for 30 min) and show as one card. Earlier weeks stay as they were.${sec === '1' ? ' ' + esc(m.w.name) + ' comes off the waitlist.' : ''}</small>
     <div style="display:flex;gap:8px"><button class="btn ghost" style="flex:1" onclick="prOpen=null;renderPairings()">Cancel</button><button class="btn" id="pr_go" style="flex:2" onclick="prPair('${k}')">Pair them</button></div><div id="pr_msg" class="msg"></div></div>`;
+}
+// Said no / Solo only live on the student record (extra.PairNo = [student ids], extra.SoloOnly = 'Yes')
+const prStu = id => students.find(x => x.id === id);
+const prSoloOnly = id => ((prStu(id) || {}).extra || {}).SoloOnly === 'Yes';
+const prSaidNo = (a, b) => (((prStu(a) || {}).extra || {}).PairNo || []).includes(b) || (((prStu(b) || {}).extra || {}).PairNo || []).includes(a);
+async function prSetExtra(id, fn) {
+  const st = prStu(id); if (!st) return { error: { message: 'Student not found' } };
+  const extra = fn({ ...(st.extra || {}) });
+  const r = await sb.from('students').update({ extra }).eq('id', id);
+  if (!r.error) st.extra = extra;
+  return r;
+}
+const prPairOf = k => { const [sec, i] = k.split('-'), m = prM[sec][+i]; return sec === '1' ? [m.s, m.w] : [m.a, m.b]; };
+async function prNo(k) {
+  const [a, b] = prPairOf(k);
+  const add = (x, y) => prSetExtra(x, e => ({ ...e, PairNo: [...new Set([...(e.PairNo || []), y])] }));
+  const r = (await add(a.id, b.id)).error || (await add(b.id, a.id)).error;
+  if (r) return alert(r.message);
+  prOpen = null; renderPairings();
+}
+async function prSolo(k) {
+  const [a, b] = prPairOf(k), pick = k.startsWith('1') ? a : (confirm('Mark ' + a.name + ' as solo only?\n(Cancel = mark ' + b.name + ' instead)') ? a : b);
+  const r = await prSetExtra(pick.id, e => ({ ...e, SoloOnly: 'Yes' }));
+  if (r.error) return alert(r.error.message);
+  prOpen = null; loadPairings();
+}
+async function prUnhide(kind, a, b) {
+  const r = kind === 'solo' ? await prSetExtra(a, e => { delete e.SoloOnly; return e; })
+    : ((await prSetExtra(a, e => ({ ...e, PairNo: (e.PairNo || []).filter(x => x !== b) }))).error ? { error: 1 } : await prSetExtra(b, e => ({ ...e, PairNo: (e.PairNo || []).filter(x => x !== a) })));
+  if (r.error) return alert(r.error.message || 'Could not save');
+  loadPairings();
+}
+function prHidden() {
+  const nm = s => esc((s.first_name || '') + ' ' + (s.last_name || ''));
+  const solo = students.filter(s => (s.extra || {}).SoloOnly === 'Yes');
+  const seen = new Set(), no = [];
+  students.forEach(s => ((s.extra || {}).PairNo || []).forEach(o => { const k = [s.id, o].sort().join('|'), t = prStu(o); if (t && !seen.has(k)) { seen.add(k); no.push([s, t]); } }));
+  if (!solo.length && !no.length) return '';
+  return `<details style="margin:10px 2px"><summary style="font-size:13px;color:#185FA5;cursor:pointer">Hidden: ${solo.length} solo only · ${no.length} said no</summary><div class="card" style="padding:0;overflow:hidden;margin-top:6px">
+    ${solo.map(s => `<div class="arow"><div class="who"><b>${nm(s)}</b><small>Solo only</small></div><button class="paybtn" onclick="prUnhide('solo','${esc(s.id)}')">Undo</button></div>`).join('')}
+    ${no.map(([x, y]) => `<div class="arow"><div class="who"><b>${nm(x)} + ${nm(y)}</b><small>Said no</small></div><button class="paybtn" onclick="prUnhide('no','${esc(x.id)}','${esc(y.id)}')">Undo</button></div>`).join('')}</div></details>`;
 }
 async function prPair(k) {
   const [sec, i] = k.split('-'), m = prM[sec][+i], start = $('pr_start').value, pairId = 'PAIR' + Date.now();
@@ -693,6 +736,7 @@ function renderPairings() {
   prM = { 1: m1, 2: m2 };
   $('pr_list1').innerHTML = m1.map(({ s, w, f }, i) => prRow(s, w, f, [`${prWho(s)} · Solo ${esc(s.l.day)} ${esc(s.l.time)}`, `${prWho(w)} · Waitlist · ${prefs(w.w)}`], '<small style="color:#3B6D11;font-weight:600">+$20/wk</small>', '1-' + i)).join('') || '<div class="center">No waitlist matches right now</div>';
   $('pr_list2').innerHTML = m2.map(({ a, b, f }, i) => prRow(a, b, f, [`${prWho(a)} · Solo ${esc(a.l.day)} ${esc(a.l.time)}`, `${prWho(b)} · Solo ${esc(b.l.day)} ${esc(b.l.time)}`], `<small style="color:#92400E">Frees ${esc(a.l.day.slice(0, 3))} ${esc(a.l.time)} or ${esc(b.l.day.slice(0, 3))} ${esc(b.l.time)}</small>`, '2-' + i)).join('') || '<div class="center">No solo matches right now</div>';
+  $('pr_hidden').innerHTML = prHidden();
   $('pr_c1').textContent = m1.length ? '(' + m1.length + ')' : ''; $('pr_c2').textContent = m2.length ? '(' + m2.length + ')' : '';
   $('pr_ready').textContent = m1.length + m2.length;
   const needs = prSolos.concat(prWait).filter(x => x.lv == null || !x.dob);
