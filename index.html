@@ -485,6 +485,22 @@
   </div>
 </div>
 
+<!-- Missing info: birthdate / level (Pairings needs both). Fixes also go to keep_fixes so they survive the final 2.0 copy. -->
+<div class="ovl hidden" id="miModal" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="mdl">
+    <div class="mh"><b>Missing info</b><button class="x" onclick="$('miModal').classList.add('hidden')">✕</button></div>
+    <small style="color:#888;display:block;margin-bottom:6px">Active and waitlist kids missing a birthdate or level. Pairings can't match them until it's filled in.</small>
+    <div class="card" style="padding:0;overflow:hidden" id="mi_list"></div>
+    <div id="mi_askBox">
+      <label>📱 Ask parents for the birthday (ticked families)</label>
+      <textarea id="mi_msg" rows="3">Hi {parent}! Quick question, what's {kid}'s birthday? I'm updating my records 🙂</textarea>
+      <label style="display:flex;gap:6px;align-items:center;font-size:13px;margin:6px 0;font-weight:400;color:#92400E"><input type="checkbox" id="mi_test" onchange="ss.set('prTest',this.checked)" style="width:auto;margin:0">Test mode: send to this number only</label>
+      <input id="mi_testTo" placeholder="Test phone, e.g. (513) 555-1234" onchange="this.value=fmtPhone(this.value);ss.set('prTestTo',this.value)" style="margin:0 0 8px;max-width:260px">
+      <button class="btn" id="mi_send" onclick="miAsk()">Text ticked families</button><div id="mi_res" class="msg"></div>
+    </div>
+  </div>
+</div>
+
 <!-- Add lesson modal (port of 2.0 modal-add-lesson) -->
 <div class="ovl hidden" id="addModal" onclick="if(event.target===this)closeAdd()">
   <div class="mdl">
@@ -1941,6 +1957,8 @@ function renderDash() {
     if (absent.length) alerts.push(['#A32D2D', absent.length + ' kid' + (absent.length === 1 ? '' : 's') + ' missed the last 2 weeks', absent.join(' · '), "go('students')"]);
     if (unpaid2.length) alerts.push(['#854F0B', unpaid2.length + ' unpaid 2+ weeks running', unpaid2.join(' · '), "go('payments')"]);
   } else loadDashHist();
+  const mi = miKids();
+  if (mi.length) alerts.push(['#7F77DD', mi.length + ' kid' + (mi.length === 1 ? '' : 's') + ' missing info', 'Birthdate or level · tap to fill in', 'openMissing()']);
   const newStu = students.filter(x => x.join_date && x.join_date >= ymd(wk[0].date));
   if (newStu.length) alerts.push(['#1D9E75', newStu.length + ' new registration' + (newStu.length === 1 ? '' : 's') + ' this week', newStu.map(x => x.first_name + ' ' + x.last_name).join(' · '), "go('students')"]);
   $('d_attn').innerHTML = alerts.length ? alerts.map(([c, t, sub, fn]) => `<div class="arow" style="cursor:pointer" onclick="${fn}"><span style="width:9px;height:9px;border-radius:50%;background:${c};flex-shrink:0"></span><div class="who"><b>${esc(t)}</b><small>${esc(sub)}</small></div></div>`).join('')
@@ -1964,6 +1982,52 @@ function renderDash() {
 
 // Tomorrow = next Monday (when today is Sunday): build next week's Monday from the lessons + next week's exceptions
 let dashNextMon = null, dashHist = null;
+// ================= MISSING INFO (birthdate / level) =================
+const MI_LV = ['L1-Foundations','L2-Rising','L3-Building','L4-Progressing','L5-Advanced','L6-Elite'];
+function miKids() {
+  return students.filter(s => ['Active', 'Waitlist'].includes(s.status)).map(s => {
+    const w = waitlist.find(w => w.student_id === s.id) || {};
+    return { s, w, noDob: !(s.dob || w.dob), noLv: !(s.skill_level || w.skill_level) };
+  }).filter(x => x.noDob || x.noLv).sort((a, b) => (a.s.first_name || '').localeCompare(b.s.first_name || ''));
+}
+function openMissing() {
+  $('mi_test').checked = ss.get('prTest', true); $('mi_testTo').value = ss.get('prTestTo', ''); $('mi_res').textContent = '';
+  renderMissing(); $('miModal').classList.remove('hidden');
+}
+function renderMissing() {
+  const k = miKids();
+  $('mi_list').innerHTML = k.map(({ s, noDob, noLv }) => { const id = esc(s.id), ph = s.parent_phone;
+    return `<div class="arow" style="flex-wrap:wrap">${noDob && ph ? `<input type="checkbox" class="mi_ck" value="${id}" checked style="width:auto;margin:0">` : ''}
+      <div class="who"><b>${esc(s.first_name)} ${esc(s.last_name)}</b><small>${esc(s.status)} · ${esc(s.parent_name || 'no parent')}${ph ? ' · ' + esc(ph) : ' · no phone'} · missing ${[noDob && 'birthdate', noLv && 'level'].filter(Boolean).join(' and ')}</small></div>
+      <div style="display:flex;gap:6px;width:100%;margin-top:4px">${noDob ? `<input type="date" id="mi_d_${id}" style="margin:0;flex:1">` : ''}${noLv ? `<select id="mi_l_${id}" style="margin:0;flex:1"><option value="">Level…</option>${MI_LV.map(v => `<option>${v}</option>`).join('')}</select>` : ''}<button class="paybtn" onclick="miSave('${id}')">Save</button></div></div>`; }).join('')
+    || '<div class="center">Everyone has a birthdate and level ✓</div>';
+  $('mi_askBox').style.display = k.some(x => x.noDob && x.s.parent_phone) ? '' : 'none';
+}
+async function miSave(id) {
+  const s = students.find(x => x.id === id), w = waitlist.find(w => w.student_id === id), d = $('mi_d_' + id), l = $('mi_l_' + id);
+  const up = {}; if (d && d.value) up.dob = d.value; if (l && l.value) up.skill_level = l.value;
+  if (!Object.keys(up).length) return alert('Fill in the birthdate or level first.');
+  let r = await sb.from('students').update(up).eq('id', id); if (r.error) return alert(r.error.message);
+  const keep = Object.entries(up).map(([f, v]) => ({ gym_id: gymId, tbl: 'students', row_id: id, field: f, value: v }));
+  if (w) { r = await sb.from('waitlist').update(up).eq('id', w.id); if (!r.error) { Object.assign(w, up); keep.push(...Object.entries(up).map(([f, v]) => ({ gym_id: gymId, tbl: 'waitlist', row_id: String(w.id), field: f, value: v }))); } }
+  await sb.from('keep_fixes').insert(keep);
+  Object.assign(s, up); renderMissing(); renderDash();
+}
+async function miAsk() {
+  const ids = [...document.querySelectorAll('.mi_ck:checked')].map(c => c.value), tpl = $('mi_msg').value.trim(), m = $('mi_res'), test = $('mi_test').checked, to = $('mi_testTo').value.trim();
+  m.className = 'msg err';
+  if (!tpl) return m.textContent = 'Type a message.';
+  if (!ids.length) return m.textContent = 'Tick at least one family.';
+  if (test && !to) return m.textContent = 'Test mode is on. Type a test phone number first.';
+  const fams = {}; ids.forEach(id => { const s = students.find(x => x.id === id), k = String(s.parent_phone).replace(/\D/g, '').slice(-10); (fams[k] = fams[k] || { phone: s.parent_phone, parent: s.parent_name, sid: s.id, kids: [] }).kids.push(s.first_name); });
+  const list = Object.values(fams).slice(0, test ? 3 : 60), fill = f => tpl.replace(/\{parent\}/g, (f.parent || '').split(' ')[0] || 'there').replace(/\{kid\}/g, f.kids.join(' and '));
+  if (!confirm(test ? 'TEST: send ' + list.length + ' sample text(s) to ' + to + '?' : 'Text ' + list.length + ' famil' + (list.length === 1 ? 'y' : 'ies') + ' for real?\n' + list.map(f => (f.parent || '?') + ' (' + f.phone + ')').join('\n'))) return;
+  $('mi_send').disabled = true; m.className = 'msg'; m.textContent = 'Sending…';
+  const res = await sb.functions.invoke('sms-send', { body: { batch: crypto.randomUUID(), messages: list.map(f => ({ to: test ? to : f.phone, student_id: test ? null : f.sid, family: test ? 'Test' : f.parent, text: (test ? '[TEST for ' + (f.parent || 'family') + '] ' : '') + fill(f) })) } });
+  $('mi_send').disabled = false;
+  if (res.error || (res.data && res.data.error)) { m.className = 'msg err'; m.textContent = 'Not sent: ' + ((res.data && res.data.error) || res.error.message); return; }
+  m.textContent = '✓ Sent ' + res.data.sent + (res.data.failed ? ' · ' + res.data.failed + ' failed' : '') + (test ? ' to your test number' : '. Replies come to your phone.');
+}
 async function loadNextMonday() {
   const nm = new Date(weekDates()[0].date); nm.setDate(nm.getDate() + 7); const ws = ymd(nm), we = ymd(new Date(nm.getTime() + 6 * 864e5));
   const X = await sb.from('schedule_exceptions').select('*').eq('week_start', ws).not('status', 'in', '("Deleted","Expired")');

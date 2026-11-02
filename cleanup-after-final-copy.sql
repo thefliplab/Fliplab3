@@ -90,4 +90,15 @@ update private_lessons set lesson_type = 'Solo', share_type = 'No', price = '$40
 -- 11. Coach Steve's cell is (234) 817-7491 (Steve, Nov 1) — used for claim alerts and test texts.
 update coaches set phone = '(234) 817-7491' where id = 'C1773883337653';
 
+-- 12. Birthdates / levels typed into 3.0 before switch-over (Missing info pop-up saves them to keep_fixes too).
+--     The final copy overwrites them, so put back the latest value for each kid + field.
+with k as (select distinct on (tbl, row_id, field) tbl, row_id, field, value from keep_fixes order by tbl, row_id, field, created_at desc)
+update students t set dob = k.value::date from k where k.tbl = 'students' and k.field = 'dob' and t.id = k.row_id;
+with k as (select distinct on (tbl, row_id, field) tbl, row_id, field, value from keep_fixes order by tbl, row_id, field, created_at desc)
+update students t set skill_level = k.value from k where k.tbl = 'students' and k.field = 'skill_level' and t.id = k.row_id;
+with k as (select distinct on (tbl, row_id, field) tbl, row_id, field, value from keep_fixes order by tbl, row_id, field, created_at desc)
+update waitlist t set dob = k.value::date from k where k.tbl = 'waitlist' and k.field = 'dob' and t.id::text = k.row_id;
+with k as (select distinct on (tbl, row_id, field) tbl, row_id, field, value from keep_fixes order by tbl, row_id, field, created_at desc)
+update waitlist t set skill_level = k.value from k where k.tbl = 'waitlist' and k.field = 'skill_level' and t.id::text = k.row_id;
+
 commit;
