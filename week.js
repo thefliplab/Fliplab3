@@ -19,7 +19,9 @@ function applyExceptions(lessons, exs) {
     if (ex.type === 'Move') {
       out.push({ ...p, status: 'Cancelled', exType: 'MoveOrigin' });
       attached[ex.id] = true;
-      return out.push({ ...p, day: ex.new_day || p.day, time: ex.new_time || p.time, coach: ex.new_coach || p.coach, exType: 'Move' });
+      // A one-week move can also change the lesson type (e.g. Shared → Solo when filling an empty slot) — price follows unless ★ special
+      const t = ex.lesson_type, typ = t ? { lesson_type: t, ...(isSpecial(p) ? {} : { price: priceFor(p.duration || '30 min', t) }) } : {};
+      return out.push({ ...p, day: ex.new_day || p.day, time: ex.new_time || p.time, coach: ex.new_coach || p.coach, ...typ, exType: 'Move' });
     }
     if (ex.type === 'PriceOverride') return out.push({ ...p, lesson_type: ex.lesson_type || 'Solo', price: priceFor(p.duration || '30 min', ex.lesson_type || 'Solo'), exType: 'PriceOverride' });
     if (ex.type === 'Add') {

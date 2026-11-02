@@ -1,4 +1,4 @@
-// @ts-nocheck — generated copy of /week.js; do not edit here
+// @ts-nocheck
 // FlipLab 3.0 shared week logic — used by index.html AND the cal-sync edge function (supabase/functions/cal-sync/week.ts is a copy + exports).
 // Change it here, then re-copy to the edge function (see supabase/functions/cal-sync/README.md).
 const runsBetween = (l, from, to) => { const st = l.start_date && l.start_date > from ? l.start_date : from; return (!l.end_date || l.end_date > st) && (!to || !l.start_date || l.start_date <= to); };
@@ -20,7 +20,9 @@ function applyExceptions(lessons, exs) {
     if (ex.type === 'Move') {
       out.push({ ...p, status: 'Cancelled', exType: 'MoveOrigin' });
       attached[ex.id] = true;
-      return out.push({ ...p, day: ex.new_day || p.day, time: ex.new_time || p.time, coach: ex.new_coach || p.coach, exType: 'Move' });
+      // A one-week move can also change the lesson type (e.g. Shared → Solo when filling an empty slot) — price follows unless ★ special
+      const t = ex.lesson_type, typ = t ? { lesson_type: t, ...(isSpecial(p) ? {} : { price: priceFor(p.duration || '30 min', t) }) } : {};
+      return out.push({ ...p, day: ex.new_day || p.day, time: ex.new_time || p.time, coach: ex.new_coach || p.coach, ...typ, exType: 'Move' });
     }
     if (ex.type === 'PriceOverride') return out.push({ ...p, lesson_type: ex.lesson_type || 'Solo', price: priceFor(p.duration || '30 min', ex.lesson_type || 'Solo'), exType: 'PriceOverride' });
     if (ex.type === 'Add') {
