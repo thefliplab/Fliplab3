@@ -376,9 +376,11 @@
 <div class="ovl hidden" id="clModal" onclick="if(event.target===this)this.classList.add('hidden')">
   <div class="mdl">
     <div class="mh"><b id="cm2_title">New weekly class</b><button class="x" onclick="$('clModal').classList.add('hidden')">✕</button></div>
+    <div class="wk" id="cx_kind"></div>
     <label>Class name</label><input id="cx_name" placeholder="e.g. Back handsprings">
     <div class="row2">
-      <div><label>Day</label><select id="cx_day"></select></div>
+      <div id="cx_dayWrap"><label>Day</label><select id="cx_day"></select></div>
+      <div id="cx_dateWrap" class="hidden"><label>Date</label><input id="cx_date" type="date"></div>
       <div><label>Time</label><input id="cx_time" type="time" value="10:30"></div>
     </div>
     <div class="row2">
@@ -393,6 +395,22 @@
       </div>
     </details>
     <button class="btn" id="cx_save" onclick="clSave()">Save class</button>
+  </div>
+</div>
+<div class="ovl hidden" id="kdModal" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="mdl">
+    <div class="mh"><b id="kd_title">Add a clinic kid</b><button class="x" onclick="$('kdModal').classList.add('hidden')">✕</button></div>
+    <label>Kid's name</label><input id="kd_kid" placeholder="First Last">
+    <label>Parent</label><input id="kd_parent">
+    <div class="row2">
+      <div><label>Phone</label><input id="kd_phone" type="tel" oninput="this.value=typingPhone(this.value)"></div>
+      <div><label>Email</label><input id="kd_email" type="email"></div>
+    </div>
+    <div class="row2">
+      <div><label>Amount</label><input id="kd_amt" type="number" inputmode="decimal"></div>
+      <div class="chk" style="margin-top:26px"><input type="checkbox" id="kd_paid"><label for="kd_paid">Paid</label></div>
+    </div>
+    <button class="btn" id="kd_save" onclick="kdSave()">Add kid</button>
   </div>
 </div>
 <div class="ovl hidden" id="ckModal" onclick="if(event.target===this)this.classList.add('hidden')">
@@ -2640,6 +2658,7 @@ async function msSend() {
 // One class = name, day/time, price, max kids. Card tabs: This week (RSVP) · Roster · Waitlist.
 // Weekly roster = class_enrollments (Enrolled); waitlist = class_enrollments 'Waitlisted';
 // "Just this <day>" adds + RSVP answers = class_rsvp for this week (week_start = Monday).
+let clClin = [], clKids = [], clPastOpen = false, clPastShow = {}, kdCls = null, cxKind = 'weekly';
 let clRows = [], clEnr = [], clRsvp = [], clPriv = [], clTabs = ss.get('clTabs', {}), ckCls = null, ckKid = null, ckOnce = false, clEditId = null;
 const clWs = () => { const t = new Date(); t.setHours(0,0,0,0); t.setDate(t.getDate() + (t.getDay() === 0 ? -6 : 1 - t.getDay())); return ymd(t); };
 const clDate = c => { const d = new Date(clWs() + 'T00:00'); d.setDate(d.getDate() + Math.max(0, DAYS.indexOf(c.day))); return d.toLocaleDateString(undefined, { month:'short', day:'numeric' }); };
@@ -2654,23 +2673,35 @@ const clPrivOf = sid => clPriv.filter(l => l.student_id === sid);
 async function loadClasses(quiet) {
   if (!quiet) $('cl_list').innerHTML = '<div class="center">Loading…</div>';
   const today = ymd(new Date());
-  const [C, E, R, L] = await Promise.all([
-    sb.from('class_schedule').select('*').eq('active', true).eq('kind', 'weekly'),
+  const [C, E, R, L, K] = await Promise.all([
+    sb.from('class_schedule').select('*').or('active.eq.true,kind.eq.clinic'),
     sb.from('class_enrollments').select('*'),
     sb.from('class_rsvp').select('*').eq('week_start', clWs()),
-    sb.from('private_lessons').select('student_id,day,time,duration,start_date,end_date,status').or('end_date.is.null,end_date.gt.' + today)
+    sb.from('private_lessons').select('student_id,day,time,duration,start_date,end_date,status').or('end_date.is.null,end_date.gt.' + today),
+    sb.from('clinic_kids').select('*').order('created_at')
   ]);
   if (C.error) { $('cl_list').innerHTML = '<div class="msg err">' + esc(C.error.message) + '</div>'; return; }
-  clRows = (C.data || []).sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || (clMin(a.time) || 0) - (clMin(b.time) || 0));
+  clClin = (C.data || []).filter(c => c.kind === 'clinic').sort((a, b) => String(a.clinic_date || '').localeCompare(String(b.clinic_date || '')));
+  clKids = K.data || [];
+  clRows = (C.data || []).filter(c => c.kind !== 'clinic' && c.active).sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || (clMin(a.time) || 0) - (clMin(b.time) || 0));
   clEnr = E.data || []; clRsvp = R.data || [];
   clPriv = (L.data || []).filter(l => !['Cancelled','Dropped'].includes(l.status) && runsBetween(l, today));
   renderClasses();
 }
 
 function renderClasses() {
-  $('cl_sub').textContent = clRows.length ? clRows.length + ' weekly' : '';
-  if (!clRows.length) { $('cl_list').innerHTML = '<div class="card center">No classes yet — tap + New.</div>'; return; }
-  $('cl_list').innerHTML = clRows.map(c => {
+  const up = clClin.filter(c => !clPast(c)), past = clClin.filter(clPast).reverse();
+  $('cl_sub').textContent = clRows.length + ' weekly' + (up.length ? ' · ' + up.length + ' clinic' + (up.length > 1 ? 's' : '') : '');
+  const pastTot = past.reduce((t, c) => t + clPaidTot(c.id), 0);
+  $('cl_list').innerHTML = (clRows.length ? '' : '<div class="card center">No weekly classes yet — tap + New.</div>') + clWeeklyHtml()
+    + (up.length ? '<div class="sec">Clinics</div>' + up.map(c => clClinicCard(c)).join('') : '')
+    + (past.length ? `<div class="sec" style="cursor:pointer;user-select:none" onclick="clPastOpen=!clPastOpen;renderClasses()"><span>${clPastOpen ? '▾' : '▸'} Past clinics</span><span style="font-weight:400;font-size:12px;color:#888">${past.length} · ${money(pastTot)} collected</span></div>`
+      + (clPastOpen ? '<div class="card" style="padding:0;overflow:hidden">' + past.map(c => { const k = clKids.filter(x => x.schedule_id === c.id);
+        return `<div class="crow" style="cursor:pointer" onclick="clPastShow['${esc(c.id)}']=!clPastShow['${esc(c.id)}'];renderClasses()"><div class="nm">${clPastShow[c.id] ? '▾' : '▸'} ${esc(c.class_name)}<small>${esc(clFmtDate(c.clinic_date))} · ${k.length} kid${k.length === 1 ? '' : 's'}</small></div><b style="color:#3B6D11">${money(clPaidTot(c.id))}</b></div>`
+          + (clPastShow[c.id] ? '<div style="background:#fafafa">' + clKidRows(c) + '</div>' : ''); }).join('') + '</div>' : '') : '');
+}
+function clWeeklyHtml() {
+  return clRows.map(c => {
     const ros = clRoster(c.id), wl = clWait(c.id), max = +c.max_students || 0, tab = clTabs[c.id] || 'week';
     const T = (k, n) => `<button class="${tab === k ? 'on' : ''}" onclick="clTab('${esc(c.id)}','${k}')">${n}</button>`;
     return `<div class="ccard"><div class="chd" onclick="clEdit('${esc(c.id)}')" title="Edit class"><b>${esc(c.class_name)}<small>${esc(c.day)} · ${esc(c.time)} · ${money(+c.price || 0)}${c.coach ? ' · ' + esc(c.coach) : ''}${c.age_group ? ' · ages ' + esc(c.age_group) : ''}</small></b>
@@ -2679,6 +2710,67 @@ function renderClasses() {
       ${tab === 'week' ? clWeekHtml(c) : tab === 'roster' ? clRosterHtml(c, ros) : clWaitHtml(wl)}
       <div class="cfoot"><button class="paybtn" style="background:var(--mint);color:#fff" onclick="ckOpen('${esc(c.id)}')">+ Add a kid</button></div></div>`;
   }).join('');
+}
+
+// ---- Clinics (Step 3): one-day; kids live only in clinic_kids (never Students/rosters/Openings) ----
+const clPast = c => !!c.ended_at || !c.active || (c.clinic_date && c.clinic_date < ymd(new Date()));
+const clPaidTot = id => clKids.filter(k => k.schedule_id === id && k.paid).reduce((t, k) => t + (+k.amount || 0), 0);
+const clFmtDate = d => d ? new Date(d + 'T00:00').toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric', year:'numeric' }) : 'no date';
+function clClinicCard(c) {
+  const k = clKids.filter(x => x.schedule_id === c.id), max = +c.max_students || 0;
+  return `<div class="ccard"><div class="chd" style="background:#5B8DEF" onclick="clEdit('${esc(c.id)}')" title="Edit clinic"><b>📅 ${esc(c.class_name)}<small>${esc(clFmtDate(c.clinic_date))} · ${esc(c.time || '')} · ${money(+c.price || 0)}${c.coach ? ' · ' + esc(c.coach) : ''}</small></b>
+    <span class="cp${max && k.length >= max ? ' full' : ''}">${k.length}${max ? '/' + max : ''} kids</span><span class="cp">${money(clPaidTot(c.id))} paid</span><span style="opacity:.8">✎</span></div>
+    ${clKidRows(c)}
+    <div class="cfoot"><button class="paybtn" style="background:#5B8DEF;color:#fff" onclick="kdOpen('${esc(c.id)}')">+ Add a kid</button></div></div>`;
+}
+function clKidRows(c) {
+  const k = clKids.filter(x => x.schedule_id === c.id);
+  if (!k.length) return '<div class="center">No kids yet</div>';
+  return k.map(x => `<div class="crow"><div class="nm">${esc(x.kid_name)}${x.student_id ? ' <span class="tag t-photo">⭐ student</span>' : ''}<small>${esc(x.parent_name || '')}${x.phone ? ' · ' + esc(x.phone) : ''}${x.email ? ' · ' + esc(x.email) : ''}</small></div>
+    <button class="paybtn" style="${x.paid ? 'background:#EAF3DE;color:#3B6D11' : ''}" onclick="kdPaid('${esc(x.id)}')">${x.paid ? '✓ ' + money(+x.amount || 0) : 'Unpaid'}</button>
+    ${x.student_id ? '' : `<button class="paybtn" style="background:#FEF3C7;color:#92400E" title="Make student" onclick="kdMake('${esc(x.id)}')">⭐</button>`}
+    <button class="paybtn" style="background:#FCEBEB;color:#A32D2D" title="Remove" onclick="kdRemove('${esc(x.id)}')">✕</button></div>`).join('');
+}
+function kdOpen(cid) {
+  kdCls = clClin.find(c => c.id === cid); $('kd_title').textContent = 'Add a kid · ' + kdCls.class_name;
+  ['kd_kid','kd_parent','kd_phone','kd_email'].forEach(i => $(i).value = ''); $('kd_amt').value = +kdCls.price || ''; $('kd_paid').checked = false;
+  $('kdModal').classList.remove('hidden'); setTimeout(() => $('kd_kid').focus(), 50);
+}
+async function kdSave() {
+  const kid = $('kd_kid').value.trim(); if (!kid) return alert("Enter the kid's name.");
+  $('kd_save').disabled = true;
+  const r = await sb.from('clinic_kids').insert({ gym_id: gymId, schedule_id: kdCls.id, kid_name: kid, parent_name: $('kd_parent').value.trim() || null,
+    phone: fmtPhone($('kd_phone').value) || null, email: $('kd_email').value.trim().toLowerCase() || null, amount: +$('kd_amt').value || 0, paid: $('kd_paid').checked });
+  $('kd_save').disabled = false;
+  if (r.error) return alert(r.error.message);
+  $('kdModal').classList.add('hidden'); loadClasses(true);
+}
+async function kdPaid(id) {
+  const x = clKids.find(k => k.id === id); if (!x) return;
+  const r = await sb.from('clinic_kids').update({ paid: !x.paid }).eq('id', id); if (r.error) return alert(r.error.message);
+  x.paid = !x.paid; renderClasses();
+}
+async function kdRemove(id) {
+  const x = clKids.find(k => k.id === id); if (!x || !confirm('Remove ' + x.kid_name + ' from this clinic?')) return;
+  const r = await sb.from('clinic_kids').delete().eq('id', id); if (r.error) return alert(r.error.message);
+  clKids = clKids.filter(k => k !== x); renderClasses();
+}
+async function kdMake(id) {
+  const x = clKids.find(k => k.id === id); if (!x) return;
+  const parts = x.kid_name.trim().split(/\s+/), first = parts.shift(), last = parts.join(' ');
+  const dup = students.find(s => ((s.first_name || '') + ' ' + (s.last_name || '')).trim().toLowerCase() === x.kid_name.trim().toLowerCase());
+  if (dup ? !confirm('A student named ' + x.kid_name + ' already exists. Link this clinic kid to them?') : !confirm('Make ' + x.kid_name + ' a student?\n\nTheir student page opens next so you can add birthday, level, etc.')) return;
+  let sid = dup && dup.id;
+  if (!sid) {
+    const cl = clClin.find(c => c.id === x.schedule_id) || {};
+    const r = await sb.from('students').insert({ gym_id: gymId, first_name: first, last_name: last || null, parent_name: x.parent_name, parent_phone: x.phone, parent_email: x.email,
+      status: 'Active', active: true, join_date: ymd(new Date()), extra: { Source: 'Clinic: ' + (cl.class_name || '') } }).select().single();
+    if (r.error) return alert(r.error.message);
+    sid = r.data.id;
+  }
+  const u = await sb.from('clinic_kids').update({ student_id: sid }).eq('id', id); if (u.error) return alert(u.error.message);
+  x.student_id = sid; await loadStudents(true);
+  if (!dup) { curTab = 'students'; openEdit(sid); } else renderClasses();
 }
 function clTab(id, k) { clTabs[id] = k; ss.set('clTabs', clTabs); renderClasses(); }
 
@@ -2744,22 +2836,31 @@ function clFill(c) {
   $('cx_coach').innerHTML = '<option value="">—</option>' + co.map(n => `<option${n === (c.coach || (clEditId ? '' : mainCoach())) ? ' selected' : ''}>${esc(n)}</option>`).join('');
   $('cx_name').value = c.class_name || ''; $('cx_time').value = to24(c.time || '10:30 AM');
   $('cx_price').value = c.price != null ? +c.price : 20; $('cx_max').value = c.max_students != null ? c.max_students : 15;
-  $('cx_len').value = c.duration || ''; $('cx_ages').value = c.age_group || '';
+  $('cx_len').value = c.duration || ''; $('cx_ages').value = c.age_group || ''; $('cx_date').value = c.clinic_date || '';
   $('clModal').classList.remove('hidden');
 }
-function clNew() { clEditId = null; $('cm2_title').textContent = 'New weekly class'; clFill({}); }
-function clEdit(id) { clEditId = id; $('cm2_title').textContent = 'Edit class'; clFill(clRows.find(c => c.id === id) || {}); }
+function cxSetKind(k) {
+  cxKind = k; const clin = k === 'clinic';
+  $('cx_kind').innerHTML = clEditId ? '' : [['weekly','Weekly class'],['clinic','One-time clinic']].map(([v, n]) => `<button type="button" style="${v === k ? 'background:var(--mint);color:#fff;border-color:var(--mint)' : ''}" onclick="cxSetKind('${v}')">${n}</button>`).join('');
+  $('cx_dayWrap').classList.toggle('hidden', clin); $('cx_dateWrap').classList.toggle('hidden', !clin);
+  $('cm2_title').textContent = (clEditId ? 'Edit ' : 'New ') + (clin ? 'clinic' : clEditId ? 'class' : 'weekly class');
+}
+function clNew() { clEditId = null; clFill({}); cxSetKind('weekly'); }
+function clEdit(id) { clEditId = id; const c = clRows.concat(clClin).find(x => x.id === id) || {}; clFill(c); cxSetKind(c.kind === 'clinic' ? 'clinic' : 'weekly'); }
 async function clSave() {
   const name = $('cx_name').value.trim(); if (!name) return alert('Give the class a name.');
   const rec = { class_name: name, day: $('cx_day').value, time: to12($('cx_time').value || '10:30'), price: +$('cx_price').value || 0,
     max_students: parseInt($('cx_max').value) || null, coach: $('cx_coach').value || null, duration: $('cx_len').value.trim() || null, age_group: $('cx_ages').value.trim() || null };
+  if (cxKind === 'clinic') { const d = $('cx_date').value; if (!d) return alert('Pick the clinic date.');
+    rec.clinic_date = d; rec.day = DAYS[(new Date(d + 'T00:00').getDay() + 6) % 7];
+    if (clEditId && d >= ymd(new Date())) { rec.ended_at = null; rec.active = true; } }   // moved to a future date → upcoming again
   $('cx_save').disabled = true;
   let r;
   if (clEditId) {
     r = await sb.from('class_schedule').update(rec).eq('id', clEditId);
     const old = clRows.find(c => c.id === clEditId);
-    if (!r.error && old && old.class_name !== name) await sb.from('class_enrollments').update({ class_name: name }).eq('schedule_id', clEditId);
-  } else r = await sb.from('class_schedule').insert({ ...rec, gym_id: gymId, kind: 'weekly', active: true, status: 'Active' });
+    if (!r.error && old && old.kind !== 'clinic' && old.class_name !== name) await sb.from('class_enrollments').update({ class_name: name }).eq('schedule_id', clEditId);
+  } else r = await sb.from('class_schedule').insert({ ...rec, gym_id: gymId, kind: cxKind, active: true, status: 'Active' });
   $('cx_save').disabled = false;
   if (r.error) return alert(r.error.message);
   $('clModal').classList.add('hidden'); loadClasses(true);
@@ -2841,7 +2942,7 @@ async function rtRun() {
 function rtStart() {
   if (rtChan) return;
   rtChan = sb.channel('fl3-admin');
-  ['private_lessons','schedule_exceptions','attendance','payments','students','waitlist','available_slots','class_attendance','class_enrollments','coaches','class_schedule','class_rsvp']
+  ['private_lessons','schedule_exceptions','attendance','payments','students','waitlist','available_slots','class_attendance','class_enrollments','coaches','class_schedule','class_rsvp','clinic_kids']
     .forEach(t => rtChan.on('postgres_changes', { event: '*', schema: 'public', table: t }, rtQueue));
   rtChan.on('postgres_changes', { event: '*', schema: 'public', table: 'text_log' }, () => { msBadge(); if (curTab === 'msgs') { clearTimeout(msRt); msRt = setTimeout(() => loadMsgs(true), 800); } });
   rtChan.subscribe();
