@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
     <p>${isWait ? `Thanks for signing up ${esc(first)}. You're on the Flip Lab waitlist, and I'll reach out as soon as a spot opens that fits your times.`
       : `Thanks for signing up ${esc(first)}! You're all set: <b>${esc(what)}</b>.`}</p>
     ${isWait ? "" : `<p>Payment is due at each lesson: ${payHtml}. Please include the athlete's name and lesson date in the payment note.</p>`}
-    <p>Questions? Just reply to this email or text me.</p><p>Coach Steve<br>Flip Lab</p></div>`;
+    <p>Questions? Just reply to this email or text me.</p><p>Coach Steve<br>Flip Lab</p></div>`.replace(/\n\s*/g, "");   // one line: blank/indented lines showed up as "=20" in mail apps
 
   const pw = Deno.env.get("YAHOO_APP_PASSWORD");
   const out: Record<string, unknown> = {};
