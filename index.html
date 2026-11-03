@@ -192,6 +192,8 @@
   <section id="classesView" class="hidden">
     <div class="sec" style="margin-top:4px"><span>Classes <span id="cl_sub" style="font-weight:400;font-size:12px;color:#888"></span></span>
       <button class="paybtn" style="background:var(--mint);color:#fff" onclick="clNew()">+ New</button></div>
+    <div class="card" id="rf_bar" style="padding:10px 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="font-size:14px">📧 Friday RSVP email</b><span id="rf_st" style="font-size:13px;color:#888;flex:1">…</span>
+      <button class="paybtn" id="rf_btn" onclick="rfToggle()" disabled>…</button><button class="paybtn" style="background:#eef0f2;color:#555" id="rf_test" onclick="rfTest()">Send me a test</button></div>
     <div id="cl_list"><div class="center">Loading…</div></div>
   </section>
 
@@ -2675,16 +2677,17 @@ const clPrivOf = sid => clPriv.filter(l => l.student_id === sid);
 async function loadClasses(quiet) {
   if (!quiet) $('cl_list').innerHTML = '<div class="center">Loading…</div>';
   const today = ymd(new Date());
-  const [C, E, R, L, K] = await Promise.all([
+  const [C, E, R, L, K, RF] = await Promise.all([
     sb.from('class_schedule').select('*').or('active.eq.true,kind.eq.clinic'),
     sb.from('class_enrollments').select('*'),
     sb.from('class_rsvp').select('*').eq('week_start', clWs()),
     sb.from('private_lessons').select('student_id,day,time,duration,start_date,end_date,status').or('end_date.is.null,end_date.gt.' + today),
-    sb.from('clinic_kids').select('*').order('created_at')
+    sb.from('clinic_kids').select('*').order('created_at'),
+    sb.from('gym_settings').select('value').eq('key', 'rsvp_friday').maybeSingle()
   ]);
   if (C.error) { $('cl_list').innerHTML = '<div class="msg err">' + esc(C.error.message) + '</div>'; return; }
   clClin = (C.data || []).filter(c => c.kind === 'clinic').sort((a, b) => String(a.clinic_date || '').localeCompare(String(b.clinic_date || '')));
-  clKids = K.data || [];
+  clKids = K.data || []; rfVal = (RF && RF.data && RF.data.value) || { on: false }; rfRender();
   clRows = (C.data || []).filter(c => c.kind !== 'clinic' && c.active).sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || (clMin(a.time) || 0) - (clMin(b.time) || 0));
   clEnr = E.data || []; clRsvp = R.data || [];
   clPriv = (L.data || []).filter(l => !['Cancelled','Dropped'].includes(l.status) && runsBetween(l, today));
@@ -2773,6 +2776,30 @@ async function kdMake(id) {
   const u = await sb.from('clinic_kids').update({ student_id: sid }).eq('id', id); if (u.error) return alert(u.error.message);
   x.student_id = sid; await loadStudents(true);
   if (!dup) { curTab = 'students'; openEdit(sid); } else renderClasses();
+}
+
+// ---- Friday RSVP email switch (same as 2.0's Gym Settings card). Sending is done by edge fn class-rsvp on pg_cron, Fri 8 AM ET ----
+let rfVal = { on: false };
+function rfRender() {
+  $('rf_btn').disabled = false; $('rf_btn').textContent = rfVal.on ? 'Turn OFF' : 'Turn ON';
+  $('rf_btn').style.cssText = rfVal.on ? 'background:#FCEBEB;color:#A32D2D' : 'background:var(--mint);color:#fff';
+  $('rf_st').textContent = rfVal.on ? '✓ ON — sends this Friday 8 AM' : 'OFF — nothing will send';
+  $('rf_st').style.color = rfVal.on ? '#3B6D11' : '#A32D2D';
+}
+async function rfToggle() {
+  const on = !rfVal.on;
+  if (on && !confirm('Turn ON the 3.0 Friday RSVP email?\n\nIf 2.0 is still sending its Friday email too, families will get two.')) return;
+  $('rf_btn').disabled = true; $('rf_btn').textContent = 'Saving…';
+  const v = { ...rfVal, on }, r = await sb.from('gym_settings').upsert({ gym_id: gymId, key: 'rsvp_friday', value: v, updated_at: new Date().toISOString() });
+  if (r.error) { alert(r.error.message); return rfRender(); }
+  rfVal = v; rfRender();
+}
+async function rfTest() {
+  $('rf_test').disabled = true; $('rf_test').textContent = 'Sending…';
+  const r = await sb.functions.invoke('class-rsvp', { body: { test: true } });
+  $('rf_test').disabled = false; $('rf_test').textContent = 'Send me a test';
+  const o = ((r.data || {}).out || [])[0] || {};
+  alert(r.error || o.error ? 'Test failed: ' + ((r.error && r.error.message) || o.error) : 'Test sent to ' + o.to + ' ✓');
 }
 function clTab(id, k) { clTabs[id] = k; ss.set('clTabs', clTabs); renderClasses(); }
 
