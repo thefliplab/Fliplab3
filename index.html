@@ -1602,7 +1602,7 @@ function renderAtt() {
   const lessons = allLs.filter(p => !isOther(p)), others = allLs.filter(isOther);
   let n = { att: 0, no: 0, paid: 0, unpaid: 0 };
   lessons.forEach(p => { const st = (attOf(p) || {}).status || '';
-    if (st === 'Attended') { n.att++; paidOf(p).amt > 0 ? n.paid++ : n.unpaid++; } else if (NOT_HERE.includes(st)) n.no++; });
+    if (st === 'Attended') { n.att++; if (!isTrade(p)) paidOf(p).amt > 0 ? n.paid++ : n.unpaid++; } else if (NOT_HERE.includes(st)) n.no++; });
   $('m_att').textContent = n.att; $('m_no').textContent = n.no; $('m_paid').textContent = n.paid; $('m_unpaid').textContent = n.unpaid;
   if (!allLs.length) { $('attList').innerHTML = '<div class="card center">No lessons scheduled this week</div>'; return; }
   const stu = {}; students.forEach(s => stu[s.id] = s);
