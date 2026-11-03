@@ -49,7 +49,8 @@ Deno.serve(async (req) => {
   const { data: co } = await db.from("coaches").select("phone").eq("gym_id", k.gym_id).eq("email", FROM).maybeSingle();
   const d = String(co?.phone || "").replace(/\D/g, ""), to = d.length === 10 ? "+1" + d : null;
   const u = Deno.env.get("SMSGATE_USER"), sp = Deno.env.get("SMSGATE_PASS");
-  if (to && u && sp) {
+  // Coach text is OFF until Steve turns it on (Nov 3): set secret SIGNUP_TEXT_COACH = on
+  if (to && u && sp && Deno.env.get("SIGNUP_TEXT_COACH") === "on") {
     const r = await fetch("https://api.sms-gate.app/3rdparty/v1/message", { method: "POST", headers: { Authorization: "Basic " + btoa(u + ":" + sp), "Content-Type": "application/json" },
       body: JSON.stringify({ textMessage: { text: `FlipLab sign-up: ${names} — ${what}. Parent ${k.parent_name} ${k.parent_phone}` }, phoneNumbers: [to] }) });
     out.text = r.ok;
