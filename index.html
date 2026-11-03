@@ -1128,7 +1128,7 @@ async function boot() {
   if (attMode === 'classes') setAttModeButtons();
   const tab = ss.get('tab', 'dashboard'), sid = ss.get('student', null);
   if (tab === 'student' && sid && students.find(x => x.id === sid)) { curTab = 'students'; openEdit(sid); if (!weekRows.length) loadWeek(); }
-  else go(['dashboard','schedule','attendance','openings','pairings','comm','payments','students','slots'].includes(tab) ? tab : 'dashboard');
+  else go(['dashboard','schedule','attendance','openings','pairings','comm','msgs','payments','students','slots'].includes(tab) ? tab : 'dashboard');
 }
 let curTab = 'schedule';
 function go(tab) { curTab = tab; ss.set('tab', tab); if (tab === 'pairings') { show('pairingsView'); return loadPairings(); } if (tab === 'comm') { show('commView'); return loadComm(); } if (tab === 'msgs') { show('msgsView'); return loadMsgs(); } if (tab === 'slots') { show('slotsView'); return loadSlots(); } if (tab === 'students') { show('studentsView'); render(); if (!weekRows.length) loadWeek(); return; } show(tab + 'View'); loadWeek(); }
