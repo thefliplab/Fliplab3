@@ -1409,7 +1409,7 @@ const slotSeason = sl => sl.season_id || (sl.is_summer ? 'fliplab:summer' : 'fli
 function slotsForWeek() { const se = seasonFor(weekStartStr()); return weekSlots.filter(sl => !se || slotSeason(sl) === se.id); }
 const isExtraSlot = sl => { const se = seasons.find(x => x.id === slotSeason(sl)); return !!se && /summer/i.test(se.name) && !(sl.extra || {}).copied_from_school_year; };
 // A weekly lesson actually runs between from and to (a lesson whose end isn't after its own start never runs)
-let attMode = 'privates', clsSched = [], clsRoster = [], clsAtt = [], clsOff = new Set();
+let attMode = 'privates', clsSched = [], clsRoster = [], clsAtt = [], clsOff = new Set(), clsRsvp = [], schClsOpen = new Set();
 let allLessons = [];
 let monthTotal = 0, waitlist = [], openSlots = [];
 let weekOffset = 0, weekRows = [], weekSlots = [], weekEx = [], weekAtt = [], weekPay = [], weekLoading = 0;
@@ -1432,16 +1432,16 @@ async function loadWeek(quiet) {
     sb.from('schedule_exceptions').select('*').eq('week_start', ws).not('status', 'in', '("Deleted","Expired")'),
     sb.from('available_slots').select('*').eq('active', true),
     att ? sb.from('attendance').select('*').eq('week_start', ws) : { data: [] },
-    att ? sb.from('payments').select('*').eq('week_start', ws) : { data: [] },
+    att || curTab === 'schedule' ? sb.from('payments').select('*').eq('week_start', ws) : { data: [] },
     curTab === 'payments' ? sb.from('payments').select('amount').gte('date', mStart) : { data: [] },
-    (curTab === 'attendance' && attMode === 'classes') || curTab === 'payments' || curTab === 'dashboard' ? Promise.all([sb.from('class_schedule').select('*').eq('active', true), sb.from('class_enrollments').select('*').not('status', 'in', '("Dropped","Waitlisted")'), sb.from('class_attendance').select('*').eq('week_start', ws), sb.from('class_week_off').select('schedule_id').eq('week_start', ws)]) : null,
+    (curTab === 'attendance' && attMode === 'classes') || curTab === 'payments' || curTab === 'dashboard' || curTab === 'schedule' ? Promise.all([sb.from('class_schedule').select('*').eq('active', true), sb.from('class_enrollments').select('*').not('status', 'in', '("Dropped","Waitlisted")'), sb.from('class_attendance').select('*').eq('week_start', ws), sb.from('class_week_off').select('schedule_id').eq('week_start', ws), sb.from('class_rsvp').select('*').eq('week_start', ws)]) : null,
     curTab === 'openings' || curTab === 'dashboard' || curTab === 'schedule' ? sb.from('waitlist').select('*').in('status', ['Waiting','Waitlist','Drop-In']).order('signup_date') : { data: [] }
   ]);
   if (my !== weekLoading) return;
   const err = L.error || X.error || S.error || A.error || P.error || M.error || W.error;
   if (err) { $('schedGrid').innerHTML = $('attList').innerHTML = '<div class="msg err">' + esc(err.message) + '</div>'; return; }
   weekAtt = A.data; weekPay = P.data; waitlist = W.data || [];
-  if (C) { const ce = C.find(r => r.error); if (ce) { $('attList').innerHTML = '<div class="msg err">' + esc(ce.error.message) + '</div>'; return; } [clsSched, clsRoster, clsAtt] = C.map(r => r.data); clsOff = new Set((C[3].data || []).map(o => o.schedule_id)); } monthTotal = (M.data || []).reduce((t, x) => t + (+x.amount || 0), 0);
+  if (C) { const ce = C.find(r => r.error); if (ce) { $('attList').innerHTML = '<div class="msg err">' + esc(ce.error.message) + '</div>'; return; } [clsSched, clsRoster, clsAtt] = C.map(r => r.data); clsOff = new Set((C[3].data || []).map(o => o.schedule_id)); clsRsvp = C[4].data || []; } monthTotal = (M.data || []).reduce((t, x) => t + (+x.amount || 0), 0);
   allLessons = L.data; dashNextMon = null; dashHist = null;
   const base = L.data.filter(p => !(p.start_date && p.start_date > we) && !(p.end_date && p.end_date <= ws));
   weekEx = X.data;
@@ -1455,6 +1455,37 @@ async function loadWeek(quiet) {
 }
 
 
+// ---- Class on the Schedule: one row (e.g. Back Handspring 10:30–11:30); tap to open the kids, tap Here / $ Paid as they walk in ----
+function clsEnd(c) { const a = clMin(c.time); if (a == null) return ''; const b = a + clLen(c.duration, 60); return to12(Math.floor(b / 60) + ':' + String(b % 60).padStart(2, '0')); }
+const clsLabel = c => { const n = c.class_name || 'Group'; return /class|clinic/i.test(n) ? n : n + ' Class'; };
+function schClsToggle(id) { schClsOpen.has(id) ? schClsOpen.delete(id) : schClsOpen.add(id); renderWeek(); }
+function schClsHtml(c) {
+  const id = esc(c.id), off = clsOff.has(c.id), open = !off && schClsOpen.has(c.id), kids = off ? [] : wkKids(c);
+  let here = 0, paid = 0;
+  kids.forEach(k => { if ((clsAttOf(c, k.student_id) || {}).status === 'Attended') here++; paid += paidOf(clsObj(c, k)).amt; });
+  const yes = kids.filter(k => k.ans === 'yes').length;
+  let h = `<div class="srow tap" style="background:#F1EFFE;border-left:4px solid #7F77DD" onclick="schClsToggle('${id}')"><div class="tm">${esc(c.time)}</div>
+    <div class="nm"><b>🤸 ${esc(clsLabel(c))}</b> <span style="font-size:12px;color:#555">${esc(c.time)}–${esc(clsEnd(c))}</span>
+    <small style="display:block;font-size:11px;color:#666">${off ? '✕ No class this week' : `${here} here · $${paid.toFixed(0)} paid · ✅ ${yes} coming · ${kids.length} in class`}</small></div>
+    <div class="co">${off ? '' : open ? '▾' : '▸'}</div></div>`;
+  if (!open) return h;
+  h += '<div style="background:#FAF9FF;border-left:4px solid #7F77DD">';
+  if (!kids.length) h += '<div class="center">No kids in this class</div>';
+  kids.forEach(r => {
+    const st = (clsAttOf(c, r.student_id) || {}).status || '', pd = paidOf(clsObj(c, r)), k = id + "','" + esc(r.student_id);
+    h += `<div class="arow" style="background:transparent"><div class="who"><b>${esc(r.student_name)}</b>${rsvpTag(r)}</div>
+      <button class="here${st === 'Attended' ? ' on' : ''}" onclick="clsMark('${k}','${st === 'Attended' ? '' : 'Attended'}')">${st === 'Attended' ? '✓ Here' : 'Here'}</button>
+      ${pd.amt > 0 ? `<span class="paid" style="cursor:pointer" title="Tap to edit" onclick="clsUndoPay('${k}')">✓ Paid $${pd.amt.toFixed(0)}${pd.method ? ' · ' + esc(pd.method) : ''}</span>` : `<button class="paybtn" onclick="clsPay('${k}')">$ Paid</button>`}</div>`;
+  });
+  if (weekOffset === 0) h += `<div style="padding:8px 12px"><button class="paybtn" style="background:var(--mint-soft);color:#1c7a5a" onclick="schAddKid('${id}')">+ Add kid (just this ${esc(c.day)})</button></div>`;
+  return h + '</div>';
+}
+// + Add kid from the Schedule → the Classes tab's Add-a-kid pop-up, set to "Just this <day>"
+async function schAddKid(cid) {
+  await loadClasses(true);
+  if (!clRows.some(c => c.id === cid)) return alert('Class not found — open the Classes tab.');
+  ckOpen(cid); ckOnce = true; ckWhen(); ckCheck();
+}
 function renderWeek() {
   const wd = weekDates(), ws = ymd(wd[0].date), md = ws.slice(5);
   const coach = $('coachFilter').value, q = $('schedSearch').value.trim().toLowerCase();
@@ -1487,8 +1518,11 @@ function renderWeek() {
     const list = Object.values(times).sort((a, b) => timeVal(a.time) - timeVal(b.time));
     fill[d.name] = { total: list.filter(mine).length, open: 0, away: 0 };
     html += `<div class="dayhd${d.name === todayName ? ' today' : ''}">${d.name}<span>${d.label}</span>{{FILL_${d.name}}}</div><div class="card" style="padding:0;margin-bottom:6px;border-radius:0 0 10px 10px;overflow:hidden">`;
-    if (!list.length) html += '<div class="srow" style="color:#aaa;font-style:italic">No slots configured</div>';
+    const dCls = clsSched.filter(c => c.day === d.name && (!coach || !c.coach || c.coach === coach) && (!q || wkKids(c).some(k => (k.student_name || '').toLowerCase().includes(q)))).sort((a, b) => timeVal(a.time) - timeVal(b.time));
+    const clsOut = t => { let h = ''; while (dCls.length && (t === null || timeVal(dCls[0].time) <= t)) h += schClsHtml(dCls.shift()); return h; };
+    if (!list.length && !dCls.length) html += '<div class="srow" style="color:#aaa;font-style:italic">No slots configured</div>';
     list.forEach(slot => {
+      html += clsOut(timeVal(slot.time));
       const ls = byTime[slot.time] || [];
       if (ls.length) {
         const groups = [], gi = {};
@@ -1507,7 +1541,7 @@ function renderWeek() {
         else html += openRow(d, slot);
       }
     });
-    html += '</div>';
+    html += clsOut(null) + '</div>';
   });
   let T = 0, O = 0, A = 0;
   wd.forEach(d => { const f = fill[d.name] || { total: 0, open: 0, away: 0 }; T += f.total; O += f.open; A += f.away;
@@ -1776,6 +1810,7 @@ async function markAtt(id, status) {
 
 function afterPay(delta) {
   if (curTab === 'dashboard') return renderDash();
+  if (curTab === 'schedule') return renderWeek();
   if (!$('editView').classList.contains('hidden') && sd && sd.s) { renderSdTop(sd.s); return loadStudentDetail(sd.s); }
   if (curTab !== 'payments') return renderAtt();
   monthTotal += delta; renderPay();
@@ -1974,12 +2009,23 @@ async function toggleClassOff(id) {
   if (r.error) return alert(r.error.message);
   off ? clsOff.delete(id) : clsOff.add(id); renderClassAtt();
 }
+// This week's kids for a class: weekly roster + "just this week" adds (class_rsvp once), each with its RSVP answer.
+// Order: here → RSVP yes → no answer → RSVP no, then by name.
+function wkKids(c) {
+  const ros = clsRoster.filter(r => r.schedule_id === c.id), ids = new Set(ros.map(r => r.student_id));
+  const rs = clsRsvp.filter(r => r.schedule_id === c.id);
+  const kids = ros.map(r => ({ ...r })).concat(rs.filter(r => r.once && !ids.has(r.student_id)).map(r => ({ student_id: r.student_id, student_name: r.student_name, once: true })));
+  const rank = k => (clsAttOf(c, k.student_id) || {}).status === 'Attended' ? 0 : k.ans === 'yes' ? 1 : k.ans === 'no' ? 3 : 2;
+  kids.forEach(k => k.ans = (rs.find(r => r.student_id === k.student_id) || {}).answer || null);
+  return kids.sort((a, b) => rank(a) - rank(b) || (a.student_name || '').localeCompare(b.student_name || ''));
+}
+const rsvpTag = k => (k.ans === 'yes' ? ' <span class="tag t-open">✅ Coming</span>' : k.ans === 'no' ? ' <span class="tag t-away">❌ Not coming</span>' : '') + (k.once ? ' <span class="tag t-ex">Just this week</span>' : '');
 function renderClassAtt() {
   const cls = [...clsSched].sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || timeVal(a.time) - timeVal(b.time));
   let n = { att: 0, no: 0, paid: 0, unpaid: 0 }, html = '';
   if (!cls.length) { $('attList').innerHTML = '<div class="card center">No active classes</div>'; ['m_att','m_no','m_paid','m_unpaid'].forEach(i => $(i).textContent = '—'); return; }
   cls.forEach(c => {
-    const roster = clsRoster.filter(r => r.schedule_id === c.id).sort((a, b) => (a.student_name || '').localeCompare(b.student_name || ''));
+    const roster = wkKids(c);
     const dd = weekDates().find(d => d.name === c.day);
     const off = clsOff.has(c.id);
     html += `<div class="dayhd" style="display:flex;align-items:center;flex-wrap:wrap">${esc(c.day)} · ${esc(c.time)} · ${esc(c.class_name)}<span>${dd ? dd.label : ''} · ${roster.length} enrolled · $${clsPrice(c)}</span>
@@ -1989,7 +2035,7 @@ function renderClassAtt() {
     roster.forEach(r => {
       const st = (clsAttOf(c, r.student_id) || {}).status || '', o = clsObj(c, r), pd = paidOf(o), k = esc(c.id) + "','" + esc(r.student_id);
       if (st === 'Attended') { n.att++; pd.amt > 0 ? n.paid++ : n.unpaid++; } else if (NOT_HERE.includes(st)) n.no++;
-      html += `<div class="arow"><div class="who"><b>${esc(r.student_name)}</b><small>${esc(r.parent_name || '')}${r.status && r.status !== 'Enrolled' ? ' · ' + esc(r.status) : ''}</small></div>
+      html += `<div class="arow"><div class="who"><b>${esc(r.student_name)}</b>${rsvpTag(r)}<small>${esc(r.parent_name || '')}${r.status && r.status !== 'Enrolled' ? ' · ' + esc(r.status) : ''}</small></div>
         <button class="here${st === 'Attended' ? ' on' : ''}" onclick="clsMark('${k}','${st === 'Attended' ? '' : 'Attended'}')">${st === 'Attended' ? '✓ Here' : 'Here'}</button>
         <select class="nothere${NOT_HERE.includes(st) ? ' on' : ''}" onchange="clsMark('${k}',this.value)"><option value="">${st ? '— Clear' : '— Not Here'}</option>${NOT_HERE.map(x => `<option${x === st ? ' selected' : ''}>${x}</option>`).join('')}</select>
         ${pd.amt > 0 ? `<span class="paid" style="cursor:pointer" title="Tap to edit" onclick="clsUndoPay('${k}')">✓ Paid $${pd.amt.toFixed(0)}${pd.method ? ' · ' + esc(pd.method) : ''}</span>` : `<button class="paybtn" onclick="clsPay('${k}')">$ Record Payment</button>`}</div>`;
@@ -1999,7 +2045,7 @@ function renderClassAtt() {
   $('m_att').textContent = n.att; $('m_no').textContent = n.no; $('m_paid').textContent = n.paid; $('m_unpaid').textContent = n.unpaid;
   $('attList').innerHTML = html;
 }
-const clsFind = (cid, sid) => { const c = clsSched.find(x => x.id === cid), r = clsRoster.find(x => x.schedule_id === cid && x.student_id === sid); return c && r ? { c, r } : null; };
+const clsFind = (cid, sid) => { const c = clsSched.find(x => x.id === cid), r = c && wkKids(c).find(x => x.student_id === sid); return c && r ? { c, r } : null; };
 async function clsMark(cid, sid, status) {
   const f = clsFind(cid, sid); if (!f) return;
   const cur = clsAttOf(f.c, sid); let res;
@@ -2009,7 +2055,7 @@ async function clsMark(cid, sid, status) {
     coach: f.c.coach, day: f.c.day, week_start: weekStartStr(), status }).select().single();
   if (res.error) return alert(res.error.message);
   clsAtt = clsAtt.filter(a => a !== cur); if (status) clsAtt.push(res.data);
-  renderClassAtt();
+  curTab === 'schedule' ? renderWeek() : renderClassAtt();
   // Same as 2.0: marking Here opens Record Payment if not paid yet
   if (status === 'Attended' && !(paidOf(clsObj(f.c, f.r)).amt > 0)) openPay(clsObj(f.c, f.r));
 }
@@ -2512,16 +2558,19 @@ async function openPrint() {
   $('printModal').classList.remove('hidden'); $('pContent').innerHTML = '<div style="padding:20px">Loading…</div>'; prScale();
   const CS = await sb.from('class_schedule').select('*').eq('active', true);
   const cls = (CS.data || []).sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || timeVal(a.time) - timeVal(b.time));
-  const CE = cls.length ? await sb.from('class_enrollments').select('*').in('schedule_id', cls.map(c => c.id)) : { data: [] };
   const seen = new Set(), byDay = {};
   weekRows.filter(p => p.status !== 'Cancelled' && !isOther(p)).forEach(p => {
     const k = (p.student_id || p.student_name) + '|' + p.day + '|' + p.time; if (seen.has(k) || !p.day) return; seen.add(k);
     (byDay[p.day] = byDay[p.day] || []).push(p);
   });
   const blocks = DAYS.filter(d => byDay[d]).map(d => ({ label: d, rows: byDay[d].sort((a, b) => timeVal(a.time) - timeVal(b.time)).map(p => [p.time, p.student_name]) }));
+  // Classes: one line on their day (no kid names) — e.g. "10:30 AM · Back Handspring Class 10:30–11:30"
   cls.forEach(c => {
-    const r = (CE.data || []).filter(e => e.schedule_id === c.id && !['Dropped','Waitlisted'].includes(e.status)).map(e => ['', e.student_name || '']).sort((a, b) => a[1].localeCompare(b[1]));
-    if (r.length) blocks.push({ label: (c.class_name || 'Group Class') + ' — ' + (c.day ? SHORT[c.day] + ' ' : '') + (c.time || ''), rows: r });
+    if (!c.day || clsOff.has(c.id)) return;
+    let b = blocks.find(x => x.label === c.day);
+    if (!b) { b = { label: c.day, rows: [] }; blocks.push(b); blocks.sort((x, y) => DAYS.indexOf(x.label) - DAYS.indexOf(y.label)); }
+    b.rows.push([c.time || '', clsLabel(c) + ' ' + (c.time || '') + '–' + clsEnd(c), true]);
+    b.rows.sort((x, y) => timeVal(x[0]) - timeVal(y[0]));
   });
   // Balance blocks over 3 columns (same as 2.0) so no column runs long
   const cols = [[], [], []], tot = [0, 0, 0];
@@ -2961,7 +3010,7 @@ async function ckSave() {
   $('ck_save').disabled = false;
   if (r.error) return alert(r.error.message);
   $('ckModal').classList.add('hidden');
-  if (ckFromStu) { await loadStudents(true); loadStudentDetail(students.find(x => x.id === s.id) || sd.s); } else loadClasses(true);
+  if (ckFromStu) { await loadStudents(true); loadStudentDetail(students.find(x => x.id === s.id) || sd.s); } else if (curTab === 'schedule' || curTab === 'attendance') loadWeek(true); else loadClasses(true);
 }
 
 // ================= AUTO-REFRESH (Supabase realtime) =================
