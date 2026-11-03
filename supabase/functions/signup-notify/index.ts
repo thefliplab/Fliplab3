@@ -12,19 +12,19 @@ const esc = (s: unknown) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
-  const { ids = [], what = "" } = await req.json().catch(() => ({}));
+  const { ids = [], what = "", shareType = "" } = await req.json().catch(() => ({}));
   const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   const since = new Date(Date.now() - 15 * 60e3).toISOString();
   const { data: kids } = await db.from("students").select("id,gym_id,first_name,last_name,skill_level,parent_name,parent_phone,parent_email,extra")
     .in("id", (ids as string[]).slice(0, 2)).gte("created_at", since).eq("extra->>Source", "3.0 sign-up").is("extra->>Notified", null);
   if (!kids?.length) return json({ ok: true, skipped: true });
-  for (const k of kids) await db.from("students").update({ extra: { ...k.extra, Notified: new Date().toISOString() } }).eq("id", k.id);
+  for (const k of kids) await db.from("students").update({ extra: { ...k.extra, Notified: new Date().toISOString(), ...(shareType ? { ShareType: String(shareType).slice(0, 30) } : {}) } }).eq("id", k.id);
 
   const k = kids[0], names = kids.map((x) => x.first_name + " " + x.last_name).join(" & ");
   const first = kids.map((x) => x.first_name).join(" & "), parentFirst = String(k.parent_name || "").split(" ")[0];
   const pay = k.extra?.PaymentMethod || "";
   const lines = [`<b>Athlete:</b> ${esc(names)}`, `<b>Parent:</b> ${esc(k.parent_name)} · ${esc(k.parent_phone)} · ${esc(k.parent_email)}`,
-    `<b>Signed up for:</b> ${esc(what)}`, pay ? `<b>Payment:</b> ${esc(pay)}` : ""].filter(Boolean).join("<br>");
+    `<b>Signed up for:</b> ${esc(what)}`, pay ? `<b>Payment:</b> ${esc(pay)}` : "", shareType && shareType !== "Solo" ? `<b>Sharing:</b> ${esc(shareType)}${k.extra?.FriendName ? " (" + esc(k.extra.FriendName) + ")" : ""}` : ""].filter(Boolean).join("<br>");
   const payHtml = pay === "Zelle" ? `Zelle: <b>${ZELLE}</b>` : pay === "Venmo" ? `<a href="${VENMO}">Pay with Venmo</a>` : "Cash at the lesson";
   const isWait = /waitlist/i.test(what);
   const parentHtml = `<div style="font-family:Arial,sans-serif;font-size:15px;color:#222;line-height:1.6">
