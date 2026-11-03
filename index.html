@@ -405,6 +405,7 @@
         <div><label>&nbsp;</label><label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="cs_class" style="width:auto"> Classes on calendar</label></div></div>
       <button class="btn" onclick="saveCal()">Save calendar settings</button>
       <button class="btn ghost" style="margin-top:8px" onclick="testText()">📱 Send test text to my phone</button>
+      <button class="btn ghost" style="margin-top:8px" onclick="testEmail()">✉️ Send test email</button>
       <div id="cs_msg" class="msg"></div>
     </div>
     <div style="border-top:1px solid #eee;margin-top:14px;padding-top:10px"><b>Coaches</b>
@@ -985,6 +986,14 @@ async function testText() {
   const r = await sb.functions.invoke('sms-send', { body: { messages: [{ to, text: 'FlipLab 3.0 test text ✓', family: 'Test' }] } });
   const err = r.error ? ((r.data && r.data.error) || r.error.message) : r.data.failed ? r.data.results[0].error : '';
   m.className = err ? 'msg err' : 'msg'; m.textContent = err ? 'Not sent: ' + err : '✓ Handed to your phone — the text should arrive in a few seconds';
+}
+async function testEmail() {
+  const m = $('cs_msg');
+  const to = prompt('Send a test email to:', 'thefliplab@yahoo.com'); if (!to) return;
+  m.className = 'msg'; m.textContent = 'Sending test email…';
+  const r = await sb.functions.invoke('send-email', { body: { messages: [{ to, subject: 'FlipLab 3.0 test email', text: 'FlipLab 3.0 test email ✓\n\nIf you can read this, 3.0 can send email as thefliplab@yahoo.com.', family: 'Test' }] } });
+  const err = r.error ? ((r.data && r.data.error) || r.error.message) : r.data.failed ? r.data.results[0].error : '';
+  m.className = err ? 'msg err' : 'msg'; m.textContent = err ? 'Not sent: ' + err : '✓ Sent from thefliplab@yahoo.com — check ' + to;
 }
 async function saveCal() {
   const mode = $('cs_mode').value, m = $('cs_msg');
