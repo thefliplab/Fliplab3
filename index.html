@@ -99,7 +99,7 @@
 </head>
 <body>
 <nav><b>Flip<span>Lab</span> 3.0</b>
-  <div id="tabs" class="hidden"><button id="tabBtn_dashboard" onclick="go('dashboard')">Dashboard</button><button id="tabBtn_schedule" onclick="go('schedule')">Schedule</button><button id="tabBtn_attendance" onclick="go('attendance')">Attendance</button><button id="tabBtn_openings" onclick="go('openings')">Openings</button><button id="tabBtn_pairings" onclick="go('pairings')">Pairings</button><button id="tabBtn_comm" onclick="go('comm')">Communicate</button><button id="tabBtn_payments" onclick="go('payments')">Payments</button><button id="tabBtn_students" onclick="go('students')">Students</button><button id="tabBtn_slots" onclick="go('slots')">Slots</button></div>
+  <div id="tabs" class="hidden"><button id="tabBtn_dashboard" onclick="go('dashboard')">Dashboard</button><button id="tabBtn_schedule" onclick="go('schedule')">Schedule</button><button id="tabBtn_attendance" onclick="go('attendance')">Attendance</button><button id="tabBtn_openings" onclick="go('openings')">Openings</button><button id="tabBtn_pairings" onclick="go('pairings')">Pairings</button><button id="tabBtn_comm" onclick="go('comm')">Communicate</button><button id="tabBtn_msgs" onclick="go('msgs')">Messages<span id="msgBadge" class="hidden" style="background:#d64545;color:#fff;border-radius:9px;padding:0 6px;margin-left:4px;font-size:11px"></span></button><button id="tabBtn_payments" onclick="go('payments')">Payments</button><button id="tabBtn_students" onclick="go('students')">Students</button><button id="tabBtn_slots" onclick="go('slots')">Slots</button></div>
   <button id="outBtn" class="hidden" onclick="openAcct()">⚙ Account</button></nav>
 <main>
 
@@ -252,6 +252,25 @@
     </div>
     <div class="sec">Recent sends</div>
     <div class="card" style="padding:0;overflow:hidden" id="cm_hist"></div>
+  </section>
+
+  <!-- Messages (incoming texts from parents) -->
+  <section id="msgsView" class="hidden">
+    <div id="ms_list">
+      <div class="sec" style="margin-top:4px">Messages <span id="ms_cnt" style="font-weight:400;font-size:12px;color:#888"></span>
+        <select id="ms_f" onchange="ss.set('msF',this.value);msRender()" style="width:auto;margin:0;padding:4px 6px;font-size:13px"><option value="all">All</option><option value="unread">Unread</option></select></div>
+      <div class="card" style="padding:0;overflow:hidden" id="ms_threads"><div class="center">Loading…</div></div>
+      <small style="color:#888;display:block;margin:6px 2px">Texts parents send to your cell. Only numbers on file as a parent phone show up. Last 60 days.</small>
+    </div>
+    <div id="ms_thread" class="hidden">
+      <div class="sec" style="margin-top:4px"><a href="#" onclick="msBack();return false" style="color:#185FA5;text-decoration:none">‹ Messages</a> <span id="ms_who" style="font-weight:600"></span></div>
+      <div class="card" id="ms_bubbles" style="display:flex;flex-direction:column;gap:6px;max-height:55vh;overflow-y:auto"></div>
+      <div class="card">
+        <div style="display:flex;gap:6px;margin-bottom:6px"><input id="ms_idea" placeholder="✨ Optional: what to say, e.g. yes Tue 5:30 works" style="flex:1;margin:0"><button class="paybtn" style="background:#EEEDFE;color:#3C3489;white-space:nowrap" onclick="msAI()">✨ Draft reply</button></div>
+        <textarea id="ms_msg" rows="3" placeholder="Type a reply…"></textarea>
+        <div style="display:flex;justify-content:flex-end;margin-top:6px"><button class="btn" id="ms_send" onclick="msSend()" style="width:auto;padding:8px 18px">Send text</button></div>
+      </div>
+    </div>
   </section>
 
   <!-- Slots (seasons + weekly time slots; replaces 2.0 v-slots + Summer slots) -->
@@ -621,10 +640,10 @@ const $ = id => document.getElementById(id);
 const ss = { get(k, d) { try { const v = sessionStorage.getItem('fl3_' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
              set(k, v) { try { sessionStorage.setItem('fl3_' + k, JSON.stringify(v)); } catch (e) {} } };
 function show(view) {
-  ['loginView','waitView','studentsView','editView','scheduleView','attendanceView','paymentsView','openingsView','dashboardView','slotsView','pairingsView','commView'].forEach(v => $(v).classList.toggle('hidden', v !== view));
+  ['loginView','waitView','studentsView','editView','scheduleView','attendanceView','paymentsView','openingsView','dashboardView','slotsView','pairingsView','commView','msgsView'].forEach(v => $(v).classList.toggle('hidden', v !== view));
   $('outBtn').classList.toggle('hidden', view === 'loginView');
   $('tabs').classList.toggle('hidden', !gymId);
-  ['dashboard','schedule','attendance','openings','pairings','comm','payments','students','slots'].forEach(t => $('tabBtn_' + t).classList.toggle('on', view === t + 'View'));
+  ['dashboard','schedule','attendance','openings','pairings','comm','msgs','payments','students','slots'].forEach(t => $('tabBtn_' + t).classList.toggle('on', view === t + 'View'));
 }
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
@@ -1103,7 +1122,7 @@ async function boot() {
   if (error || !gyms || !gyms.length) { show('waitView'); return; }
   gymId = gyms[0].id; gymTitle = gyms[0].name; $('gymName').textContent = gyms[0].name + ' — Students';
   const SE = await sb.from('seasons').select('*').order('sort'); seasons = SE.data || [];
-  myEmail = (session.user.email || '').toLowerCase(); await loadCoaches(); rtStart();
+  myEmail = (session.user.email || '').toLowerCase(); await loadCoaches(); rtStart(); msBadge();
   await loadStudents();
   weekOffset = ss.get('week', 0); stuGroup = ss.get('group', 'priv'); attMode = ss.get('attMode', 'privates');
   if (attMode === 'classes') setAttModeButtons();
@@ -1112,7 +1131,7 @@ async function boot() {
   else go(['dashboard','schedule','attendance','openings','pairings','comm','payments','students','slots'].includes(tab) ? tab : 'dashboard');
 }
 let curTab = 'schedule';
-function go(tab) { curTab = tab; ss.set('tab', tab); if (tab === 'pairings') { show('pairingsView'); return loadPairings(); } if (tab === 'comm') { show('commView'); return loadComm(); } if (tab === 'slots') { show('slotsView'); return loadSlots(); } if (tab === 'students') { show('studentsView'); render(); if (!weekRows.length) loadWeek(); return; } show(tab + 'View'); loadWeek(); }
+function go(tab) { curTab = tab; ss.set('tab', tab); if (tab === 'pairings') { show('pairingsView'); return loadPairings(); } if (tab === 'comm') { show('commView'); return loadComm(); } if (tab === 'msgs') { show('msgsView'); return loadMsgs(); } if (tab === 'slots') { show('slotsView'); return loadSlots(); } if (tab === 'students') { show('studentsView'); render(); if (!weekRows.length) loadWeek(); return; } show(tab + 'View'); loadWeek(); }
 
 async function loadStudents(quiet) {
   if (!quiet) $('list').innerHTML = '<div class="center">Loading…</div>';
@@ -2012,6 +2031,7 @@ function renderDash() {
     if (absent.length) alerts.push(['#A32D2D', absent.length + ' kid' + (absent.length === 1 ? '' : 's') + ' missed the last 2 weeks', absent.join(' · '), "go('students')"]);
     if (unpaid2.length) alerts.push(['#854F0B', unpaid2.length + ' unpaid 2+ weeks running', unpaid2.join(' · '), "go('payments')"]);
   } else loadDashHist();
+  if (msUnread) alerts.push(['#d64545', msUnread + ' unread text' + (msUnread === 1 ? '' : 's') + ' from parents', 'Tap to open Messages', "go('msgs')"]);
   const mi = miKids();
   if (mi.length) alerts.push(['#7F77DD', mi.length + ' kid' + (mi.length === 1 ? '' : 's') + ' missing info', 'Birthdate or level · tap to fill in', 'openMissing()']);
   const newStu = students.filter(x => x.join_date && x.join_date >= ymd(wk[0].date));
@@ -2481,6 +2501,81 @@ async function restoreLesson(id) {
   loadWeek();
 }
 
+// ================= MESSAGES (incoming parent texts; text_log IN from sms-receive, OUT from sms-send) =================
+let msRows = [], msOpen = ss.get('msOpen', null), msUnread = 0, msRt = null;
+const msWhen = t => { const d = new Date(t), n = new Date(); return d.toDateString() === n.toDateString() ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : d.toLocaleDateString([], { month: 'short', day: 'numeric' }); };
+async function msBadge() {
+  const { count } = await sb.from('text_log').select('id', { count: 'exact', head: true }).eq('direction', 'IN').eq('status', 'Unread');
+  msUnread = count || 0;
+  const b = $('msgBadge'); b.textContent = msUnread; b.classList.toggle('hidden', !msUnread);
+}
+async function loadMsgs(quiet) {
+  if (!quiet) $('ms_threads').innerHTML = '<div class="center">Loading…</div>';
+  $('ms_f').value = ss.get('msF', 'all');
+  const since = new Date(Date.now() - 60 * 864e5).toISOString();
+  const { data, error } = await sb.from('text_log').select('id,direction,phone,student_id,family_name,body,status,received_at,extra').gte('received_at', since).order('received_at', { ascending: true }).range(0, 999);
+  if (error) { $('ms_threads').innerHTML = '<div class="center">' + esc(error.message) + '</div>'; return; }
+  msRows = (data || []).filter(r => r.phone && r.family_name !== 'Test');
+  msRender();
+  if (msOpen) msShow(msOpen, true);
+}
+function msThreads() {
+  const by = {};
+  msRows.forEach(r => { (by[r.phone] = by[r.phone] || []).push(r); });
+  return Object.entries(by).filter(([, l]) => l.some(r => r.direction === 'IN'))     // inbox = families who texted back
+    .map(([phone, l]) => { const inn = l.filter(r => r.direction === 'IN'), last = l[l.length - 1], who = inn[inn.length - 1];
+      return { phone, list: l, last, name: who.family_name || fmtPhone(phone), kids: (who.extra?.kids || []).join(' & '), unread: inn.filter(r => r.status === 'Unread').length }; })
+    .sort((a, b) => b.last.received_at.localeCompare(a.last.received_at));
+}
+function msRender() {
+  let t = msThreads(); const f = $('ms_f').value;
+  const totU = t.reduce((n, x) => n + x.unread, 0);
+  $('ms_cnt').textContent = t.length + ' conversation' + (t.length === 1 ? '' : 's') + (totU ? ' · ' + totU + ' unread' : '');
+  if (f === 'unread') t = t.filter(x => x.unread);
+  $('ms_threads').innerHTML = t.length ? t.map(x => `<div class="arow" style="cursor:pointer" onclick="msShow('${x.phone}')">
+      <span style="width:9px;height:9px;border-radius:50%;background:${x.unread ? '#d64545' : 'transparent'};flex-shrink:0"></span>
+      <div class="who" style="flex:1;min-width:0"><b>${esc(x.name)}${x.kids ? ' <span style="font-weight:400;color:#888">(' + esc(x.kids) + ')</span>' : ''}</b>
+      <small style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${x.last.direction === 'OUT' ? 'You: ' : ''}${esc(x.last.body)}</small></div>
+      <small style="color:#888;white-space:nowrap">${msWhen(x.last.received_at)}</small></div>`).join('')
+    : '<div class="center">' + (f === 'unread' ? 'No unread messages' : 'No texts from parents yet') + '</div>';
+}
+async function msShow(phone, quiet) {
+  const x = msThreads().find(t => t.phone === phone);
+  if (!x) { msBack(); return; }
+  msOpen = phone; ss.set('msOpen', phone);
+  $('ms_list').classList.add('hidden'); $('ms_thread').classList.remove('hidden');
+  $('ms_who').textContent = x.name + (x.kids ? ' (' + x.kids + ')' : '') + ' · ' + fmtPhone(phone);
+  $('ms_bubbles').innerHTML = x.list.map(r => { const me = r.direction === 'OUT';
+    return `<div style="align-self:${me ? 'flex-end' : 'flex-start'};max-width:82%;background:${me ? '#e6f8f1' : '#f1f3f5'};border-radius:12px;padding:7px 10px;font-size:14px;white-space:pre-wrap">${esc(r.body)}
+      <div style="font-size:11px;color:#888;margin-top:2px;text-align:${me ? 'right' : 'left'}">${msWhen(r.received_at)}${me && r.status === 'Failed' ? ' · <span style="color:#d64545">Failed</span>' : ''}</div></div>`; }).join('');
+  const bx = $('ms_bubbles'); bx.scrollTop = bx.scrollHeight;
+  if (!quiet) { $('ms_msg').value = ''; $('ms_idea').value = ''; }
+  const ids = x.list.filter(r => r.direction === 'IN' && r.status === 'Unread').map(r => r.id);
+  if (ids.length) { await sb.from('text_log').update({ status: 'Read' }).in('id', ids); ids.forEach(id => { const r = msRows.find(y => y.id === id); if (r) r.status = 'Read'; }); msBadge(); }
+}
+function msBack() { msOpen = null; ss.set('msOpen', null); $('ms_thread').classList.add('hidden'); $('ms_list').classList.remove('hidden'); msRender(); }
+async function msAI() {
+  const x = msThreads().find(t => t.phone === msOpen); if (!x) return;
+  const btn = event.target; btn.disabled = true; const old = btn.textContent; btn.textContent = '✨ Writing…';
+  const thread = x.list.slice(-12).map(r => (r.direction === 'OUT' ? 'Steve: ' : 'Parent: ') + r.body).join('\n');
+  const res = await sb.functions.invoke('ai-write', { body: { mode: 'reply', thread, parent: (x.name || '').split(' ')[0], kid: x.kids, idea: $('ms_idea').value.trim() } });
+  btn.disabled = false; btn.textContent = old;
+  if (res.error || res.data?.error) return alert('AI: ' + (res.data?.error || res.error.message));
+  $('ms_msg').value = res.data.text;
+}
+async function msSend() {
+  const x = msThreads().find(t => t.phone === msOpen), text = $('ms_msg').value.trim();
+  if (!x || !text) return;
+  if (!confirm('Text this to ' + x.name + ' at ' + fmtPhone(x.phone) + '?\n\n' + text)) return;
+  const b = $('ms_send'); b.disabled = true; b.textContent = 'Sending…';
+  const sid = [...x.list].reverse().find(r => r.student_id)?.student_id || null;
+  const res = await sb.functions.invoke('sms-send', { body: { messages: [{ to: x.phone, student_id: sid, family: x.name, text }] } });
+  b.disabled = false; b.textContent = 'Send text';
+  if (res.error || !res.data?.sent) return alert('Not sent: ' + (res.data?.results?.[0]?.error || res.error?.message || 'unknown error'));
+  $('ms_msg').value = ''; $('ms_idea').value = '';
+  await loadMsgs(true);
+}
+
 // ================= AUTO-REFRESH (Supabase realtime) =================
 // Another phone changes something → quietly reload the current tab (same tab / week / scroll). Waits while a pop-up is open.
 let rtTimer = null, rtPending = false, rtHiddenAt = null, rtChan = null;
@@ -2502,6 +2597,7 @@ function rtStart() {
   rtChan = sb.channel('fl3-admin');
   ['private_lessons','schedule_exceptions','attendance','payments','students','waitlist','available_slots','class_attendance','class_enrollments','coaches']
     .forEach(t => rtChan.on('postgres_changes', { event: '*', schema: 'public', table: t }, rtQueue));
+  rtChan.on('postgres_changes', { event: '*', schema: 'public', table: 'text_log' }, () => { msBadge(); if (curTab === 'msgs') { clearTimeout(msRt); msRt = setTimeout(() => loadMsgs(true), 800); } });
   rtChan.subscribe();
 }
 // Back to the app after a while → refresh once to catch anything missed

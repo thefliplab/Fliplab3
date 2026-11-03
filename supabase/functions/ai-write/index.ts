@@ -1,5 +1,5 @@
 // FlipLab 3.0 — AI help writing parent texts (Communicate tab). Signed-in user only (verify_jwt on).
-// Body: { mode: "draft" | "shorter" | "friendlier" | "professional" | "onetext", idea?: string, text?: string, audience?: string }
+// Body: { mode: "reply" (thread, parent, kid, idea?) | "draft" | "shorter" | "friendlier" | "professional" | "onetext", idea?: string, text?: string, audience?: string }
 // Secret: ANTHROPIC_API_KEY. Returns { text }.
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
@@ -26,6 +26,7 @@ const ASK: Record<string, (b: any) => string> = {
   shorter: b => `Make this text shorter in Steve's voice, keeping every fact:\n${b.text}`,
   friendlier: b => `Make this text warmer and friendlier, keeping every fact:\n${b.text}`,
   professional: b => `Make this text more professional, keeping every fact:\n${b.text}`,
+  reply: b => `Write Steve's reply to ${b.parent || "the parent"}${b.kid ? " (parent of " + b.kid + ")" : ""}. This goes to one person, so use their real first name, not {parent} or {kid}. Only use facts from the conversation or the coach's note; if you'd need a fact you don't have, keep it general. Conversation so far, oldest first:\n${b.thread}\n\nCoach's note on what to say (may be empty): ${b.idea || ""}`,
   onetext: b => `Rewrite this text to fit in one SMS: 150 characters or fewer counting {parent} and {kid} as 8 characters each. Keep the key facts:\n${b.text}`,
 };
 
@@ -38,10 +39,10 @@ Deno.serve(async (req) => {
   if (!key) return json({ error: "AI isn't set up yet (ANTHROPIC_API_KEY secret missing)" }, 500);
   const b = await req.json().catch(() => ({}));
   const ask = ASK[b.mode];
-  if (!ask || (b.mode === "draft" ? !b.idea : !b.text)) return json({ error: "Nothing to work with" }, 400);
+  if (!ask || (b.mode === "draft" ? !b.idea : b.mode === "reply" ? !b.thread : !b.text)) return json({ error: "Nothing to work with" }, 400);
   const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST",
     headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-    body: JSON.stringify({ model: "claude-sonnet-5-5", max_tokens: 600, system: SYSTEM, messages: [{ role: "user", content: ask(b).slice(0, 2000) }] }) });
+    body: JSON.stringify({ model: "claude-sonnet-5-5", max_tokens: 600, system: SYSTEM, messages: [{ role: "user", content: ask(b).slice(0, 4000) }] }) });
   const out = await r.json().catch(() => ({}));
   if (!r.ok) return json({ error: out?.error?.message || "AI error " + r.status }, 502);
   return json({ text: (out.content || []).map((c: any) => c.text || "").join("").trim() });
