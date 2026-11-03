@@ -302,6 +302,7 @@ input:focus{outline:none;border-color:var(--btn);box-shadow:0 0 0 3px rgba(67,73
         <div class="item" id="photo-Yes" onclick="pickPhoto('Yes')"><strong>Yes, I give permission</strong><div class="d">Photos/videos may be used on Flip Lab's social media and website</div></div>
         <div class="item" id="photo-No" onclick="pickPhoto('No')"><strong>No, I do not give permission</strong><div class="d">No photos or videos of my athlete will be shared publicly</div></div>
       </div>
+      <input id="website" name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0" aria-hidden="true">
       <div class="sig"><span>Signed:</span><input id="signature" placeholder="Type your full legal name"></div>
       <button class="btn" id="submitBtn" onclick="submitForm()">Complete Registration</button>
       <button class="back" onclick="show('3')">← Back</button>
@@ -425,9 +426,10 @@ async function loadSlots(forWaitlist) {
     return;
   }
   $('slotGrid').innerHTML = (joining && !list.some(s => s.friend) ? '<div style="font-size:12px;color:#888;margin-bottom:10px">We couldn\'t find your friend\'s time — check the spelling, or pick an open time below.</div>' : '')
-    + '<div class="slot-grid">' + list.map((s, i) => `<div class="slot" onclick="pickSlot(${i})"><div class="slot-day">${esc(s.day)}</div><div class="slot-time">${esc(s.time)}</div><div class="slot-badge">${esc(s.coach || '')}</div>${s.friend ? `<div class="slot-badge" style="color:#7C3AED">Your friend's slot — ${esc(s.friend)}</div>` : ''}</div>`).join('') + '</div>';
+    + '<div class="slot-grid">' + list.map((s, i) => `<div class="slot" onclick="pickSlot(${i})"><div class="slot-day">${esc(s.day)}</div><div class="slot-time">${esc(s.time)}</div><div class="slot-badge">starts ${startOf(s.day)}</div>${s.friend ? `<div class="slot-badge" style="color:#7C3AED">Your friend's slot — ${esc(s.friend)}</div>` : ''}</div>`).join('') + '</div>';
   if (DL && DL.day) { const i = list.findIndex(s => s.day.toLowerCase() === DL.day.toLowerCase() && s.time.replace(/\s/g, '').toLowerCase() === DL.time.replace(/\s/g, '').toLowerCase()); if (i >= 0) { pickSlot(i); document.querySelectorAll('.slot')[i].scrollIntoView({ behavior: 'smooth', block: 'center' }); } DL.day = null; }
 }
+function startOf(day) { const t = new Date(); t.setHours(12, 0, 0, 0); const mon = new Date(t); mon.setDate(t.getDate() - ((t.getDay() + 6) % 7)); const d = new Date(mon); d.setDate(mon.getDate() + DAYS.indexOf(day)); if (d < t) d.setDate(d.getDate() + 7); return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); }
 function pickSlot(i) { slot = list[i]; document.querySelectorAll('.slot').forEach((x, j) => x.classList.toggle('selected', j === i)); $('btnSlot').style.display = 'block'; }
 function next2() { if (!slot) return alert('Please choose a time slot.'); show('1'); }
 function switchToWaitlist() { path = 'waitlist'; slot = null; $('choiceReserve').classList.remove('selected'); $('choiceWaitlist').classList.add('selected'); show('2w'); loadSlots(true); }
@@ -534,7 +536,7 @@ async function submitForm() {
   const friendName = fmt === 'class' || hasSib ? '' : sharingFriend() ? friends().join(', ') : share === 'With a friend' ? $('friendName').value.trim() : '';
   const p = { athletes, school: $('school').value.trim(), parentName: $('parentName').value.trim(), parentPhone: $('parentPhone').value.trim(), parentEmail: $('parentEmail').value.trim(),
     paymentMethod: pay, photoPermission: photo, signature: $('signature').value.trim(), path: fmt === 'class' ? 'class' : path, lessonSubType: fmt === 'class' ? 'solo' : fmt,
-    slotId: slot?.id, classId: cls?.id, friendName, preferredDays: days, preferredTimes: times, openToAnything: openAny };
+    slotId: slot?.id, classId: cls?.id, friendName, shareType, website: $('website').value, preferredDays: days, preferredTimes: times, openToAnything: openAny };
   let r = {}; try { r = await sb.rpc('signup_register', { p_slug: GYM, p }); } catch (e) { r = { error: e }; }
   const res = r.data || {};
   b.disabled = false; b.textContent = 'Complete Registration';
@@ -550,10 +552,11 @@ async function submitForm() {
   const what = res.result === 'waitlist' ? 'Waitlist / Drop-In (' + (openAny ? 'open to any day/time' : times.join(', ')) + ')'
     : res.slot ? fl + ' · ' + slot.day + 's at ' + slot.time + ', starting ' + new Date(res.start + 'T12:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
     : 'Class: ' + res.class + (res.result === 'waitlisted' ? ' (class waitlist)' : '');
-  sb.functions.invoke('signup-notify', { body: { ids: res.ids, what, shareType } }).catch(() => {});
+  const whatFull = what + (res.changed ? ' — sharing with ' + res.changed : '');
+  sb.functions.invoke('signup-notify', { body: { ids: res.ids, what: whatFull, shareType } }).catch(() => {});
   const lines = [`<strong>Athlete:</strong> ${esc(athletes[0].firstName + ' ' + athletes[0].lastName)}`, `<strong>Skill Level:</strong> ${esc(skill)}`];
   if (hasSib) lines.push(`<strong>Sibling:</strong> ${esc(athletes[1].firstName + ' ' + athletes[1].lastName)}`, `<strong>Sibling Skill:</strong> ${esc(sibSkill)}`);
-  lines.push(`<strong>Parent:</strong> ${esc(p.parentName)}`, `<strong>Email:</strong> ${esc(p.parentEmail)}`, `<strong>Payment:</strong> ${esc(pay)}`, `<strong>Signed up for:</strong> ${esc(what)}`);
+  lines.push(`<strong>Parent:</strong> ${esc(p.parentName)}`, `<strong>Email:</strong> ${esc(p.parentEmail)}`, `<strong>Payment:</strong> ${esc(pay)}`, `<strong>Signed up for:</strong> ${esc(whatFull)}`);
   $('summaryBox').innerHTML = lines.join('<br>');
   if (res.result === 'waitlist') { $('doneTitle').textContent = "You're on the List!"; $('doneSub').textContent = "We'll reach out as soon as a spot opens that matches your availability."; }
   else if (hasSib) { $('doneTitle').textContent = 'Both Athletes Registered!'; $('doneSub').textContent = 'Both athletes have been registered and linked as a shared lesson.'; }

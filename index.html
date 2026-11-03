@@ -707,7 +707,7 @@ function prMatch(a, b, close) {
   const ag = Math.abs(prYrs(a.dob) - prYrs(b.dob)); if (ag > 2) return null;
   return { gap, ag };
 }
-function prWho(x) { const age = ageOf(x.dob); return (x.skill ? esc(String(x.skill).split('-')[0]) : 'No level') + (age !== '' ? ' · age ' + age : ''); }
+function prWho(x) { const age = ageOf(x.dob); return (x.skill ? esc(String(x.skill).split('-')[0]) : 'No level') + (age !== '' ? ' · age ' + age : '') + (((prStu(x.id) || {}).extra || {}).ShareType === 'Pair me up' ? ' · <b style="color:#1D9E75">🤝 asked to be paired</b>' : ''); }
 function prRow(a, b, f, note, extra, k) {
   return `<div class="arow"><div class="who"><b>${esc(a.name)} + ${esc(b.name)}</b><small>${esc(a.name.split(' ')[0])}: ${note[0]}</small><small>${esc(b.name.split(' ')[0])}: ${note[1]}</small>${extra || ''}${prOffered(a.id, b.id)}</div><span class="tag ${f.gap ? 't-away' : 't-photo'}">${f.gap ? 'Close level' : 'Same level'}</span><div style="display:flex;gap:4px;flex-wrap:wrap"><button class="paybtn" style="background:#E6F1FB;color:#185FA5" onclick="prOpen=prOpen==='o${k}'?null:'o${k}';renderPairings()">Offer</button><button class="paybtn" onclick="prOpen=prOpen==='${k}'?null:'${k}';renderPairings()">Pair</button><button class="paybtn" style="background:#eef0f2;color:#555" onclick="prNo('${k}')">Said no</button><button class="paybtn" style="background:#eef0f2;color:#555" onclick="prSolo('${k}')">Solo only</button></div></div>${prOpen === k ? prConfirm(k) : prOpen === 'o' + k ? prOfferBox(k) : ''}`;
 }
