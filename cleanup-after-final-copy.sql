@@ -101,4 +101,26 @@ update waitlist t set dob = k.value::date from k where k.tbl = 'waitlist' and k.
 with k as (select distinct on (tbl, row_id, field) tbl, row_id, field, value from keep_fixes order by tbl, row_id, field, created_at desc)
 update waitlist t set skill_level = k.value from k where k.tbl = 'waitlist' and k.field = 'skill_level' and t.id::text = k.row_id;
 
+-- 13. Grace Gerke + Paisley Padgett paired Tue 8:30 PM with Coach Steve (done in 3.0 Nov 1; 2.0 has them unpaired).
+--     Same values 3.0 had on Nov 3 (the shared price is applied by the app when both are in the slot).
+update private_lessons set pair_id = 'PAIR-GG-PP-TUE830', share_type = 'Matched' where id in ('PV163', 'PL-1792546158511');
+update private_lessons set lesson_type = 'Shared', price = '$30' where id = 'PL-1792546158511';
+
+-- 14. Loveland 4th Grade Clinic (SCH-002, June 7) → a one-time clinic under Classes → Past clinics (Steve, Nov 3).
+--     Its 23 kids move into clinic_kids. Paid = they have a 2.0 class payment; amount = what they paid.
+--     The 20 payments ($280, lesson_id CLS_SCH-002_…) stay as they are — NO new payments, so the money isn't counted twice.
+--     Jane Insco (real student) stays linked to her student record; the other 22 student records are already Inactive and are left alone.
+insert into clinic_kids (gym_id, schedule_id, kid_name, parent_name, phone, email, paid, amount, student_id, notes)
+select e.gym_id, e.schedule_id, e.student_name, e.parent_name, e.phone, e.email,
+       coalesce(p.amt, 0) > 0, coalesce(p.amt, 14),
+       case when exists (select 1 from private_lessons l where l.student_id = e.student_id)
+              or exists (select 1 from class_enrollments e2 where e2.student_id = e.student_id and e2.schedule_id <> 'SCH-002')
+            then e.student_id end,
+       'Moved from 2.0 class enrollment'
+from class_enrollments e
+left join (select split_part(lesson_id, '_', 3) sid, sum(amount) amt from payments where lesson_id like 'CLS\_SCH-002\_%' group by 1) p on p.sid = e.student_id
+where e.schedule_id = 'SCH-002';
+delete from class_enrollments where schedule_id = 'SCH-002';
+update class_schedule set kind = 'clinic', clinic_date = '2026-06-07', ended_at = now(), active = false where id = 'SCH-002';
+
 commit;
