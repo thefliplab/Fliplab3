@@ -268,7 +268,7 @@
       <div class="card">
         <div style="display:flex;gap:6px;margin-bottom:6px"><input id="ms_idea" placeholder="✨ Optional: what to say, e.g. yes Tue 5:30 works" style="flex:1;margin:0"><button class="paybtn" style="background:#EEEDFE;color:#3C3489;white-space:nowrap" onclick="msAI()">✨ Draft reply</button></div>
         <textarea id="ms_msg" rows="3" placeholder="Type a reply…"></textarea>
-        <div style="display:flex;justify-content:flex-end;margin-top:6px"><button class="btn" id="ms_send" onclick="msSend()" style="width:auto;padding:8px 18px">Send text</button></div>
+        <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:6px"><label style="margin:0;font-size:13px;font-weight:400;color:#555">From <select id="ms_line" style="width:auto;margin:0;padding:4px 6px;font-size:13px"><option value="Cell">📱 Cell</option><option value="Voice">☎️ Voice</option></select></label><button class="btn" id="ms_send" onclick="msSend()" style="width:auto;padding:8px 18px">Send text</button></div>
       </div>
     </div>
   </section>
@@ -2547,9 +2547,9 @@ async function msShow(phone, quiet) {
   $('ms_who').textContent = x.name + (x.kids ? ' (' + x.kids + ')' : '') + ' · ' + fmtPhone(phone);
   $('ms_bubbles').innerHTML = x.list.map(r => { const me = r.direction === 'OUT';
     return `<div style="align-self:${me ? 'flex-end' : 'flex-start'};max-width:82%;background:${me ? '#e6f8f1' : '#f1f3f5'};border-radius:12px;padding:7px 10px;font-size:14px;white-space:pre-wrap">${esc(r.body)}
-      <div style="font-size:11px;color:#888;margin-top:2px;text-align:${me ? 'right' : 'left'}">${msWhen(r.received_at)}${me && r.status === 'Failed' ? ' · <span style="color:#d64545">Failed</span>' : ''}</div></div>`; }).join('');
+      <div style="font-size:11px;color:#888;margin-top:2px;text-align:${me ? 'right' : 'left'}">${msWhen(r.received_at)}${r.extra?.line === 'Voice' ? ' · ☎️ Voice' : ''}${me && r.status === 'Failed' ? ' · <span style="color:#d64545">Failed</span>' : ''}</div></div>`; }).join('');
   const bx = $('ms_bubbles'); bx.scrollTop = bx.scrollHeight;
-  if (!quiet) { $('ms_msg').value = ''; $('ms_idea').value = ''; }
+  if (!quiet) { $('ms_msg').value = ''; $('ms_idea').value = ''; const li = [...x.list].reverse().find(r => r.direction === 'IN'); $('ms_line').value = li?.extra?.line === 'Voice' ? 'Voice' : 'Cell'; }
   const ids = x.list.filter(r => r.direction === 'IN' && r.status === 'Unread').map(r => r.id);
   if (ids.length) { await sb.from('text_log').update({ status: 'Read' }).in('id', ids); ids.forEach(id => { const r = msRows.find(y => y.id === id); if (r) r.status = 'Read'; }); msBadge(); }
 }
@@ -2566,12 +2566,22 @@ async function msAI() {
 async function msSend() {
   const x = msThreads().find(t => t.phone === msOpen), text = $('ms_msg').value.trim();
   if (!x || !text) return;
-  if (!confirm('Text this to ' + x.name + ' at ' + fmtPhone(x.phone) + '?\n\n' + text)) return;
+  let voice = $('ms_line').value === 'Voice';
+  if (!confirm('Text this to ' + x.name + ' at ' + fmtPhone(x.phone) + ' from your ' + (voice ? 'Google Voice number' : 'cell') + '?\n\n' + text)) return;
   const b = $('ms_send'); b.disabled = true; b.textContent = 'Sending…';
   const sid = [...x.list].reverse().find(r => r.student_id)?.student_id || null;
-  const res = await sb.functions.invoke('sms-send', { body: { messages: [{ to: x.phone, student_id: sid, family: x.name, text }] } });
+  let err = null;
+  if (voice) {
+    const v = await sb.functions.invoke('voice-send', { body: { to: x.phone, student_id: sid, family: x.name, text } });
+    if (v.error || !v.data?.ok) { err = v.data?.error || v.error?.message || 'unknown error';
+      if (confirm('Voice didn\'t send: ' + err + '\n\nSend from your cell instead?')) { voice = false; err = null; } }
+  }
+  if (!voice && !err) {
+    const res = await sb.functions.invoke('sms-send', { body: { messages: [{ to: x.phone, student_id: sid, family: x.name, text }] } });
+    if (res.error || !res.data?.sent) err = res.data?.results?.[0]?.error || res.error?.message || 'unknown error';
+  }
   b.disabled = false; b.textContent = 'Send text';
-  if (res.error || !res.data?.sent) return alert('Not sent: ' + (res.data?.results?.[0]?.error || res.error?.message || 'unknown error'));
+  if (err) return alert('Not sent: ' + err);
   $('ms_msg').value = ''; $('ms_idea').value = '';
   await loadMsgs(true);
 }
