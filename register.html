@@ -510,7 +510,7 @@ function pickPay(p) {
   pay = p; ['Cash','Venmo','Zelle'].forEach(x => $('pay-' + x).classList.toggle('selected', x === p));
   $('payInfo').style.display = 'block';
   $('payInfo').innerHTML = p === 'Cash' ? '<strong>Cash</strong><br>Please bring exact change to your lesson. Payment is due at the time of service.'
-    : p === 'Venmo' ? `<strong>Venmo</strong><br>Please include your athlete's name and lesson date in the payment note. Payment is due at the time of service.<br><br><a class="go" href="${VENMO}" target="_blank">Open Venmo →</a>`
+    : p === 'Venmo' ? `<strong>Venmo</strong><br>Follow the link below to make a payment, or save the link to pay later. You can pay now or when the lesson is complete. Please include your athlete's name and lesson date in the payment note.<br><br><a class="go" href="${VENMO}" target="_blank">Pay with Venmo →</a>`
     : `<strong>Zelle</strong><br>Send payment to <strong>${ZELLE}</strong><br>Please include your athlete's name and lesson date in the payment note. Payment is due at the time of service.`;
 }
 function pickShare(v) { share = v; document.querySelectorAll('.item.share').forEach(x => x.classList.toggle('selected', x.id === 'share-' + v)); $('friendNameWrap').style.display = v === 'With a friend' ? 'block' : 'none'; }
