@@ -1865,7 +1865,7 @@ function renderPay() {
 // ================= FINANCIAL REPORT (port of 2.0 getFinancialReport / getMonthOverMonth / CSV) =================
 let finLoaded = false, finRows = [];
 const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-const finCat = x => String(x.lesson_id || '').startsWith('CLS_') ? 'Group Class' : x.lesson_type === 'Shared' ? 'Private — Shared' : x.lesson_type === 'Group' ? 'Private — Group' : x.lesson_type === 'Solo' ? 'Private — Solo' : 'Private — Other';
+const finCat = x => String(x.lesson_id || '').startsWith('CLINIC_') ? 'Clinic' : String(x.lesson_id || '').startsWith('CLS_') ? 'Group Class' : x.lesson_type === 'Shared' ? 'Private — Shared' : x.lesson_type === 'Group' ? 'Private — Group' : x.lesson_type === 'Solo' ? 'Private — Solo' : 'Private — Other';
 async function fetchAllPayments(from, to) {
   let out = [];
   for (let i = 0; ; i += 1000) {
@@ -2086,8 +2086,13 @@ async function savePay(method) {
   if (!(amount > 0)) { $('qp_msg').className = 'msg err'; $('qp_msg').textContent = 'Enter an amount.'; return; }
   $('qp_msg').className = 'msg'; $('qp_msg').textContent = 'Saving…';
   const res = await sb.from('payments').insert({ gym_id: gymId, student_id: p.student_id, student_name: p.student_name, lesson_id: p.id, day: p.day, amount, method,
-    date: dateFor(p.day) || ymd(new Date()), week_start: weekStartStr(), lesson_type: p.lesson_type || null, extra: $('qp_special').checked ? { Adjusted: 'Yes' } : {} }).select().single();
+    date: p.date || dateFor(p.day) || ymd(new Date()), week_start: p.ws || weekStartStr(), lesson_type: p.lesson_type || null, notes: p.notes || null, extra: $('qp_special').checked ? { Adjusted: 'Yes' } : {} }).select().single();
   if (res.error) { $('qp_msg').className = 'msg err'; $('qp_msg').textContent = res.error.message; return; }
+  if (p.kidId) {   // clinic kid → mark paid on the clinic card
+    const k = clKids.find(z => z.id === p.kidId), r = await sb.from('clinic_kids').update({ paid: true, amount }).eq('id', p.kidId);
+    if (r.error) { $('qp_msg').className = 'msg err'; $('qp_msg').textContent = r.error.message; return; }
+    if (k) { k.paid = true; k.amount = amount; } $('payModal').classList.add('hidden'); return renderClasses();
+  }
   weekPay.push(res.data); $('payModal').classList.add('hidden'); afterPay(amount);
 }
 
@@ -2799,13 +2804,24 @@ async function kdSave() {
   if (r.error) return alert(r.error.message);
   $('kdModal').classList.add('hidden'); loadClasses(true);
 }
+// Clinic Paid = a real payment (lesson_id CLINIC_<kid id>) dated the clinic's day → counts in Payments, Financial report, CSV.
 async function kdPaid(id) {
   const x = clKids.find(k => k.id === id); if (!x) return;
-  const r = await sb.from('clinic_kids').update({ paid: !x.paid }).eq('id', id); if (r.error) return alert(r.error.message);
-  x.paid = !x.paid; renderClasses();
+  const c = clClin.find(r => r.id === x.schedule_id) || {};
+  if (x.paid) {
+    if (!confirm('Mark ' + x.kid_name + ' unpaid? This removes their clinic payment.')) return;
+    const d = await sb.from('payments').delete().eq('lesson_id', 'CLINIC_' + id); if (d.error) return alert(d.error.message);
+    const r = await sb.from('clinic_kids').update({ paid: false }).eq('id', id); if (r.error) return alert(r.error.message);
+    x.paid = false; return renderClasses();
+  }
+  const amt = +x.amount || +String(c.price || '').replace(/[^0-9.]/g, '') || 0, dt = c.clinic_date || ymd(new Date());
+  const m = new Date(dt + 'T00:00'); m.setDate(m.getDate() - (m.getDay() + 6) % 7);
+  openPay({ id: 'CLINIC_' + id, kidId: id, student_id: x.student_id || null, student_name: x.kid_name, day: c.day || DAYS[(new Date(dt + 'T00:00').getDay() + 6) % 7], time: c.time || '',
+    price: '$' + amt, lesson_type: 'Clinic', date: dt, ws: ymd(m), notes: 'Clinic: ' + (c.class_name || '') });
 }
 async function kdRemove(id) {
   const x = clKids.find(k => k.id === id); if (!x || !confirm('Remove ' + x.kid_name + ' from this clinic?')) return;
+  if (x.paid) { const d = await sb.from('payments').delete().eq('lesson_id', 'CLINIC_' + id); if (d.error) return alert(d.error.message); }
   const r = await sb.from('clinic_kids').delete().eq('id', id); if (r.error) return alert(r.error.message);
   clKids = clKids.filter(k => k !== x); renderClasses();
 }
