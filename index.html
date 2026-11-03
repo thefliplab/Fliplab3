@@ -416,7 +416,8 @@
 <div class="ovl hidden" id="ckModal" onclick="if(event.target===this)this.classList.add('hidden')">
   <div class="mdl">
     <div class="mh"><b id="ck_title">Add a kid</b><button class="x" onclick="$('ckModal').classList.add('hidden')">✕</button></div>
-    <div class="ddwrap"><label>Student</label><input id="ck_q" placeholder="Start typing a name…" autocomplete="off" oninput="ckSearch()"><div class="dd hidden" id="ck_dd"></div></div>
+    <div id="ck_clsWrap" class="hidden"><label>Class</label><select id="ck_cls" onchange="ckPickCls(this.value)"></select></div>
+    <div class="ddwrap" id="ck_qWrap"><label>Student</label><input id="ck_q" placeholder="Start typing a name…" autocomplete="off" oninput="ckSearch()"><div class="dd hidden" id="ck_dd"></div></div>
     <div id="ck_pick"></div>
     <div class="wk" id="ck_when"></div>
     <div id="ck_note" style="font-size:13px;margin-bottom:10px"></div>
@@ -1339,6 +1340,7 @@ function renderSdTop(s) {
   else {
     if (owing.length) qa.push(`<button class="pri" onclick="openPay('${esc(owing[0].id)}')">$ Record payment</button>`);
     if (s.parent_phone && owing.length) qa.push(`<button onclick="location.href=smsHref('${esc(s.parent_phone)}', sdRemindText())">📱 Payment reminder</button>`);
+    qa.push(`<button onclick="sdAddClass()">🤸 + Add to a class</button>`);
     if (live.length) qa.push(`<button class="warn" onclick="sdCancelWeek()">✕ Cancel ${weekOffset === 0 ? 'this week' : 'that week'}</button>`);
     qa.push(`<button class="dang" onclick="sdStatus('Dropped')">Drop student</button>`);
   }
@@ -1378,7 +1380,7 @@ function renderSdPanel(t) {
     const live = sd.lessons.filter(liveLesson), past = sd.lessons.filter(l => !liveLesson(l));
     const cls = sd.cls.filter(e => !['Dropped'].includes(e.status));
     el.innerHTML = `<div class="sec" style="margin-top:0">Weekly lessons</div><div class="card" style="padding:0;overflow:hidden">${live.length ? live.map(l => row(`<b>${esc(l.day)} ${esc(l.time)}</b><small>${esc(l.coach || 'TBD')} · ${esc(l.duration || '30 min')} · ${esc(l.lesson_type || 'Solo')}${l.matched_with ? ' with ' + esc(l.matched_with) : ''}${l.start_date ? ' · since ' + esc(l.start_date) : ''}</small>`, `<div class="bal ok">${(l.extra || {}).SpecialPrice === 'Yes' ? esc(l.price || '') + ' ★' : l.lesson_type === 'Shared' ? priceFor(l.duration || '30 min', 'Shared') : esc(l.price || priceFor(l.duration || '30 min', 'Solo'))}</div>`)).join('') : '<div class="center">No weekly lessons</div>'}</div>
-      <div class="sec">Classes</div><div class="card" style="padding:0;overflow:hidden">${cls.length ? cls.map(e => row(`<b>${esc(e.class_name || e.schedule_id)}</b><small>${esc(e.status || '')}${e.enroll_date ? ' · since ' + esc(e.enroll_date) : ''}</small>`)).join('') : '<div class="center">No classes</div>'}</div>
+      <div class="sec">Classes<button class="paybtn" style="background:var(--mint);color:#fff" onclick="sdAddClass()">+ Add to a class</button></div><div class="card" style="padding:0;overflow:hidden">${cls.length ? cls.map(e => row(`<b>${esc(e.class_name || e.schedule_id)}</b><small>${esc(e.status || '')}${e.enroll_date ? ' · since ' + esc(e.enroll_date) : ''}</small>`)).join('') : '<div class="center">No classes</div>'}</div>
       ${past.length ? `<div class="sec">Past lessons</div><div class="card" style="padding:0;overflow:hidden">${past.slice(0, 20).map(l => row(`<span style="color:#888">${esc(l.day)} ${esc(l.time)} · ${esc(l.coach || '')} · ${esc(l.lesson_type || '')}</span><small>${esc(l.start_date || '…')} → ${esc(l.end_date || '')}</small>`)).join('')}</div>` : ''}
       <div style="font-size:12px;color:#888;margin-top:8px">To move, cancel or change a lesson, tap it on the Schedule tab.</div>`;
   } else if (t === 'payments') {
@@ -2867,11 +2869,23 @@ async function clSave() {
 }
 
 // ---- Add a kid ----
-function ckOpen(cid) {
-  ckCls = clRows.find(c => c.id === cid); ckKid = null; ckOnce = false;
-  $('ck_title').textContent = 'Add a kid · ' + ckCls.class_name;
+let ckFromStu = false;
+function ckOpen(cid, sid) {   // sid = opened from a student page (Step 4): pick the class instead of the kid
+  ckFromStu = !!sid; ckCls = clRows.find(c => c.id === cid); ckKid = null; ckOnce = false;
+  $('ck_title').textContent = ckFromStu ? 'Add to a class' : 'Add a kid · ' + ckCls.class_name;
+  $('ck_qWrap').classList.toggle('hidden', ckFromStu); $('ck_clsWrap').classList.toggle('hidden', !ckFromStu);
+  if (ckFromStu) $('ck_cls').innerHTML = clRows.map(c => { const n = clRoster(c.id).length, m = +c.max_students || 0;
+    return `<option value="${esc(c.id)}"${c.id === cid ? ' selected' : ''}>${esc(c.class_name)} · ${esc(c.day)} ${esc(c.time)} (${n}${m ? '/' + m : ''}${m && n >= m ? ' full' : ''})</option>`; }).join('');
   $('ck_q').value = ''; $('ck_dd').classList.add('hidden'); $('ck_pick').innerHTML = ''; $('ck_note').innerHTML = '';
-  ckWhen(); $('ckModal').classList.remove('hidden'); setTimeout(() => $('ck_q').focus(), 50);
+  ckWhen(); $('ckModal').classList.remove('hidden');
+  if (ckFromStu) ckChoose(sid); else setTimeout(() => $('ck_q').focus(), 50);
+}
+function ckPickCls(id) { ckCls = clRows.find(c => c.id === id); ckWhen(); ckCheck(); }
+async function sdAddClass() {
+  await loadClasses(true);
+  if (!clRows.length) return alert('No weekly classes yet — make one on the Classes tab.');
+  const sid = sd.s.id, first = clRows.find(c => !clRoster(c.id).some(e => e.student_id === sid)) || clRows[0];
+  ckOpen(first.id, sid);
 }
 function ckWhen() {
   const B = (v, n) => `<button type="button" style="${ckOnce === v ? 'background:var(--mint);color:#fff;border-color:var(--mint)' : ''}" onclick="ckOnce=${v};ckWhen();ckCheck()">${n}</button>`;
@@ -2919,7 +2933,8 @@ async function ckSave() {
   }
   $('ck_save').disabled = false;
   if (r.error) return alert(r.error.message);
-  $('ckModal').classList.add('hidden'); loadClasses(true);
+  $('ckModal').classList.add('hidden');
+  if (ckFromStu) { await loadStudents(true); loadStudentDetail(students.find(x => x.id === s.id) || sd.s); } else loadClasses(true);
 }
 
 // ================= AUTO-REFRESH (Supabase realtime) =================
