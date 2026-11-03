@@ -248,11 +248,11 @@ input:focus{outline:none;border-color:var(--btn);box-shadow:0 0 0 3px rgba(67,73
         <div class="fgrp"><label>Email *</label><input id="parentEmail" type="email" placeholder="jane@email.com" autocomplete="email"></div>
       </div>
       <div class="hr"></div>
-      <div class="lbl">Payment Method *</div>
+      <div class="lbl" id="payLbl">Payment Method *</div>
       <div class="stack">
         <div class="item pay" id="pay-Cash" onclick="pickPay('Cash')"><strong>Cash</strong> <span style="font-size:12px;color:#888">— Pay at first lesson</span></div>
         <div class="item pay" id="pay-Venmo" onclick="pickPay('Venmo')"><strong>Venmo</strong></div>
-        <div class="item pay" id="pay-Zelle" onclick="pickPay('Zelle')"><strong>Zelle</strong> <span style="font-size:12px;color:#888">— 951-317-5158</span></div>
+        <div class="item pay" id="pay-Zelle" onclick="pickPay('Zelle')"><strong>Zelle</strong> <span id="zelleSub" style="font-size:12px;color:#888">— 951-317-5158</span></div>
       </div>
       <div class="info" id="payInfo" style="display:none"></div>
       <div id="shareSection">
@@ -502,13 +502,18 @@ async function next1() {
   }
   // sharing already decided by lesson type / siblings / class → don't ask again
   $('shareSection').style.display = hasSib || fmt === 'class' || sharingFriend() ? 'none' : '';
+  $('payLbl').textContent = waitPay() ? 'How do you plan to pay? *' : 'Payment Method *';
+  $('zelleSub').style.display = waitPay() ? 'none' : '';
+  if (pay) pickPay(pay);
   show('3');
 }
 
 // ---- step 3: parent + payment + share ----
+const waitPay = () => path === 'waitlist' && fmt !== 'class';
 function pickPay(p) {
   pay = p; ['Cash','Venmo','Zelle'].forEach(x => $('pay-' + x).classList.toggle('selected', x === p));
   $('payInfo').style.display = 'block';
+  if (waitPay()) { $('payInfo').innerHTML = '<strong>Nothing to pay now.</strong><br>Once Coach Steve finds you a spot, you\'ll pay at each lesson.'; return; }
   $('payInfo').innerHTML = p === 'Cash' ? '<strong>Cash</strong><br>Please bring exact change to your lesson. Payment is due at the time of service.'
     : p === 'Venmo' ? `<strong>Venmo</strong><br>Follow the link below to make a payment, or save the link to pay later. You can pay now or when the lesson is complete. Please include your athlete's name and lesson date in the payment note.<br><br><a class="go" href="${VENMO}" target="_blank">Pay with Venmo →</a>`
     : `<strong>Zelle</strong><br>Send payment to <strong>${ZELLE}</strong><br>Please include your athlete's name and lesson date in the payment note. Payment is due at the time of service.`;
