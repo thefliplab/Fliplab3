@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flip Lab — Register Your Athlete</title>
+<!-- FlipLab 3.0 public sign-up — copy of the live 2.0 parent.html (Nov 2026 layout: Lesson → Reserve → Time → Athlete → Parent → Sign).
+     Data only through signup_slots / signup_check / signup_register (SECURITY DEFINER); then signup-notify emails parent + coach and texts the coach.
+     Deep link: ?slotDay=Monday&slotTime=5:00 PM&slotType=private|shared|group -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&display=swap');
+:root{--hero:#4349C6;--hero-text:#fff;--bg:#f5f4f0;--card:#fff;--btn:#4349C6;--accent:#4349C6;--border:#e0ddd6;--hfont:'Bebas Neue',sans-serif;--bfont:'DM Sans',sans-serif;--r:12px;--progress:#fff}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--bfont);background:var(--bg);color:#2c2c2a;min-height:100vh}
+.container{max-width:520px;margin:0 auto;padding:20px 16px 40px}
+.card{background:var(--card);border-radius:var(--r);padding:22px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,.07)}
+.step{display:none}.step.active{display:block}
+.eyebrow{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);font-weight:500;margin-bottom:6px}
+.h{font-family:var(--hfont);font-size:26px;font-weight:600;color:var(--hero);margin-bottom:4px;line-height:1.2}
+.sub{font-size:13px;color:#6b7280;margin-bottom:20px;font-weight:300}
+.lbl{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#6b7280;margin-bottom:12px;font-weight:500}
+.hr{height:1px;background:var(--border);margin:16px 0}
+.fgrp{margin-bottom:13px}
+label{display:block;font-size:12px;color:#666;margin-bottom:4px;font-weight:500}
+input,select,textarea{width:100%;padding:10px 12px;border-radius:9px;border:1px solid #ddd;font-size:14px;font-family:var(--bfont);color:#2c2c2a;background:#fff}
+input:focus{outline:none;border-color:var(--btn);box-shadow:0 0 0 3px rgba(67,73,198,.1)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.btn{width:100%;padding:12px;border-radius:var(--r);font-size:15px;font-weight:600;cursor:pointer;border:none;font-family:var(--bfont);margin-top:6px;background:var(--btn);color:#fff}
+.btn:hover{filter:brightness(.9)}.btn:disabled{opacity:.6;cursor:not-allowed}
+.back{background:none;color:#aaa;border:none;font-size:13px;padding:8px 0 0;cursor:pointer;font-family:var(--bfont);display:block;text-align:left}
+.item{border:1.5px solid var(--border);border-radius:var(--r);padding:12px 14px;cursor:pointer;transition:all .15s;background:var(--card)}
+.item:hover{border-color:var(--btn)}
+.item.selected{border-color:var(--btn);background:var(--bg);box-shadow:0 0 0 1px var(--btn)}
+.item strong{font-size:14px}.item .d{font-size:12px;color:#888;margin-top:2px}
+.stack{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+.icon{width:38px;height:38px;border-radius:8px;background:var(--bg);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.icon svg{width:18px;height:18px;stroke:var(--hero);fill:none;stroke-width:1.5;stroke-linecap:round}
+.ltype-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+.ltype{border:1.5px solid var(--border);border-radius:var(--r);padding:16px;cursor:pointer;transition:all .15s;display:flex;flex-direction:column;gap:10px;align-items:flex-start;background:var(--card)}
+.ltype:hover{border-color:var(--btn);background:var(--bg)}
+.ltype.selected{border-color:var(--btn);background:var(--bg);box-shadow:0 0 0 1px var(--btn)}
+.ltype-label{font-weight:700;font-size:15px;color:#2c2c2a}.ltype-desc{font-size:12px;color:#888;margin-top:2px}
+.ltype-each{display:inline-block;background:var(--bg);color:var(--btn);font-size:9.5px;font-weight:700;letter-spacing:.8px;padding:2px 7px;border-radius:99px;text-transform:uppercase;margin-top:4px}
+.ltype-foot{margin-top:auto;padding-top:8px;border-top:1px solid var(--border);width:100%}
+.p-from{font-size:10px;color:#aaa;display:block;margin-bottom:1px}
+.p-amt{font-family:var(--hfont);font-size:20px;letter-spacing:.5px;color:var(--btn);display:block;line-height:1}
+.p-per{font-size:10px;color:#bbb;display:block;margin-top:2px}
+.choice{border:1.5px solid var(--border);border-radius:var(--r);padding:16px;cursor:pointer;transition:all .15s;background:var(--card);display:flex;align-items:flex-start;gap:14px}
+.choice:hover{border-color:var(--btn);background:var(--bg)}
+.choice.selected{border-color:var(--btn);background:var(--bg);box-shadow:0 0 0 1px var(--btn)}
+.choice .icon{width:36px;height:36px}.choice .icon svg{width:17px;height:17px}
+.choice-label{font-weight:600;font-size:14px}.choice-sub{font-size:12px;color:#888;margin-top:4px}
+.slot-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.slot{border:1.5px solid var(--border);border-radius:var(--r);padding:12px 10px;cursor:pointer;transition:all .15s;text-align:center;background:var(--card)}
+.slot:hover{border-color:var(--btn);background:var(--bg)}
+.slot.selected{border-color:var(--btn);background:var(--bg);box-shadow:0 0 0 1px var(--btn)}
+.slot-day{font-weight:600;font-size:14px}.slot-time{font-size:13px;color:#888;margin-top:2px}.slot-badge{font-size:11px;margin-top:4px;color:var(--btn);font-weight:500}
+.cls{border:1.5px solid var(--border);border-radius:var(--r);padding:14px 12px;cursor:pointer;transition:all .15s;margin-bottom:10px;background:var(--card)}
+.cls:hover{border-color:var(--btn);background:var(--bg)}
+.cls.selected{border-color:var(--btn);background:var(--bg);box-shadow:0 0 0 1px var(--btn)}
+.cls.full{opacity:.55;border-color:#eee}
+.cls-name{font-weight:600;font-size:15px}.cls-meta{font-size:13px;color:#888;margin-top:3px}
+.spots{font-size:12px;font-weight:500;margin-top:5px}.ok{color:#3B6D11}.low{color:#854F0B}.full-t{color:#A32D2D}
+.skill-title{font-weight:600;font-size:14px}.skill-desc{font-size:12px;color:#888;margin-top:2px}
+.checkline{display:flex;gap:10px;align-items:flex-start;margin-bottom:10px;font-size:13px;color:#555;line-height:1.5;font-weight:400}
+.checkline input{width:auto;margin-top:2px;flex-shrink:0;accent-color:var(--btn)}
+.waiver{background:#f9f8f5;border-radius:10px;padding:14px;font-size:12px;line-height:1.7;color:#555;max-height:220px;overflow-y:auto;margin-bottom:14px;border:1px solid #eee}
+.sig{border:1.5px solid #ddd;border-radius:10px;padding:10px 12px;background:#fff;display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.sig span{font-size:13px;color:#aaa}
+.sig input{border:none;border-bottom:1.5px solid var(--btn);border-radius:0;flex:1;padding:4px 0;font-size:16px;font-style:italic;background:transparent}
+.sig input:focus{box-shadow:none}
+.info{background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:14px;font-size:13px;color:#444;line-height:1.7}
+.info a.go{display:inline-block;background:var(--btn);color:#fff;padding:10px 20px;border-radius:var(--r);text-decoration:none;font-weight:600;font-size:14px}
+.summary{background:var(--card);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:var(--r);padding:12px 14px;margin-bottom:14px;font-size:13px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.summary strong{color:var(--hero)}.summary a{color:var(--btn);font-weight:600;cursor:pointer;white-space:nowrap;text-decoration:none}
+.loading{text-align:center;color:#aaa;font-size:13px;padding:16px 0}
+.err{text-align:center;color:#A32D2D;font-size:13px;padding:10px 0}
+.taken{background:#fff4e5;border:1px solid #f5c26b;color:#7a4b00;border-radius:var(--r);padding:12px;font-size:13px;margin-bottom:12px;line-height:1.5}
+/* header */
+#site-hero{background:#0b1020;padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:64px}
+#site-hero img{height:44px;width:auto;max-width:160px;object-fit:contain;border-radius:6px}
+#logoText{font-family:var(--hfont);font-size:20px;font-weight:600;letter-spacing:2px;color:#fff;display:none}
+#hero-sub{font-size:11px;letter-spacing:1.5px;color:#6b70e0;text-transform:uppercase}
+.prog{background:var(--hero);padding:14px 24px 16px;border-bottom:1px solid rgba(255,255,255,.06)}
+#dots{display:flex;align-items:center;max-width:480px;margin:0 auto;padding-top:16px}
+.banner{display:none;border-left:3px solid var(--btn);padding:8px 0 8px 12px;margin-bottom:16px;background:rgba(67,73,198,.06);border-radius:0 6px 6px 0;font-size:12px;color:var(--btn);font-weight:500;letter-spacing:.3px}
+</style>
+</head>
+<body>
+<div id="site-hero">
+  <div style="display:flex;align-items:center;gap:12px">
+    <img src="https://fliplabcoachsteve.com/images/logo.png" alt="Flip Lab with Coach Steve" onerror="this.style.display='none';document.getElementById('logoText').style.display='block'">
+    <div id="logoText">FLIP LAB</div>
+  </div>
+  <div id="hero-sub">Tumbling and Training</div>
+</div>
+<div class="prog"><div id="dots"></div></div>
+
+<div class="container">
+  <div class="banner" id="banner"></div>
+
+  <!-- STEP 1b — Lesson (first screen) -->
+  <div class="step active" id="step1b">
+    <div class="eyebrow" id="eyebrow-1b">Step 1</div>
+    <div class="h">Choose Your Lesson</div>
+    <div class="sub">Pick the format that best fits your athlete's goals.</div>
+    <div class="card">
+      <div class="lbl">Who's training?</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:18px">
+        <div class="item selected" id="sib-no" onclick="selectSibling(false)"><strong>Just one athlete</strong></div>
+        <div class="item" id="sib-yes" onclick="selectSibling(true)"><strong>Two siblings</strong><div class="d">Sharing the same lesson slot</div></div>
+      </div>
+      <div class="lbl">Lesson type</div>
+      <div class="ltype-grid">
+        <div class="ltype" id="lt-solo" onclick="pickFormat('solo')">
+          <div class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg></div>
+          <div><div class="ltype-label">Solo Private</div><div class="ltype-desc">1-on-1 coaching with Coach Steve</div></div>
+          <div class="ltype-foot"><span class="p-from">from</span><span class="p-amt">$40</span><span class="p-per">/ 30 min</span></div>
+        </div>
+        <div class="ltype" id="lt-shared" onclick="pickFormat('shared')">
+          <div class="icon"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><circle cx="16" cy="8" r="3.5"/><path d="M2 20c0-3.3 3.1-6 7-6"/><path d="M22 20c0-3.3-3.1-6-7-6"/></svg></div>
+          <div><div class="ltype-label">Shared Private</div><div class="ltype-desc">Split a slot with one other athlete</div><span class="ltype-each">per person</span></div>
+          <div class="ltype-foot"><span class="p-from">from</span><span class="p-amt">$30</span><span class="p-per">/ 30 min each</span></div>
+        </div>
+        <div class="ltype" id="lt-group" onclick="pickFormat('group')">
+          <div class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="7" r="3"/><circle cx="6" cy="11" r="2.5"/><circle cx="18" cy="11" r="2.5"/><path d="M5 19c0-2.8 3.1-5 7-5s7 2.2 7 5"/></svg></div>
+          <div><div class="ltype-label">Small Group</div><div class="ltype-desc">Up to 3 athletes — best value</div><span class="ltype-each">per person</span></div>
+          <div class="ltype-foot"><span class="p-from">from</span><span class="p-amt">$25</span><span class="p-per">/ 30 min each</span></div>
+        </div>
+        <div class="ltype" id="lt-class" onclick="pickFormat('class')" style="border-style:dashed">
+          <div class="icon"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></div>
+          <div><div class="ltype-label">Join a Class</div><div class="ltype-desc">Group classes with other athletes</div></div>
+          <div class="ltype-foot"><span class="p-from">view</span><span class="p-amt" style="font-size:14px">Schedule</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 2a — Reserve or waitlist -->
+  <div class="step" id="step2a">
+    <div class="eyebrow" id="eyebrow-2a">Step 2</div>
+    <div class="h">Reserve or Waitlist?</div>
+    <div class="sub">Grab an open time now, or get on the list for the next one.</div>
+    <div class="card">
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px">
+        <div class="choice" id="choiceReserve" onclick="pickPath('reserve')">
+          <div class="icon"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></div>
+          <div><div class="choice-label">Reserve a Slot</div><div class="choice-sub">Pick an available day and time and lock in your spot</div></div>
+        </div>
+        <div class="choice" id="choiceWaitlist" onclick="pickPath('waitlist')">
+          <div class="icon"><svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
+          <div><div class="choice-label">Waitlist / Drop-In</div><div class="choice-sub">Tell us your availability and we'll reach out when a spot opens</div></div>
+        </div>
+      </div>
+      <div id="sharingQ" style="display:none;border-top:1px solid var(--border);padding-top:16px;margin-top:4px">
+        <div class="lbl" id="friendHead">Who are you sharing with?</div>
+        <div class="fgrp"><label id="friendLbl" style="font-size:12px;color:#6b7280">Friend's athlete name</label><input id="friend1" placeholder="e.g. Hailey Prosise"></div>
+        <div class="fgrp" id="friend2wrap" style="display:none"><label style="font-size:12px;color:#6b7280">Second friend's athlete name <span style="color:#888;font-weight:400">(optional)</span></label><input id="friend2" placeholder="e.g. Jade Liedhegner"></div>
+        <div style="font-size:11px;color:#888;margin-top:4px" id="friendHelp">We'll show you their time slot so you can pick the same one.</div>
+      </div>
+      <button class="btn" id="btn2a" onclick="next2a()" style="display:none">Continue</button>
+      <button class="back" onclick="show('1b')">← Back</button>
+    </div>
+  </div>
+
+  <!-- STEP 2w — Waitlist availability -->
+  <div class="step" id="step2w">
+    <div class="eyebrow" id="eyebrow-2w">Step 3</div>
+    <div class="h">Your Availability</div>
+    <div class="sub">Tell us when you're generally available and we'll reach out when something opens up.</div>
+    <div class="card">
+      <div class="checkline" style="margin-bottom:16px"><input type="checkbox" id="openAny" onchange="toggleAny(this.checked)"><span style="font-size:14px;font-weight:500">I'm open to any available day and time</span></div>
+      <div id="availBox">
+        <div class="fgrp"><label>Which days work for you?</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px" id="dayBoxes"></div></div>
+        <div id="perDay" style="margin-top:16px"></div>
+      </div>
+      <button class="btn" onclick="next2w()">Continue</button>
+      <button class="back" onclick="show('2a')">← Back</button>
+    </div>
+  </div>
+
+  <!-- STEP 2 — Choose slot -->
+  <div class="step" id="step2">
+    <div class="eyebrow" id="eyebrow-2">Step 3</div>
+    <div class="h">Choose a Time Slot</div>
+    <div class="sub">Tap a time that works. You'll add your info next.</div>
+    <div class="card">
+      <div class="taken" id="takenMsg" style="display:none"></div>
+      <div id="slotGrid"><div class="loading">Loading available times...</div></div>
+      <button class="btn" id="btnSlot" onclick="next2()" style="display:none">Continue</button>
+      <div style="text-align:center;font-size:12px;color:#888;margin-top:12px">Don't see a time that works? <a href="#" onclick="switchToWaitlist();return false" style="color:var(--btn);font-weight:600">Join the waitlist</a></div>
+      <button class="back" onclick="show('2a')">← Back</button>
+    </div>
+  </div>
+
+  <!-- STEP 2c — Choose class -->
+  <div class="step" id="step2c">
+    <div class="eyebrow" id="eyebrow-2c">Step 2</div>
+    <div class="h">Choose a Class</div>
+    <div class="sub">Select the class that best fits your athlete's schedule and level.</div>
+    <div class="card">
+      <div id="classList"><div class="loading">Loading classes...</div></div>
+      <button class="btn" id="btnClass" onclick="show('1')" style="display:none">Continue</button>
+      <button class="back" onclick="show('1b')">← Back</button>
+    </div>
+  </div>
+
+  <!-- STEP 1 — Athlete info (after picking a time) -->
+  <div class="step" id="step1">
+    <div class="eyebrow" id="eyebrow-1">Step 4</div>
+    <div class="h">Athlete Information</div>
+    <div class="sub">Almost done. Tell us about the athlete you're registering.</div>
+    <div class="summary" id="choiceSummary"></div>
+    <div class="card">
+      <div class="grid2">
+        <div class="fgrp"><label>First name *</label><input id="firstName" placeholder="Zoey"></div>
+        <div class="fgrp"><label>Last name *</label><input id="lastName" placeholder="Smith"></div>
+      </div>
+      <div class="fgrp"><label>Date of birth *</label><input id="dob" type="date"></div>
+      <div class="fgrp"><label>School</label><input id="school" placeholder="Lincoln Elementary"></div>
+      <div class="hr"></div>
+      <div class="lbl">Skill Level *</div><div class="stack" id="skillList"></div>
+      <div id="sibFields" style="display:none">
+        <div class="hr"></div><div class="lbl">Sibling Info</div>
+        <div class="grid2">
+          <div class="fgrp"><label>First name *</label><input id="sibFirstName" placeholder="Emma"></div>
+          <div class="fgrp"><label>Last name *</label><input id="sibLastName" placeholder="Smith"></div>
+        </div>
+        <div class="fgrp"><label>Date of birth *</label><input id="sibDob" type="date"></div>
+        <div class="lbl">Sibling Skill Level *</div><div class="stack" id="sibSkillList"></div>
+      </div>
+      <button class="btn" id="btn1" onclick="next1()">Continue</button>
+      <button class="back" onclick="back1()">← Back</button>
+    </div>
+  </div>
+
+  <!-- STEP 3 — Parent + payment + share -->
+  <div class="step" id="step3">
+    <div class="eyebrow" id="eyebrow-3">Step 5</div>
+    <div class="h">Parent / Guardian</div>
+    <div class="sub">We'll use this to send confirmations and lesson reminders.</div>
+    <div class="card">
+      <div class="fgrp"><label>Parent / guardian name *</label><input id="parentName" placeholder="Jane Smith" autocomplete="name"></div>
+      <div class="grid2">
+        <div class="fgrp"><label>Phone *</label><input id="parentPhone" type="tel" placeholder="(555) 123-4567" oninput="fmtPhone(this)" onblur="fmtPhone(this)" autocomplete="tel"></div>
+        <div class="fgrp"><label>Email *</label><input id="parentEmail" type="email" placeholder="jane@email.com" autocomplete="email"></div>
+      </div>
+      <div class="hr"></div>
+      <div class="lbl" id="payLbl">Payment Method *</div>
+      <div class="stack">
+        <div class="item pay" id="pay-Cash" onclick="pickPay('Cash')"><strong>Cash</strong> <span style="font-size:12px;color:#888">— Pay at first lesson</span></div>
+        <div class="item pay" id="pay-Venmo" onclick="pickPay('Venmo')"><strong>Venmo</strong></div>
+        <div class="item pay" id="pay-Zelle" onclick="pickPay('Zelle')"><strong>Zelle</strong> <span id="zelleSub" style="font-size:12px;color:#888">— 951-317-5158</span></div>
+      </div>
+      <div class="info" id="payInfo" style="display:none"></div>
+      <div id="shareSection">
+        <div class="hr"></div>
+        <div class="lbl">Sharing Options</div>
+        <div class="stack">
+          <div class="item share selected" id="share-Solo" onclick="pickShare('Solo')"><strong>Solo lesson</strong><div class="d">Just my athlete, 1-on-1 with the coach</div></div>
+          <div class="item share" id="share-With a friend" onclick="pickShare('With a friend')"><strong>Share with a friend</strong><div class="d">Split the cost with another athlete</div></div>
+          <div class="item share" id="share-Pair me up" onclick="pickShare('Pair me up')"><strong>Pair me up</strong><div class="d">Match me with another athlete at the same time</div></div>
+        </div>
+        <div class="fgrp" id="friendNameWrap" style="display:none"><label>Friend's athlete name</label><input id="friendName" placeholder="e.g. Taylor Jones"></div>
+      </div>
+      <button class="btn" onclick="next3()">Continue</button>
+      <button class="back" onclick="show('1')">← Back</button>
+    </div>
+  </div>
+
+  <!-- STEP 5 — Policies + waiver + photo + signature -->
+  <div class="step" id="step5">
+    <div class="eyebrow" id="eyebrow-5">Final Step</div>
+    <div class="h">Policies &amp; Waiver</div>
+    <div class="sub">Please review and sign before completing registration.</div>
+    <div class="card">
+      <div class="lbl" style="margin-bottom:10px">Cancellation Policy</div>
+      <div class="waiver">
+        <strong>Flip Lab Private Lesson Cancellation Policy</strong><br><br>
+        We value the time and commitment of our athletes and families, as well as the time of our coaches. To ensure fairness and consistency, the following cancellation policy is in effect for all private lessons:<br><br>
+        <strong>Advance Notice</strong><br>All cancellations must be made at least 24 hours in advance of the scheduled lesson. We understand that emergencies sometimes happen. In such cases, circumstances will be reviewed on a case-by-case basis at the discretion of your coach.<br><br>
+        <strong>Late Cancellations &amp; No-Shows</strong><br>Any cancellation made with less than 24 hours notice, or failure to attend a scheduled lesson, will result in the full lesson fee being charged, unless otherwise approved under the emergency exception.<br><br>
+        <strong>Coach Cancellations</strong><br>If your coach must cancel a lesson, no fee will be charged. Since lessons are pay-as-you-go, no makeup is required, and we will simply see you at your next scheduled lesson.<br><br>
+        <strong>Payment Terms</strong><br>Lessons are considered pay-as-you-go unless otherwise arranged in writing. Payment is required at the time of service.<br><br>
+        <strong>Repeated Violations</strong><br>Consistent late cancellations or no-shows may result in the suspension or loss of private lesson privileges.<br><br>
+        By scheduling a private lesson, the client acknowledges and agrees to follow this cancellation policy.
+      </div>
+      <div class="checkline"><input type="checkbox" id="cancelAccept"><span>I understand and agree to the cancellation policy above.</span></div>
+      <div class="hr"></div>
+      <div class="lbl" style="margin-bottom:10px">Liability Waiver</div>
+      <div class="waiver">
+        <p>By signing below, I acknowledge that participation in gymnastics, tumbling, and related activities at Flip Lab involves inherent risks of injury. I voluntarily assume all risks associated with participation. I agree to release, waive, and hold harmless Flip Lab, its coaches, staff, and facility from any and all claims, damages, or liability arising from participation, including injuries caused by negligence.</p><br>
+        <p>I confirm that the athlete named in this registration is physically fit to participate. I will inform Flip Lab of any medical conditions or limitations that may affect participation.</p><br>
+        <p>This waiver is binding on myself, my heirs, and my legal representatives. I have read this agreement and understand its terms.</p>
+      </div>
+      <div class="checkline"><input type="checkbox" id="waiverAccept"><span>I have read and agree to the liability waiver.</span></div>
+      <div class="hr"></div>
+      <div class="lbl">Photo Permission</div>
+      <div class="stack">
+        <div class="item" id="photo-Yes" onclick="pickPhoto('Yes')"><strong>Yes, I give permission</strong><div class="d">Photos/videos may be used on Flip Lab's social media and website</div></div>
+        <div class="item" id="photo-No" onclick="pickPhoto('No')"><strong>No, I do not give permission</strong><div class="d">No photos or videos of my athlete will be shared publicly</div></div>
+      </div>
+      <input id="website" name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0" aria-hidden="true">
+      <div class="sig"><span>Signed:</span><input id="signature" placeholder="Type your full legal name"></div>
+      <button class="btn" id="submitBtn" onclick="submitForm()">Complete Registration</button>
+      <button class="back" onclick="show('3')">← Back</button>
+    </div>
+  </div>
+
+  <!-- DONE -->
+  <div class="step" id="stepDone">
+    <div class="card">
+      <div style="text-align:center;padding:16px 0 8px">
+        <div style="width:60px;height:60px;border-radius:50%;background:rgba(67,73,198,.1);border:1.5px solid var(--accent);display:flex;align-items:center;justify-content:center;margin:0 auto 16px">
+          <svg viewBox="0 0 24 24" style="width:26px;height:26px;stroke:var(--accent);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><polyline points="20 6 9 17 4 12"/></svg></div>
+        <div class="h" id="doneTitle" style="margin-bottom:6px">Registration Complete</div>
+        <div style="font-size:13px;color:#6b7280;margin-bottom:24px;font-weight:300" id="doneSub">Welcome to Flip Lab! Coach Steve will be in touch soon.</div>
+      </div>
+      <div class="hr" style="margin-top:0"></div>
+      <div id="summaryBox" style="background:var(--bg);border-radius:var(--r);padding:16px;margin-bottom:16px;font-size:13px;line-height:2"></div>
+      <div class="info" style="color:var(--hero)"><strong>What happens next?</strong><br><span id="doneNext"></span></div>
+      <button class="btn" onclick="location.reload()">Register Another Athlete</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const sb = supabase.createClient('https://angmtyojkwlrefxpcgoa.supabase.co', 'sb_publishable_fPciNfnNHpHQikB8mqHNpw_hIVRIGo5');
+const GYM = new URLSearchParams(location.search).get('gym') || 'fliplab';
+const VENMO = 'https://venmo.com/code?user_id=2634245503713280412', ZELLE = '951-317-5158';
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const SKILLS = [
+  ['L1-Foundations', 'Forward rolls, handstands, bridges, kickovers, cartwheel'],
+  ['L2-Rising', 'Roundoff, Front & Back Walkovers, Front handspring prep'],
+  ['L3-Building', 'Back Handspring, Front Handspring, Roundoff handspring prep'],
+  ['L4-Progressing', 'Roundoff Back handspring, Front Handspring, Back Tuck Prep'],
+  ['L5-Advanced', 'Standing Tucks, Roundoff Tucks, Handspring Tucks, Layout Prep'],
+  ['L6-Elite', 'Handspring Tucks, Layouts, Full Twisting Layouts, Specialty Passes']];
+const LABEL = { solo: 'Solo Private', shared: 'Shared Private', group: 'Small Group' };
+
+let cur = '1b', skill = '', sibSkill = '', hasSib = false, fmt = '', path = '', slot = null, cls = null, pay = '', photo = '', share = 'Solo';
+let days = [], times = [], openAny = false, allSlots = null, list = [], classes = [];
+const sharingFriend = () => (fmt === 'shared' || fmt === 'group') && !hasSib;
+const friends = () => [$('friend1').value, $('friend2').value].map(x => x.trim()).filter(Boolean);
+
+// deep link from the website (?slotDay=&slotTime=&slotType=)
+const q = new URLSearchParams(location.search);
+const DL = q.get('slotDay') && q.get('slotTime') ? { day: q.get('slotDay'), time: q.get('slotTime'), type: (q.get('slotType') || 'private').toLowerCase() } : null;
+if (DL) { $('banner').textContent = 'Holding ' + DL.day + ' ' + DL.time + ' · ' + ({ private: 'Private Lesson', shared: 'Shared Lesson', group: 'Small Group Lesson' }[DL.type] || 'Lesson'); $('banner').style.display = 'block'; }
+
+const skillHtml = fn => SKILLS.map(([v, d]) => `<div class="item" data-v="${v}" onclick="${fn}(this)"><div class="skill-title">${v}</div><div class="skill-desc">${d}</div></div>`).join('');
+$('skillList').innerHTML = skillHtml('pickSkill'); $('sibSkillList').innerHTML = skillHtml('pickSibSkill');
+$('dayBoxes').innerHTML = DAYS.map(d => `<label class="checkline"><input type="checkbox" value="${d}" onchange="toggleDay(this)"> ${d}</label>`).join('');
+function pickSkill(el) { document.querySelectorAll('#skillList .item').forEach(x => x.classList.toggle('selected', x === el)); skill = el.dataset.v; }
+function pickSibSkill(el) { document.querySelectorAll('#sibSkillList .item').forEach(x => x.classList.toggle('selected', x === el)); sibSkill = el.dataset.v; }
+function selectSibling(y) { hasSib = y; $('sib-no').classList.toggle('selected', !y); $('sib-yes').classList.toggle('selected', y); $('sibFields').style.display = y ? 'block' : 'none'; }
+function fmtPhone(el) { let d = el.value.replace(/\D/g, ''); if (d.length === 11 && d[0] === '1') d = d.slice(1); d = d.slice(0, 10);
+  el.value = d.length >= 7 ? `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` : d.length >= 4 ? `(${d.slice(0, 3)}) ${d.slice(3)}` : d.length ? '(' + d : ''; }
+const timeVal = t => { const m = String(t).match(/(\d+):(\d+)\s*(AM|PM)/i); if (!m) return 0; let h = +m[1] % 12; if (/pm/i.test(m[3])) h += 12; return h * 60 + +m[2]; };
+
+// ---- steps + progress dots (same as 2.0) ----
+function stepsList() { return fmt === 'class' ? ['1b','2c','1','3','5'] : path === 'waitlist' ? ['1b','2a','2w','1','3','5'] : ['1b','2a','2','1','3','5']; }
+const NAMES = { '1b': 'Lesson', '2a': 'Reserve', '2': 'Time', '2w': 'Availability', '2c': 'Class', '1': 'Athlete', '3': 'Parent', '5': 'Sign' };
+function show(id, noPush) {
+  document.querySelectorAll('.step').forEach(s => s.classList.toggle('active', s.id === 'step' + id)); cur = id;
+  if (id === '1') renderSummary();
+  const st = stepsList(), idx = id === 'Done' ? st.length : st.indexOf(id);
+  st.forEach((s, i) => { const eb = $('eyebrow-' + s); if (eb) eb.textContent = i === st.length - 1 ? 'Final Step' : 'Step ' + (i + 1); });
+  $('dots').innerHTML = st.map((s, i) => {
+    const state = i < idx ? 'done' : i === idx ? 'active' : '';
+    const dot = state === 'done' ? 'background:var(--progress);border-color:var(--progress);color:var(--hero);' : state === 'active' ? 'border-color:var(--progress);color:var(--progress);box-shadow:0 0 0 3px rgba(255,255,255,.15);' : 'border-color:rgba(255,255,255,.2);color:rgba(255,255,255,.4);';
+    const lab = state === 'active' ? 'color:var(--progress);' : state === 'done' ? 'color:rgba(255,255,255,.5);' : 'color:rgba(255,255,255,.3);';
+    const line = i < st.length - 1 ? `<div style="flex:1;height:1px;margin:0 4px 14px;background:${i < idx ? 'var(--progress)' : 'rgba(255,255,255,.12)'}"></div>` : '';
+    return `<div style="display:flex;flex-direction:column;align-items:center;flex:1"><div style="width:24px;height:24px;border-radius:50%;border:1px solid;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;transition:all .3s;${dot}">${i < idx ? '✓' : i + 1}</div>
+      <div style="font-size:9px;letter-spacing:.8px;text-transform:uppercase;margin-top:5px;white-space:nowrap;${lab}">${NAMES[s].split(' ')[0]}</div></div>` + line;
+  }).join('');
+  window.scrollTo(0, 0);
+  if (!noPush && id !== 'Done') history.pushState({ step: id }, '', '');
+}
+window.addEventListener('popstate', e => { if (e.state && e.state.step && cur !== 'Done') show(e.state.step, true); });
+history.replaceState({ step: '1b' }, '', ''); show('1b', true);
+
+// ---- step 1b: format ----
+function pickFormat(t) {
+  fmt = t; ['solo','shared','group','class'].forEach(x => $('lt-' + x).classList.toggle('selected', x === t));
+  $('friend1').value = ''; $('friend2').value = '';
+  setTimeout(() => {
+    if (t === 'class') { path = ''; show('2c'); loadClasses(); return; }
+    $('friendHead').textContent = t === 'group' ? 'WHO ARE YOU GROUPING WITH?' : 'WHO ARE YOU SHARING WITH?';
+    $('friendLbl').textContent = t === 'group' ? "First friend's athlete name" : "Friend's athlete name";
+    $('friend2wrap').style.display = t === 'group' ? 'block' : 'none';
+    $('friendHelp').textContent = t === 'group' ? "We'll show you their time slot so you can join them. Add a second friend if you'd like." : "We'll show you their time slot so you can pick the same one.";
+    path = ''; $('choiceReserve').classList.remove('selected'); $('choiceWaitlist').classList.remove('selected'); $('btn2a').style.display = 'none'; $('sharingQ').style.display = 'none';
+    show('2a');
+    if (DL && !DL.used && !sharingFriend()) { DL.used = true; pickPath('reserve'); }
+  }, 180);
+}
+if (DL) pickFormat({ private: 'solo', shared: 'shared', group: 'group' }[DL.type] || 'solo');
+
+// ---- step 2a: reserve / waitlist ----
+function pickPath(p) {
+  path = p; $('choiceReserve').classList.toggle('selected', p === 'reserve'); $('choiceWaitlist').classList.toggle('selected', p === 'waitlist');
+  const rel = p === 'reserve' && sharingFriend();
+  $('sharingQ').style.display = rel ? 'block' : 'none'; $('btn2a').style.display = 'block'; show('2a', true);
+  if (p === 'waitlist' || !rel) setTimeout(next2a, 200);
+}
+function next2a() {
+  if (!path) return alert('Please choose an option.');
+  if (path === 'reserve' && sharingFriend() && !friends().length)
+    return alert(fmt === 'group' ? "Please enter at least one friend's name so we can show you their time slot." : "Please enter your friend's name so we can show you their time slot.");
+  if (path === 'reserve') { $('takenMsg').style.display = 'none'; show('2'); loadSlots(); } else { show('2w'); loadSlots(true); }
+}
+async function loadSlots(forWaitlist) {
+  if (!forWaitlist) { $('slotGrid').innerHTML = '<div class="loading">Loading available times...</div>'; $('btnSlot').style.display = 'none'; slot = null; }
+  let r = {}; try { r = await sb.rpc('signup_slots', { p_slug: GYM, p_friends: path === 'reserve' && sharingFriend() ? friends() : [] }); } catch (e) {}
+  allSlots = r.data?.slots || []; classes = r.data?.classes || [];
+  if (forWaitlist) return renderPerDay();
+  const joining = sharingFriend() && friends().length;
+  list = allSlots.filter(s => !s.taken || (joining && s.friend));
+  if (!list.length) {
+    $('slotGrid').innerHTML = `<div class="err">Coach Steve's private lesson schedule is currently full. We'd love to work with your athlete — tap <b>Join the waitlist</b> below and we'll reach out as soon as a spot opens.</div>`;
+    return;
+  }
+  $('slotGrid').innerHTML = (joining && !list.some(s => s.friend) ? '<div style="font-size:12px;color:#888;margin-bottom:10px">We couldn\'t find your friend\'s time — check the spelling, or pick an open time below.</div>' : '')
+    + '<div class="slot-grid">' + list.map((s, i) => `<div class="slot" onclick="pickSlot(${i})"><div class="slot-day">${esc(s.day)}</div><div class="slot-time">${esc(s.time)}</div><div class="slot-badge">starts ${startOf(s.day)}</div>${s.friend ? `<div class="slot-badge" style="color:#7C3AED">Your friend's slot — ${esc(s.friend)}</div>` : ''}</div>`).join('') + '</div>';
+  if (DL && DL.day) { const i = list.findIndex(s => s.day.toLowerCase() === DL.day.toLowerCase() && s.time.replace(/\s/g, '').toLowerCase() === DL.time.replace(/\s/g, '').toLowerCase()); if (i >= 0) { pickSlot(i); document.querySelectorAll('.slot')[i].scrollIntoView({ behavior: 'smooth', block: 'center' }); } DL.day = null; }
+}
+function startOf(day) { const t = new Date(); t.setHours(12, 0, 0, 0); const mon = new Date(t); mon.setDate(t.getDate() - ((t.getDay() + 6) % 7)); const d = new Date(mon); d.setDate(mon.getDate() + DAYS.indexOf(day)); if (d < t) d.setDate(d.getDate() + 7); return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); }
+function pickSlot(i) { slot = list[i]; document.querySelectorAll('.slot').forEach((x, j) => x.classList.toggle('selected', j === i)); $('btnSlot').style.display = 'block'; }
+function next2() { if (!slot) return alert('Please choose a time slot.'); show('1'); }
+function switchToWaitlist() { path = 'waitlist'; slot = null; $('choiceReserve').classList.remove('selected'); $('choiceWaitlist').classList.add('selected'); show('2w'); loadSlots(true); }
+
+// ---- step 2w: waitlist times ----
+function toggleAny(on) { openAny = on; $('availBox').style.opacity = on ? .4 : 1; $('availBox').style.pointerEvents = on ? 'none' : ''; if (on) { days = []; times = []; } }
+function toggleDay(cb) { days = cb.checked ? [...new Set([...days, cb.value])] : days.filter(d => d !== cb.value); if (!cb.checked) times = times.filter(t => !t.startsWith(cb.value + ' ')); renderPerDay(); }
+function renderPerDay() {
+  if (!allSlots) return;
+  $('perDay').innerHTML = DAYS.filter(d => days.includes(d)).map(d => {
+    const ts = [...new Set(allSlots.filter(s => s.day === d).map(s => s.time))].sort((a, b) => timeVal(a) - timeVal(b));
+    return `<div style="margin-bottom:14px"><div style="font-weight:600;font-size:13px;color:#2c2c2a;margin-bottom:6px">${d}</div>` + (ts.length
+      ? '<div style="display:flex;flex-wrap:wrap;gap:8px">' + ts.map(t => { const k = d + ' ' + t; return `<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin:0;font-weight:400"><input type="checkbox" style="width:auto;accent-color:var(--btn)" ${times.includes(k) ? 'checked' : ''} onchange="toggleTime('${k}',this.checked)"> ${t}</label>`; }).join('') + '</div>'
+      : '<div style="font-size:12px;color:#aaa">No scheduled times for this day</div>') + '</div>';
+  }).join('');
+}
+function toggleTime(k, on) { times = on ? [...new Set([...times, k])] : times.filter(t => t !== k); }
+function next2w() {
+  if (!openAny && !days.length) return alert('Please select at least one preferred day, or check "open to any availability".');
+  if (!openAny && !times.length) return alert('Please select at least one preferred time for your chosen days, or check "open to any availability".');
+  show('1');
+}
+
+// ---- step 2c: classes ----
+async function loadClasses() {
+  $('classList').innerHTML = '<div class="loading">Loading classes...</div>'; $('btnClass').style.display = 'none'; cls = null;
+  let r = {}; try { r = await sb.rpc('signup_slots', { p_slug: GYM, p_friends: [] }); } catch (e) {}
+  classes = r.data?.classes || [];
+  if (!classes.length) { $('classList').innerHTML = '<div class="err">No classes available right now. Please contact us directly.</div>'; return; }
+  $('classList').innerHTML = classes.map((c, i) => {
+    const left = c.max ? c.max - c.enrolled : null, full = left !== null && left <= 0;
+    const sp = left === null ? '' : full ? '<div class="spots full-t">Class full</div><div class="cls-meta" style="font-size:11px">You can join the waitlist</div>' : left <= 2 ? `<div class="spots low">Only ${left} spot${left === 1 ? '' : 's'} left!</div>` : `<div class="spots ok">${left} spots available</div>`;
+    return `<div class="cls${full ? ' full' : ''}" onclick="pickClass(${i})"><div class="cls-name">${esc(c.name)}</div><div class="cls-meta">${esc(c.day)}${c.time ? ' · ' + esc(c.time) : ''}${c.coach ? ' · ' + esc(c.coach) : ''}</div>${c.age_group ? `<div class="cls-meta">${esc(c.age_group)}</div>` : ''}${c.price ? `<div class="cls-meta" style="color:var(--btn);font-weight:500">$${esc(c.price)}</div>` : ''}${sp}</div>`;
+  }).join('');
+}
+function pickClass(i) { cls = classes[i]; document.querySelectorAll('.cls').forEach((x, j) => x.classList.toggle('selected', j === i)); $('btnClass').style.display = 'block'; }
+
+// ---- step 1: athlete + "already registered?" check ----
+function renderSummary() {
+  let what = fmt === 'class' ? 'Class' : (LABEL[fmt] || 'Lesson'); if (hasSib) what += ' · 2 siblings';
+  let when = '', change = '2';
+  if (fmt === 'class' && cls) { when = cls.name + ' · ' + cls.day + (cls.time ? ' ' + cls.time : ''); change = '2c'; }
+  else if (path === 'waitlist') { when = 'Waitlist' + (openAny ? ' · any day/time' : days.length ? ' · ' + days.join(', ') : ''); change = '2w'; }
+  else if (slot) when = slot.day + ' at ' + slot.time;
+  $('choiceSummary').innerHTML = `<div><strong>${esc(what)}</strong>${when ? '<br>' + esc(when) : ''}</div><a onclick="show('${change}')">Change</a>`;
+}
+function back1() { show(fmt === 'class' ? '2c' : path === 'waitlist' ? '2w' : '2'); }
+async function next1() {
+  if (!$('firstName').value.trim()) return alert('Please enter first name.');
+  if (!$('lastName').value.trim()) return alert('Please enter last name.');
+  if (!$('dob').value) return alert('Please enter date of birth.');
+  if (!skill) return alert('Please select a skill level.');
+  if (hasSib) {
+    if (!$('sibFirstName').value.trim()) return alert('Please enter sibling first name.');
+    if (!$('sibLastName').value.trim()) return alert('Please enter sibling last name.');
+    if (!$('sibDob').value) return alert('Please enter sibling date of birth.');
+    if (!sibSkill) return alert('Please select a skill level for the sibling.');
+  }
+  const b = $('btn1'); b.disabled = true; b.textContent = 'Checking...';
+  const ath = [{ firstName: $('firstName').value.trim(), lastName: $('lastName').value.trim(), dob: $('dob').value }];
+  if (hasSib) ath.push({ firstName: $('sibFirstName').value.trim(), lastName: $('sibLastName').value.trim(), dob: $('sibDob').value });
+  let r = {}; try { r = await sb.rpc('signup_check', { p_slug: GYM, p_athletes: ath }); } catch (e) {}
+  b.disabled = false; b.textContent = 'Continue';
+  const kind = fmt === 'class' ? 'class' : 'private';
+  for (const x of r.data?.existing || []) {
+    const m = kind === 'class' && x.hasClass ? x.name + ' is already signed up for a class.'
+      : kind === 'private' && x.hasPrivate ? x.name + ' already has a private lesson with us.'
+      : kind === 'private' && x.onWaitlist ? x.name + ' is already on our waitlist. We will reach out as soon as a spot opens up.' : '';
+    if (m) return alert(m + '\n\nYou can still sign up for ' + (kind === 'class' ? 'a private lesson' : 'a class') + '. Please contact us if you need to make a change.');
+  }
+  // sharing already decided by lesson type / siblings / class → don't ask again
+  $('shareSection').style.display = hasSib || fmt === 'class' || sharingFriend() ? 'none' : '';
+  $('payLbl').textContent = waitPay() ? 'How do you plan to pay? *' : 'Payment Method *';
+  $('zelleSub').style.display = waitPay() ? 'none' : '';
+  if (pay) pickPay(pay);
+  show('3');
+}
+
+// ---- step 3: parent + payment + share ----
+const waitPay = () => path === 'waitlist' && fmt !== 'class';
+function pickPay(p) {
+  pay = p; ['Cash','Venmo','Zelle'].forEach(x => $('pay-' + x).classList.toggle('selected', x === p));
+  $('payInfo').style.display = 'block';
+  if (waitPay()) { $('payInfo').innerHTML = '<strong>Nothing to pay now.</strong><br>Once Coach Steve finds you a spot, you\'ll pay at each lesson.'; return; }
+  $('payInfo').innerHTML = p === 'Cash' ? '<strong>Cash</strong><br>Please bring exact change to your lesson. Payment is due at the time of service.'
+    : p === 'Venmo' ? `<strong>Venmo</strong><br>Follow the link below to make a payment, or save the link to pay later. You can pay now or when the lesson is complete. Please include your athlete's name and lesson date in the payment note.<br><br><a class="go" href="${VENMO}" target="_blank">Pay with Venmo →</a>`
+    : `<strong>Zelle</strong><br>Send payment to <strong>${ZELLE}</strong><br>Please include your athlete's name and lesson date in the payment note. Payment is due at the time of service.`;
+}
+function pickShare(v) { share = v; document.querySelectorAll('.item.share').forEach(x => x.classList.toggle('selected', x.id === 'share-' + v)); $('friendNameWrap').style.display = v === 'With a friend' ? 'block' : 'none'; }
+function next3() {
+  if (!$('parentName').value.trim()) return alert('Please enter parent name.');
+  if ($('parentPhone').value.replace(/\D/g, '').length !== 10) return alert('Please enter parent phone.');
+  if (!/^\S+@\S+\.\S+$/.test($('parentEmail').value.trim())) return alert('Please enter parent email.');
+  if (!pay) return alert('Please select a payment method.');
+  show('5');
+}
+function pickPhoto(v) { photo = v; $('photo-Yes').classList.toggle('selected', v === 'Yes'); $('photo-No').classList.toggle('selected', v === 'No'); }
+
+// ---- submit ----
+async function submitForm() {
+  if (!$('cancelAccept').checked) return alert('Please accept the cancellation policy.');
+  if (!$('waiverAccept').checked) return alert('Please accept the liability waiver.');
+  if (!photo) return alert('Please select a photo permission option.');
+  if (!$('signature').value.trim()) return alert('Please type your full name as a signature.');
+  const b = $('submitBtn'); b.disabled = true; b.textContent = 'Submitting...';
+  const athletes = [{ firstName: $('firstName').value.trim(), lastName: $('lastName').value.trim(), dob: $('dob').value, skillLevel: skill }];
+  if (hasSib) athletes.push({ firstName: $('sibFirstName').value.trim(), lastName: $('sibLastName').value.trim(), dob: $('sibDob').value, skillLevel: sibSkill });
+  const shareType = fmt === 'class' ? 'Solo' : hasSib || sharingFriend() ? 'With a friend' : share;
+  const friendName = fmt === 'class' || hasSib ? '' : sharingFriend() ? friends().join(', ') : share === 'With a friend' ? $('friendName').value.trim() : '';
+  const p = { athletes, school: $('school').value.trim(), parentName: $('parentName').value.trim(), parentPhone: $('parentPhone').value.trim(), parentEmail: $('parentEmail').value.trim(),
+    paymentMethod: pay, photoPermission: photo, signature: $('signature').value.trim(), path: fmt === 'class' ? 'class' : path, lessonSubType: fmt === 'class' ? 'solo' : fmt,
+    slotId: slot?.id, classId: cls?.id, friendName, shareType, website: $('website').value, preferredDays: days, preferredTimes: times, openToAnything: openAny };
+  let r = {}; try { r = await sb.rpc('signup_register', { p_slug: GYM, p }); } catch (e) { r = { error: e }; }
+  const res = r.data || {};
+  b.disabled = false; b.textContent = 'Complete Registration';
+  if (r.error || !res.ok) {
+    const msg = res.error || r.error?.message || 'Unknown error';
+    if (path === 'reserve' && /taken|no longer available/i.test(msg)) {   // same as 2.0 handleSlotTaken_
+      $('takenMsg').innerHTML = `<strong>Sorry, ${esc(slot ? slot.day + ' at ' + slot.time : 'that time')} was just taken by another family.</strong><br>Please pick another time. Everything you typed is saved.`;
+      $('takenMsg').style.display = 'block'; show('2'); loadSlots(); return;
+    }
+    return alert('Something went wrong: ' + msg);
+  }
+  const fl = hasSib ? 'Shared Private (siblings)' : LABEL[fmt] || '';
+  const what = res.result === 'waitlist' ? 'Waitlist / Drop-In (' + (openAny ? 'open to any day/time' : times.join(', ')) + ')'
+    : res.slot ? fl + ' · ' + slot.day + 's at ' + slot.time + ', starting ' + new Date(res.start + 'T12:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    : 'Class: ' + res.class + (res.result === 'waitlisted' ? ' (class waitlist)' : '');
+  const whatFull = what + (res.changed ? ' — sharing with ' + res.changed : '');
+  sb.functions.invoke('signup-notify', { body: { ids: res.ids, what: whatFull, shareType } }).catch(() => {});
+  const lines = [`<strong>Athlete:</strong> ${esc(athletes[0].firstName + ' ' + athletes[0].lastName)}`, `<strong>Skill Level:</strong> ${esc(skill)}`];
+  if (hasSib) lines.push(`<strong>Sibling:</strong> ${esc(athletes[1].firstName + ' ' + athletes[1].lastName)}`, `<strong>Sibling Skill:</strong> ${esc(sibSkill)}`);
+  lines.push(`<strong>Parent:</strong> ${esc(p.parentName)}`, `<strong>Email:</strong> ${esc(p.parentEmail)}`, `<strong>Payment:</strong> ${esc(pay)}`, `<strong>Signed up for:</strong> ${esc(whatFull)}`);
+  $('summaryBox').innerHTML = lines.join('<br>');
+  if (res.result === 'waitlist') { $('doneTitle').textContent = "You're on the List!"; $('doneSub').textContent = "We'll reach out as soon as a spot opens that matches your availability."; }
+  else if (hasSib) { $('doneTitle').textContent = 'Both Athletes Registered!'; $('doneSub').textContent = 'Both athletes have been registered and linked as a shared lesson.'; }
+  $('doneNext').textContent = res.result === 'waitlist' ? 'Coach Steve will text you when a spot opens up. A confirmation email is on its way.'
+    : 'Coach Steve will reach out to confirm your first session. Send payment via Venmo or Zelle (' + ZELLE + ') when you\'re ready, or bring cash. A confirmation email is on its way.';
+  show('Done');
+}
+</script>
+</body>
+</html>

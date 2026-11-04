@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Class RSVP</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  body { margin:0; font-family:Arial, sans-serif; background:#F4F7F6; color:#2c2c2a; }
+  .wrap { max-width:420px; margin:60px auto; padding:0 14px; text-align:center; }
+  .hd { background:#4349C6; padding:16px; border-radius:12px 12px 0 0; } .hd h1 { color:#fff; letter-spacing:3px; margin:0; font-size:20px; }
+  .bd { background:#fff; border-radius:0 0 12px 12px; padding:32px; border:1px solid #eee; }
+  .em { font-size:40px; margin-bottom:16px; } p { font-size:18px; font-weight:500; line-height:1.6; margin:0; }
+  .sw { margin-top:18px; font-size:14px; color:#888; } .sw a { color:#4349C6; }
+</style>
+</head>
+<body>
+<div class="wrap"><div class="hd"><h1 id="g">FLIP LAB</h1></div><div class="bd" id="b"><p style="color:#888">Saving…</p></div></div>
+<script>
+// Friday RSVP email buttons land here (same messages as 2.0). The answer is saved by rsvp_answer in the database.
+const sb = supabase.createClient('https://angmtyojkwlrefxpcgoa.supabase.co', 'sb_publishable_fPciNfnNHpHQikB8mqHNpw_hIVRIGo5');
+const q = new URLSearchParams(location.search), t = q.get('t') || '', a = q.get('a') === 'no' ? 'no' : 'yes';
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+function show(i) {
+  if (i.gym) document.getElementById('g').textContent = i.gym.toUpperCase();
+  const other = a === 'yes' ? 'no' : 'yes';
+  const msg = i.state !== 'ok' ? '<div class="em">🤔</div><p>This link isn\'t working. Please text or email Coach Steve.</p>'
+    : a === 'yes' ? `<div class="em">🤸</div><p>See you Sunday, ${esc(i.first)}! Coach Steve has you on the list.</p>`
+    : `<div class="em">👋</div><p>Got it ${esc(i.first)} — we'll miss you this week! See you next time.</p>`;
+  document.getElementById('b').innerHTML = msg + (i.state === 'ok' ? `<div class="sw">Tapped the wrong one? <a href="?t=${encodeURIComponent(t)}&a=${other}">${other === 'yes' ? "We'll be there" : "Can't make it"}</a></div>` : '');
+}
+(async () => {
+  if (t === 'TEST') return show({ state: 'ok', first: 'Zoey', gym: 'Flip Lab' });
+  const r = await sb.rpc('rsvp_answer', { t, a });
+  show(r.error ? { state: 'missing' } : r.data);
+})();
+</script>
+</body>
+</html>
