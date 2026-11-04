@@ -1,4 +1,4 @@
-// FlipLab 3.0 — send email through Yahoo as "Flip Lab" <thefliplab@yahoo.com> (no Apps Script / 2.0 needed).
+// FlipLab 3.0 — send email. Flip Lab: through Yahoo as "Flip Lab" <thefliplab@yahoo.com>. Other gyms: only through their OWN connected email (email-connect).
 // Called by the admin page (signed-in user; verify_jwt on).
 //   { messages: [{ to, subject, text, student_id?, family? }], batch? }  → up to 40 per call, ~1.5s apart
 //   Each email logged to email_log (status Sent / Failed).
@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
   let client: SMTPClient;
   try {
     client = new SMTPClient({ connection: { hostname: host, port: 465, tls: true, auth: { username: from, password: pw } } });
-  } catch (e) { return json({ error: "Couldn't connect to Yahoo: " + String(e).slice(0, 200) }, 500); }
+  } catch (e) { return json({ error: "Couldn't connect to email: " + String(e).slice(0, 200) }, 500); }
 
   const results = [];
   for (const [i, m] of messages.slice(0, 40).entries()) {
@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
     if (!okEmail(to) || !m.text) error = "Bad email address or empty message";
     else {
       try {
-        if (i > 0) await sleep(1500);   // go easy on Yahoo
+        if (i > 0) await sleep(1500);   // go easy on the mail server
         await client.send({ from: `${name} <${from}>`, to, subject: m.subject || name, content: m.text, html: toHtml(m.text) });
         ok = true;
       } catch (e) { error = String((e as Error)?.message || e).slice(0, 300); }
