@@ -271,7 +271,7 @@
       <small style="color:#888;display:block;margin:6px 2px">Texts parents send to your cell. Only numbers on file as a parent phone show up. Last 60 days.</small>
     </div>
     <div id="ms_thread" class="hidden">
-      <div class="sec" style="margin-top:4px"><a href="#" onclick="msBack();return false" style="color:#185FA5;text-decoration:none">‹ Messages</a> <span id="ms_who" style="font-weight:600"></span></div>
+      <div class="sec" style="margin-top:4px"><a href="#" onclick="msBack();return false" style="color:#185FA5;text-decoration:none">‹ Messages</a> <span id="ms_who" style="font-weight:600"></span> <button class="paybtn" style="float:right;background:#fff;color:#d64545;border:1px solid #d64545" onclick="msDelete()">🗑 Delete</button></div>
       <div class="card" id="ms_bubbles" style="display:flex;flex-direction:column;gap:6px;max-height:55vh;overflow-y:auto"></div>
       <div class="card">
         <div style="display:flex;gap:6px;margin-bottom:6px"><input id="ms_idea" placeholder="✨ Optional: what to say, e.g. yes Tue 5:30 works" style="flex:1;margin:0"><button class="paybtn" style="background:#EEEDFE;color:#3C3489;white-space:nowrap" onclick="msAI()">✨ Draft reply</button></div>
@@ -2648,7 +2648,7 @@ async function loadMsgs(quiet) {
   const since = new Date(Date.now() - 60 * 864e5).toISOString();
   const { data, error } = await sb.from('text_log').select('id,direction,phone,student_id,family_name,body,status,received_at,extra').gte('received_at', since).order('received_at', { ascending: true }).range(0, 999);
   if (error) { $('ms_threads').innerHTML = '<div class="center">' + esc(error.message) + '</div>'; return; }
-  msRows = (data || []).filter(r => r.phone && r.family_name !== 'Test');
+  msRows = (data || []).filter(r => r.phone && r.family_name !== 'Test' && r.status !== 'Deleted');
   msRender();
   if (msOpen) msShow(msOpen, true);
 }
@@ -2685,6 +2685,14 @@ async function msShow(phone, quiet) {
   if (!quiet) { $('ms_msg').value = ''; $('ms_idea').value = ''; const li = [...x.list].reverse().find(r => r.direction === 'IN'); $('ms_line').value = li?.extra?.line === 'Voice' ? 'Voice' : 'Cell'; }
   const ids = x.list.filter(r => r.direction === 'IN' && r.status === 'Unread').map(r => r.id);
   if (ids.length) { await sb.from('text_log').update({ status: 'Read' }).in('id', ids); ids.forEach(id => { const r = msRows.find(y => y.id === id); if (r) r.status = 'Read'; }); msBadge(); }
+}
+// Delete a conversation: hides its texts from Messages (kept in the database, marked Deleted). A new text from them starts fresh.
+async function msDelete() {
+  const x = msThreads().find(t => t.phone === msOpen); if (!x) return;
+  if (!confirm('Delete the conversation with ' + x.name + '?\n\nIt disappears from Messages. If they text again, a new conversation starts.')) return;
+  const ids = x.list.map(r => r.id), { error } = await sb.from('text_log').update({ status: 'Deleted' }).in('id', ids);
+  if (error) return alert(error.message);
+  msRows = msRows.filter(r => !ids.includes(r.id)); msBadge(); msBack();
 }
 function msBack() { msOpen = null; ss.set('msOpen', null); $('ms_thread').classList.add('hidden'); $('ms_list').classList.remove('hidden'); msRender(); }
 async function msAI() {
