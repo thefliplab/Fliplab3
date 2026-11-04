@@ -481,6 +481,7 @@
   <div class="mdl">
     <div class="mh"><b>Account</b><button class="x" onclick="$('acctModal').classList.add('hidden')">✕</button></div>
     <div id="acctEmail" style="font-size:13px;color:var(--muted);margin-bottom:10px"></div>
+    <button class="btn ghost" style="margin-bottom:12px" onclick="$('acctModal').classList.add('hidden');stOpen()">⚙ Settings — look, prices, payment buttons</button>
     <label>New password</label><input id="pw1" type="password" autocomplete="new-password">
     <label>Type it again</label><input id="pw2" type="password" autocomplete="new-password">
     <button class="btn" onclick="changePw()">Change password</button>
@@ -1245,7 +1246,7 @@ async function loadSettings() {
 function applySettings() {
   Object.assign(PRICING.Solo, SET.prices.Solo); Object.assign(PRICING.Shared, SET.prices.Shared);
   const root = document.documentElement.style;
-  if (SET.color !== SET_DEF.color) { root.setProperty('--mint', SET.color); root.setProperty('--mint-soft', 'color-mix(in srgb, ' + SET.color + ' 14%, white)'); }
+  if (SET.color !== SET_DEF.color) { root.setProperty('--mint', SET.color); root.setProperty('--mint-soft', 'color-mix(in srgb, ' + SET.color + ' 14%, white)'); } else { root.removeProperty('--mint'); root.removeProperty('--mint-soft'); }
   if (gymSlug && gymSlug !== 'fliplab') $('brand').innerHTML = (SET.logo_url ? `<img src="${esc(SET.logo_url)}" alt="" style="height:26px;vertical-align:middle;margin-right:8px;border-radius:4px">` : '') + esc(gymTitle);
   ['al_duration', 'lm_duration'].forEach(id => [...$(id).options].forEach(o => o.hidden = !SET.lengths.includes(o.value)));
   const m = SET.pay_methods;
@@ -1261,23 +1262,13 @@ async function saveSettings(extra) {
   Object.assign(SET, extra || {}); applySettings(); return true;
 }
 const WZ_COLORS = ['#3ecf9e', '#1D9E75', '#4349C6', '#378ADD', '#D4537E', '#D85A30', '#1f2933'];
-function wzStart() { wz = { ...JSON.parse(JSON.stringify(SET)), days: [], from: 960, to: 1140, every: 30, off: [] }; wzStep = 0; show('setupView'); $('tabs').classList.add('hidden'); wzDraw(); }
+function wzStart() { wzSet = false; wz = { ...JSON.parse(JSON.stringify(SET)), days: [], from: 960, to: 1140, every: 30, off: [] }; wzStep = 0; show('setupView'); $('tabs').classList.add('hidden'); wzDraw(); }
 function wzDraw() {
+  if (wzSet) return stDraw();
   const n = wzStep, dots = [0, 1, 2, 3].map(i => `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;margin:0 3px;background:${i === n ? 'var(--mint)' : '#d5dadf'}"></span>`).join('');
   const head = (t, sub) => `<div style="text-align:center;margin-bottom:6px">${dots}</div><div class="hdr" style="margin-top:6px">${t}<span style="font-weight:400;font-size:13px">Step ${n + 1} of 4</span></div><div style="color:var(--muted);font-size:13px;margin-bottom:4px">${sub}</div>`;
   let body = '';
-  if (n === 0) body = head('Your look', 'Shows in your top bar and buttons. You can change it later in Settings.') + `
-    <label>Logo</label><div style="display:flex;align-items:center;gap:10px">${wz.logo_url ? `<img src="${esc(wz.logo_url)}" style="height:48px;border-radius:6px">` : '<div style="width:48px;height:48px;border:1px dashed #bbb;border-radius:6px"></div>'}
-      <input type="file" id="wz_logo" accept="image/*" onchange="wzLogo(this)" style="width:auto;font-size:13px"></div><div id="wz_lmsg" class="msg"></div>
-    <label>Main color</label><div style="display:flex;gap:10px;flex-wrap:wrap">${WZ_COLORS.map(c => `<button onclick="wz.color='${c}';wzDraw()" aria-label="color" style="width:34px;height:34px;border-radius:50%;border:0;background:${c};outline:${wz.color === c ? '3px solid #1f2933' : '0'};outline-offset:2px"></button>`).join('')}</div>
-    <div style="margin-top:14px;background:${wz.color};color:#fff;border-radius:8px;padding:10px;text-align:center;font-weight:600">Buttons look like this</div>`;
-  if (n === 1) body = head('Lessons and prices', 'Prices for new lessons. ★ special prices you set on a lesson are never changed.') + `
-    <label>Lesson lengths you offer</label><div>${SET_DEF.lengths.map(l => `<button class="paybtn" style="margin:0 6px 6px 0;padding:8px 12px;${wz.lengths.includes(l) ? 'background:var(--mint-soft);color:#1c7a5a' : 'background:#eee;color:#888'}" onclick="wzLen('${l}')">${l}</button>`).join('')}</div>
-    ${wz.lengths.map(l => `<div class="row2"><div><label>${l} solo $</label><input type="number" inputmode="decimal" value="${String(wz.prices.Solo[l]).replace('$', '')}" onchange="wz.prices.Solo['${l}']='$'+(+this.value||0)"></div><div><label>${l} shared $ (each)</label><input type="number" inputmode="decimal" value="${String(wz.prices.Shared[l]).replace('$', '')}" onchange="wz.prices.Shared['${l}']='$'+(+this.value||0)"></div></div>`).join('')}
-    <label>Group class price $ (per class)</label><input type="number" inputmode="decimal" value="${wz.class_price}" onchange="wz.class_price=+this.value||0">`;
-  if (n === 2) body = head('Payment buttons', 'These show when you record a payment.') + `
-    <div style="margin:10px 0">${wz.pay_methods.map((m, i) => `<span class="pill" style="display:inline-block;margin:0 6px 6px 0;padding:6px 10px;font-size:14px">${esc(m)} <a href="#" onclick="wz.pay_methods.splice(${i},1);wzDraw();return false" style="color:#A32D2D;text-decoration:none;margin-left:4px">✕</a></span>`).join('') || '<small style="color:#aaa">None yet</small>'}</div>
-    <div class="row2"><div><input id="wz_pm" placeholder="Check, CashApp…"></div><div><button class="btn ghost" onclick="wzAddPm()">+ Add</button></div></div>`;
+  if (n < 3) body = head(['Your look', 'Lessons and prices', 'Payment buttons'][n], ['Shows in your top bar and buttons. You can change it later in Settings.', 'Prices for new lessons. ★ special prices you set on a lesson are never changed.', 'These show when you record a payment.'][n]) + wzPart(n);
   if (n === 3) { const sl = wzSlots(); body = head('Your weekly times', 'Your open times show on your sign-up page. Tap a time to leave it out.') + `
     <label>Days you coach</label><div>${DAYS.map(d => `<button class="paybtn" style="margin:0 6px 6px 0;padding:8px 10px;${wz.days.includes(d) ? 'background:var(--mint-soft);color:#1c7a5a' : 'background:#eee;color:#888'}" onclick="wzDay('${d}')">${d.slice(0, 3)}</button>`).join('')}</div>
     <div class="row2"><div><label>From</label><select onchange="wz.from=+this.value;wzDraw()">${wzTimeOpts(wz.from)}</select></div><div><label>To</label><select onchange="wz.to=+this.value;wzDraw()">${wzTimeOpts(wz.to)}</select></div></div>
@@ -1289,6 +1280,41 @@ function wzDraw() {
     <div style="text-align:center;margin-top:10px"><a href="#" onclick="wzStep++;wzDraw();return false" style="color:var(--muted);font-size:13px">Skip this step</a></div>` : (n ? '<div style="margin-top:10px"><button class="btn ghost" onclick="wzStep--;wzDraw()">Back</button></div>' : '');
   $('wzCard').innerHTML = `<div style="font-weight:600;font-size:18px;margin-bottom:8px">Welcome, let's set up ${esc(gymTitle)}</div>` + body + nav;
 }
+function wzPart(n) {
+  if (n === 0) return `
+    <label>Logo</label><div style="display:flex;align-items:center;gap:10px">${wz.logo_url ? `<img src="${esc(wz.logo_url)}" style="height:48px;border-radius:6px">` : '<div style="width:48px;height:48px;border:1px dashed #bbb;border-radius:6px"></div>'}
+      <input type="file" id="wz_logo" accept="image/*" onchange="wzLogo(this)" style="width:auto;font-size:13px"></div><div id="wz_lmsg" class="msg"></div>
+    <label>Main color</label><div style="display:flex;gap:10px;flex-wrap:wrap">${WZ_COLORS.map(c => `<button onclick="wz.color='${c}';wzDraw()" aria-label="color" style="width:34px;height:34px;border-radius:50%;border:0;background:${c};outline:${wz.color === c ? '3px solid #1f2933' : '0'};outline-offset:2px"></button>`).join('')}</div>
+    <div style="margin-top:14px;background:${wz.color};color:#fff;border-radius:8px;padding:10px;text-align:center;font-weight:600">Buttons look like this</div>`;
+  if (n === 1) return `
+    <label>Lesson lengths you offer</label><div>${SET_DEF.lengths.map(l => `<button class="paybtn" style="margin:0 6px 6px 0;padding:8px 12px;${wz.lengths.includes(l) ? 'background:var(--mint-soft);color:#1c7a5a' : 'background:#eee;color:#888'}" onclick="wzLen('${l}')">${l}</button>`).join('')}</div>
+    ${wz.lengths.map(l => `<div class="row2"><div><label>${l} solo $</label><input type="number" inputmode="decimal" value="${String(wz.prices.Solo[l]).replace('$', '')}" onchange="wz.prices.Solo['${l}']='$'+(+this.value||0)"></div><div><label>${l} shared $ (each)</label><input type="number" inputmode="decimal" value="${String(wz.prices.Shared[l]).replace('$', '')}" onchange="wz.prices.Shared['${l}']='$'+(+this.value||0)"></div></div>`).join('')}
+    <label>Group class price $ (per class)</label><input type="number" inputmode="decimal" value="${wz.class_price}" onchange="wz.class_price=+this.value||0">`;
+  if (n === 2) return `
+    <div style="margin:10px 0">${wz.pay_methods.map((m, i) => `<span class="pill" style="display:inline-block;margin:0 6px 6px 0;padding:6px 10px;font-size:14px">${esc(m)} <a href="#" onclick="wz.pay_methods.splice(${i},1);wzDraw();return false" style="color:#A32D2D;text-decoration:none;margin-left:4px">✕</a></span>`).join('') || '<small style="color:#aaa">None yet</small>'}</div>
+    <div class="row2"><div><input id="wz_pm" placeholder="Check, CashApp…"></div><div><button class="btn ghost" onclick="wzAddPm()">+ Add</button></div></div>`;
+  return '';
+}
+// ⚙ Settings page: same pieces as the wizard, all on one card, one Save. Tabs stay visible.
+let wzSet = false;
+function stOpen() { wz = JSON.parse(JSON.stringify(SET)); wzSet = true; show('setupView'); stDraw(); }
+function stDraw() {
+  const sec = (t, sub, n) => `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">${t}</b><div style="color:var(--muted);font-size:13px">${sub}</div>${wzPart(n)}</div>`;
+  $('wzCard').innerHTML = `<div class="hdr" style="margin-top:0">⚙ Settings</div>`
+    + sec('Look', 'Logo and main color for your top bar and buttons.', 0)
+    + sec('Lessons and prices', 'Prices for new lessons. Lessons you already have and ★ special prices are never changed.', 1)
+    + sec('Payment buttons', 'These show when you record a payment.', 2)
+    + `<button class="btn" style="margin-top:18px" onclick="stSave()">Save settings</button>
+       <button class="btn ghost" style="margin-top:8px" onclick="stClose()">Cancel</button><div id="st_msg" class="msg"></div>`;
+}
+async function stSave() {
+  if (!wz.pay_methods.length) return alert('Keep at least one payment button.');
+  const m = $('st_msg'); m.className = 'msg'; m.textContent = 'Saving…';
+  const keep = JSON.parse(JSON.stringify(SET)); Object.assign(SET, wz);
+  if (!(await saveSettings({}))) { SET = keep; applySettings(); m.textContent = ''; return; }
+  m.className = 'msg'; m.style.color = '#3B6D11'; m.textContent = 'Saved ✓'; setTimeout(stClose, 700);
+}
+function stClose() { wzSet = false; $('tabBtn_schedule').click(); }
 const wzT = m => ((Math.floor(m / 60) % 12) || 12) + ':' + String(m % 60).padStart(2, '0') + ' ' + (m < 720 ? 'AM' : 'PM');
 const wzTimeOpts = v => Array.from({ length: 64 }, (_, i) => 360 + i * 15).map(m => `<option value="${m}"${m === v ? ' selected' : ''}>${wzT(m)}</option>`).join('');
 function wzSlots() { const times = []; for (let m = wz.from; m + wz.every <= wz.to; m += wz.every) times.push(wzT(m)); let count = 0; wz.days.forEach(d => times.forEach(t => { if (!wz.off.includes(d + '|' + t)) count++; })); return { times, count }; }
