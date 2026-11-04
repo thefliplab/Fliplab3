@@ -844,14 +844,38 @@ function viaSet(id, k) { ss.set('sendVia', k); const c = $(id); c.dataset.v = k;
   c.querySelectorAll('button').forEach(b => { const on = b.dataset.k === k; b.style.background = on ? 'var(--mint)' : '#eef0f2'; b.style.color = on ? '#fff' : '#555'; }); }
 const viaGet = id => ($(id) || {}).dataset ? $(id).dataset.v || 'text' : 'text';
 const okMail = e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e || '').trim());
-async function sendEmails(messages, batch) {   // send-email takes up to 40 per call
-  const out = { sent: 0, failed: 0, error: '' };
-  for (let i = 0; i < messages.length; i += 40) {
-    const r = await sb.functions.invoke('send-email', { body: { messages: messages.slice(i, i + 40), batch } });
-    if (r.error || (r.data && r.data.error)) { out.error = (r.data && r.data.error) || r.error.message; break; }
+async function sendEmails(messages, batch, onProgress) {   // small groups so nothing can hang; returns the ones that didn't go in .bad
+  const out = { sent: 0, failed: 0, error: '', bad: [] };
+  for (let i = 0; i < messages.length; i += 8) {
+    const part = messages.slice(i, i + 8);
+    if (onProgress) onProgress(i, messages.length);
+    const r = await sb.functions.invoke('send-email', { body: { messages: part, batch } });
+    if (r.error || (r.data && r.data.error)) {   // whole group didn't confirm — offer to resend it
+      out.error = (r.data && r.data.error) || r.error.message; out.failed += part.length; out.bad.push(...part); continue;
+    }
     out.sent += r.data.sent || 0; out.failed += r.data.failed || 0;
+    (r.data.results || []).forEach((x, k) => { if (!x.ok && part[k]) out.bad.push({ ...part[k], why: x.error || '' }); });
   }
   return out;
+}
+// Resend button for emails that didn't go (shown under the Communicate Send result)
+let cmBad = [], cmBadBatch = null;
+function cmBadHtml() {
+  if (!cmBad.length) return '';
+  return `<div class="card" style="margin-top:8px;padding:10px"><b style="color:#b42318">Didn't get the email (${cmBad.length}):</b>
+    <div style="font-size:13px;margin:4px 0 8px">${cmBad.map(m => esc(m.family || m.to) + (m.why ? ' <small style="color:#888">— ' + esc(String(m.why).slice(0, 60)) + '</small>' : '')).join('<br>')}</div>
+    <button class="btn" id="cm_resend" onclick="cmResend()">Resend to these</button></div>`;
+}
+async function cmResend() {
+  if (!cmBad.length || !confirm('Resend the email to ' + cmBad.length + ' famil' + (cmBad.length === 1 ? 'y' : 'ies') + '?')) return;
+  const r = $('cm_res'), btn = $('cm_resend'); if (btn) btn.disabled = true;
+  r.className = 'msg'; r.textContent = 'Resending…';
+  const er = await sendEmails(cmBad.map(({ why, ...m }) => m), cmBadBatch, (i, n) => r.textContent = 'Resending… ' + i + ' of ' + n);
+  if (cmBadBatch) { const b = await sb.from('blasts').select('sent,failed').eq('id', cmBadBatch).maybeSingle();
+    if (b.data) await sb.from('blasts').update({ sent: (b.data.sent || 0) + er.sent, failed: Math.max(0, (b.data.failed || 0) - er.sent) }).eq('id', cmBadBatch); }
+  cmBad = er.bad;
+  r.className = cmBad.length ? 'msg err' : 'msg';
+  r.innerHTML = esc((er.sent ? '✓ Resent ' + er.sent : 'Not sent') + (cmBad.length ? ' · ' + cmBad.length + ' still didn\'t go' : '')) + cmBadHtml();
 }
 // Offer: text (sms-send, replies come to Steve's phone) and/or email (send-email). Saved as extra.PairOffer = { otherId: date }.
 const prFam = x => { const st = prStu(x.id) || {}, w = x.w || {}; return { phone: st.parent_phone || w.parent_phone, email: st.parent_email || w.parent_email, parent: ((st.parent_name || w.parent_name || '').split(' ')[0]) || 'there', kid: x.name.split(' ')[0] }; };
@@ -1075,7 +1099,7 @@ async function cmSend() {
   if (test && tl.length && !to) return r.textContent = 'Test mode is on. Type a test phone number first.';
   const what = [tl.length && tl.length + ' text' + (tl.length === 1 ? '' : 's'), el.length && el.length + ' email' + (el.length === 1 ? '' : 's')].filter(Boolean).join(' + ');
   if (!confirm(test ? 'TEST: send ' + what + ' as samples (' + [tl.length && 'texts to ' + to, el.length && 'emails to ' + myEmail].filter(Boolean).join(', ') + ')?' : 'Send ' + what + ' for real?')) return;
-  $('cm_send').disabled = true; r.className = 'msg'; r.textContent = 'Sending…';
+  $('cm_send').disabled = true; r.className = 'msg'; r.textContent = 'Sending…'; cmBad = [];
   const batch = crypto.randomUUID(); let sent = 0, failed = 0; const errs = [];
   const msgs = tl.map(f => ({ to: test ? to : f.phone, student_id: test ? null : f.sid, family: test ? 'Test' : f.parent, text: (test ? '[TEST for ' + (f.parent || 'family') + '] ' : '') + fill(f) }));
   for (let i = 0; i < msgs.length; i += 50) {   // sms-send takes up to 60 per call
@@ -1084,13 +1108,14 @@ async function cmSend() {
     sent += part.data.sent || 0; failed += part.data.failed || 0;
   }
   if (el.length) {
-    const er = await sendEmails(el.map(f => ({ to: test ? myEmail : f.email, student_id: test ? null : f.sid, family: test ? 'Test' : f.parent, subject: (test ? '[TEST] ' : '') + subj, text: (test ? '[TEST for ' + (f.parent || 'family') + '] ' : '') + fill(f) })), batch);
-    if (er.error) errs.push('Emails: ' + er.error); sent += er.sent; failed += er.failed;
+    const er = await sendEmails(el.map(f => ({ to: test ? myEmail : f.email, student_id: test ? null : f.sid, family: test ? 'Test' : f.parent, subject: (test ? '[TEST] ' : '') + subj, text: (test ? '[TEST for ' + (f.parent || 'family') + '] ' : '') + fill(f) })), batch,
+      (i, n) => r.textContent = 'Sending emails… ' + i + ' of ' + n);
+    sent += er.sent; failed += er.failed; cmBad = er.bad; cmBadBatch = batch;
   }
   $('cm_send').disabled = false;
   await sb.from('blasts').insert({ id: batch, gym_id: gymId, audience: label + (via === 'text' ? '' : via === 'email' ? ' · email' : ' · text+email'), body: tpl, families: picks.length, sent, failed, test });
   r.className = errs.length || failed ? 'msg err' : 'msg';
-  r.textContent = (sent ? '✓ Sent ' + sent : 'Not sent') + (failed ? ' · ' + failed + ' failed' : '') + (errs.length ? ' · ' + errs.join(' · ') : '') + (test && sent ? ' (test samples)' : '');
+  r.innerHTML = esc((sent ? '✓ Sent ' + sent : 'Not sent') + (failed ? ' · ' + failed + ' failed' : '') + (errs.length ? ' · ' + errs.join(' · ') : '') + (test && sent ? ' (test samples)' : '')) + cmBadHtml();
   loadComm();
 }
 // ================= CALENDAR SYNC SETTINGS (edge function cal-sync does the work) =================
