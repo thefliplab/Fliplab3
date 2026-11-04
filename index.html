@@ -713,6 +713,48 @@
 <script src="week.js"></script>
 <script>
 const sb = supabase.createClient('https://angmtyojkwlrefxpcgoa.supabase.co', 'sb_publishable_fPciNfnNHpHQikB8mqHNpw_hIVRIGo5');
+// ===== Other gyms: "send it yourself" (Steve's phone / Yahoo / Voice are Flip Lab only — the server refuses other gyms) =====
+// Every sms-send / send-email / voice-send call from a non-Flip Lab gym opens a list instead: 📱 Text / ✉️ Email buttons
+// that open the coach's own Messages / Mail app with the message filled in. Logged as "Sent by hand" (best effort).
+const sbInvoke = sb.functions.invoke.bind(sb.functions);
+sb.functions.invoke = async (name, opts) => {
+  if (!gymSlug || gymSlug === 'fliplab' || !['sms-send', 'send-email', 'voice-send'].includes(name)) return sbInvoke(name, opts);
+  const b = (opts && opts.body) || {};
+  if (b.check) return { data: name === 'voice-send' ? { ok: false } : { checked: 0, changed: 0 }, error: null };
+  const list = name === 'voice-send' ? [{ to: b.to, text: b.text, student_id: b.student_id, family: b.family }] : (b.messages || []);
+  hsAdd(name === 'send-email' ? 'email' : 'text', list);
+  const results = list.map(m => ({ to: m.to, ok: true }));
+  return { data: name === 'voice-send' ? { ok: true } : { sent: list.length, failed: 0, results }, error: null };
+};
+let hs = [];
+function hsAdd(kind, list) {
+  list.forEach(m => hs.push({ kind, to: String(m.to || '').trim(), subject: m.subject || gymTitle, text: m.text || '', sid: m.student_id || null, fam: m.family || '', done: false }));
+  // best-effort log so Messages / history still show it
+  const now = new Date().toISOString();
+  if (kind === 'text') sb.from('text_log').insert(list.map(m => ({ gym_id: gymId, direction: 'OUT', phone: String(m.to || '').replace(/\D/g, '').slice(-10), student_id: m.student_id || null, family_name: m.family || null, body: m.text, status: 'Sent by hand', received_at: now, extra: { hand: true } }))).then(() => {}, () => {});
+  else sb.from('email_log').insert(list.map(m => ({ gym_id: gymId, to_email: m.to || '(none)', student_id: m.student_id || null, family_name: m.family || null, subject: m.subject || gymTitle, body: m.text || '', status: 'Sent by hand' }))).then(() => {}, () => {});
+  hsDraw();
+}
+function hsHref(x) {
+  return x.kind === 'text' ? 'sms:' + x.to.replace(/\D/g, '') + '?&body=' + encodeURIComponent(x.text)
+    : 'mailto:' + encodeURIComponent(x.to) + '?subject=' + encodeURIComponent(x.subject) + '&body=' + encodeURIComponent(x.text);
+}
+function hsDraw() {
+  let el = $('hsBox');
+  if (!el) { el = document.createElement('div'); el.id = 'hsBox'; el.className = 'ovl'; document.body.appendChild(el); }
+  if (!hs.length) return el.classList.add('hidden');
+  el.classList.remove('hidden');
+  const same = hs.every(x => x.text === hs[0].text), left = hs.filter(x => !x.done).length;
+  el.innerHTML = `<div class="mdl"><div class="mh"><b>Send these from your phone (${left} left)</b><button class="x" onclick="hs=[];hsDraw()">✕</button></div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:8px">Tap each one. Your Messages or Mail app opens with the message filled in. Just hit send.</div>
+    ${same ? `<button class="btn ghost" style="margin-bottom:8px" onclick="hsCopy(0)">📋 Copy message</button>` : ''}
+    ${hs.map((x, i) => `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid #eee;${x.done ? 'opacity:.45' : ''}">
+      <div style="flex:1;min-width:0"><b style="font-size:14px">${esc(x.fam || x.to)}</b><div style="font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.to)}${same ? '' : ' · ' + esc(x.text.slice(0, 60))}</div></div>
+      ${same ? '' : `<button class="paybtn" onclick="hsCopy(${i})">📋</button>`}
+      ${x.to ? `<a class="paybtn" style="text-decoration:none;background:var(--mint);color:#fff" href="${esc(hsHref(x))}" onclick="hs[${i}].done=true;setTimeout(hsDraw,300)">${x.done ? '✓ ' : ''}${x.kind === 'text' ? '📱 Text' : '✉️ Email'}</a>` : '<small style="color:#A32D2D">no ' + (x.kind === 'text' ? 'phone' : 'email') + '</small>'}</div>`).join('')}
+    <button class="btn" style="margin-top:12px" onclick="hs=[];hsDraw()">Done</button></div>`;
+}
+function hsCopy(i) { const t = hs[i].text; (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => alert('Copied'), () => prompt('Copy this message:', t)); }
 // Phone layout: (513) 555-1234. 10 digits (or 11 starting with 1) get formatted; anything else is left as typed.
 function fmtPhone(v) { v = String(v || '').trim(); let d = v.replace(/\D/g, ''); if (d.length === 11 && d[0] === '1') d = d.slice(1); return d.length === 10 ? '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6) : v; }
 function typingPhone(v) { let d = v.replace(/\D/g, ''); if (d.length > 10) return v; return !d ? '' : d.length < 4 ? '(' + d : d.length < 7 ? '(' + d.slice(0, 3) + ') ' + d.slice(3) : '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6); }
