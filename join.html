@@ -34,7 +34,7 @@ const KEY = 'fl3_join_' + tok;   // remembers the gym name typed before an email
 function saved() { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { return {}; } }
 function save(v) { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch (e) {} }
 
-function form() {
+function drawForm() {
   const s = saved();
   $('c').innerHTML = `<h2>${signIn ? 'Sign in to finish' : 'Coach Steve invited you'}</h2>
     <div class="sub">${signIn ? 'Use the login you already made.' : 'Make your login and your own gym is set up for you.'}</div>
@@ -43,7 +43,7 @@ function form() {
     <label>Email</label><input id="em" type="email" autocomplete="email" value="${esc(s.em || '')}">
     <label>Password</label><input id="pw" type="password" autocomplete="${signIn ? 'current-password' : 'new-password'}" placeholder="${signIn ? '' : 'At least 8 characters'}">
     <button id="go" onclick="go()">${signIn ? 'Sign in and create my gym' : 'Create my gym'}</button>
-    <button class="link" onclick="signIn=!signIn;form()">${signIn ? 'New here? Make a login' : 'Already made your login? Sign in'}</button>
+    <button class="link" onclick="signIn=!signIn;drawForm()">${signIn ? 'New here? Make a login' : 'Already made your login? Sign in'}</button>
     <div id="m" class="msg"></div>`;
 }
 function err(t) { $('m').className = 'msg err'; $('m').textContent = t; const b = $('go'); if (b) { b.disabled = false; b.textContent = signIn ? 'Sign in and create my gym' : 'Create my gym'; } }
@@ -62,7 +62,7 @@ async function go() {
   if (r.error) return err(r.error.message);
   if (!r.data.session) {   // email confirmation is turned on
     $('c').innerHTML = `<h2>Check your email</h2><div class="box ok">We sent a confirm link to <b>${esc(em)}</b>. Tap it and you'll come back here to finish.</div>
-      <button class="link" onclick="signIn=true;form()">Already confirmed? Sign in</button>`;
+      <button class="link" onclick="signIn=true;drawForm()">Already confirmed? Sign in</button>`;
     return;
   }
   await claim(gn, nm);
@@ -71,7 +71,7 @@ async function go() {
 async function claim(gn, nm) {
   const r = await sb.rpc('claim_invite', { p_token: tok, p_gym_name: gn, p_coach_name: nm });
   if (r.error) {
-    if (!$('go')) form();
+    if (!$('go')) drawForm();
     return err(r.error.message);
   }
   try { localStorage.removeItem(KEY); } catch (e) {}
@@ -90,7 +90,7 @@ async function load() {
   const { data: { session } } = await sb.auth.getSession();
   const s = saved();
   if (session && s.gn) { $('c').innerHTML = '<div class="sub">Setting up your gym…</div>'; return claim(s.gn, s.nm || info.coach_name); }
-  signIn = !!session; form();
+  signIn = !!session; drawForm();
 }
 load();
 </script>
