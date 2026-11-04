@@ -1230,7 +1230,7 @@ async function revokeInvite(t) {
 }
 // ================= GYM SETTINGS + FIRST-LOGIN SETUP WIZARD =================
 // gym_settings key 'settings' per gym. Flip Lab's row is {setup_done:true} → it keeps every default below.
-const SET_DEF = { color: '#3ecf9e', logo_url: '', lengths: ['30 min', '45 min', '60 min'], class_price: 20, pay_methods: ['Cash', 'Venmo', 'Zelle'],
+const SET_DEF = { color: '#3ecf9e', logo_url: '', lengths: ['30 min', '45 min', '60 min'], class_price: 20, pay_methods: ['Cash', 'Venmo', 'Zelle'], hide_tabs: [],
   prices: { Solo: { '30 min': '$40', '45 min': '$60', '60 min': '$80' }, Shared: { '30 min': '$30', '45 min': '$45', '60 min': '$60' } } };
 let SET = JSON.parse(JSON.stringify(SET_DEF)), gymSlug = '', wz = null, wzStep = 0;
 const payList = () => { const m = SET.pay_methods; return m.length > 1 ? m.slice(0, -1).join(', ') + ' or ' + m[m.length - 1] : m[0] || 'Cash'; };
@@ -1244,6 +1244,7 @@ async function loadSettings() {
   return !!v.setup_done || r.error != null;   // never trap Steve in the wizard if the read fails
 }
 function applySettings() {
+  ST_TABS.forEach(([t]) => $('tabBtn_' + t).classList.toggle('hidden', (SET.hide_tabs || []).includes(t)));
   Object.assign(PRICING.Solo, SET.prices.Solo); Object.assign(PRICING.Shared, SET.prices.Shared);
   const root = document.documentElement.style;
   if (SET.color !== SET_DEF.color) { root.setProperty('--mint', SET.color); root.setProperty('--mint-soft', 'color-mix(in srgb, ' + SET.color + ' 14%, white)'); } else { root.removeProperty('--mint'); root.removeProperty('--mint-soft'); }
@@ -1297,6 +1298,9 @@ function wzPart(n) {
 }
 // ⚙ Settings page: same pieces as the wizard, all on one card, one Save. Tabs stay visible.
 let wzSet = false;
+// Tabs a coach can hide (Dashboard, Schedule, Students always show). Hiding only hides the button — no data is touched.
+const ST_TABS = [['openings', 'Openings'], ['slots', 'Slots'], ['classes', 'Classes'], ['pairings', 'Pairings'], ['msgs', 'Messages'], ['comm', 'Communicate'], ['attendance', 'Attendance'], ['payments', 'Payments']];
+function stTab(t) { const h = wz.hide_tabs = wz.hide_tabs || []; const i = h.indexOf(t); i >= 0 ? h.splice(i, 1) : h.push(t); stDraw(); }
 function stOpen() { wz = JSON.parse(JSON.stringify(SET)); wzSet = true; show('setupView'); stDraw(); }
 function stDraw() {
   const sec = (t, sub, n) => `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">${t}</b><div style="color:var(--muted);font-size:13px">${sub}</div>${wzPart(n)}</div>`;
@@ -1304,6 +1308,8 @@ function stDraw() {
     + sec('Look', 'Logo and main color for your top bar and buttons.', 0)
     + sec('Lessons and prices', 'Prices for new lessons. Lessons you already have and ★ special prices are never changed.', 1)
     + sec('Payment buttons', 'These show when you record a payment.', 2)
+    + `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Tabs</b><div style="color:var(--muted);font-size:13px">Tap to turn a tab off or on. Hiding a tab never deletes anything. Dashboard, Schedule and Students always show.</div>
+       <div style="margin-top:8px">${ST_TABS.map(([t, n]) => { const off = (wz.hide_tabs || []).includes(t); return `<button class="paybtn" style="margin:0 6px 6px 0;padding:8px 12px;${off ? 'background:#eee;color:#aaa;text-decoration:line-through' : 'background:var(--mint-soft);color:#1c7a5a'}" onclick="stTab('${t}')">${off ? '' : '✓ '}${n}</button>`; }).join('')}</div></div>`
     + `<button class="btn" style="margin-top:18px" onclick="stSave()">Save settings</button>
        <button class="btn ghost" style="margin-top:8px" onclick="stClose()">Cancel</button><div id="st_msg" class="msg"></div>`;
 }
@@ -1563,7 +1569,7 @@ async function boot() {
   if (ss.get('import', 0)) { ss.set('import', 0); imStart(); }
 }
 let curTab = 'schedule';
-function go(tab) { curTab = tab; ss.set('tab', tab); if (tab === 'classes') { show('classesView'); return loadClasses(); } if (tab === 'pairings') { show('pairingsView'); return loadPairings(); } if (tab === 'comm') { show('commView'); return loadComm(); } if (tab === 'msgs') { show('msgsView'); return loadMsgs(); } if (tab === 'slots') { show('slotsView'); return loadSlots(); } if (tab === 'students') { show('studentsView'); render(); if (!weekRows.length) loadWeek(); return; } show(tab + 'View'); loadWeek(); }
+function go(tab) { if ((SET.hide_tabs || []).includes(tab)) tab = 'schedule'; curTab = tab; ss.set('tab', tab); if (tab === 'classes') { show('classesView'); return loadClasses(); } if (tab === 'pairings') { show('pairingsView'); return loadPairings(); } if (tab === 'comm') { show('commView'); return loadComm(); } if (tab === 'msgs') { show('msgsView'); return loadMsgs(); } if (tab === 'slots') { show('slotsView'); return loadSlots(); } if (tab === 'students') { show('studentsView'); render(); if (!weekRows.length) loadWeek(); return; } show(tab + 'View'); loadWeek(); }
 
 async function loadStudents(quiet) {
   if (!quiet) $('list').innerHTML = '<div class="center">Loading…</div>';
