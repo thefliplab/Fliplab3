@@ -330,7 +330,7 @@ input:focus{outline:none;border-color:var(--btn);box-shadow:0 0 0 3px rgba(67,73
 <script>
 const sb = supabase.createClient('https://angmtyojkwlrefxpcgoa.supabase.co', 'sb_publishable_fPciNfnNHpHQikB8mqHNpw_hIVRIGo5');
 const GYM = new URLSearchParams(location.search).get('gym') || 'fliplab';
-let VENMO = 'https://venmo.com/code?user_id=2634245503713280412', ZELLE = '951-317-5158', COACH = 'Coach Steve', MINE = true;   // other gyms: set from signup_look
+let VENMO = 'https://venmo.com/code?user_id=2634245503713280412', ZELLE = '951-317-5158', COACH = 'Coach Steve', MINE = true;   // MINE = a confirmation email goes out (Flip Lab, or a gym with its email connected)
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
@@ -580,7 +580,7 @@ async function submitForm() {
   const E = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const me = GYM !== 'fliplab', hrs = +L.cancel_hrs || 24, hero = document.getElementById('site-hero');
   if (me) {
-    MINE = false; VENMO = L.c_venmo || ''; ZELLE = L.c_zelle || '';
+    MINE = !!L.mail; VENMO = L.c_venmo || ''; ZELLE = L.c_zelle || '';
     if (L.coach) COACH = /^coach\b/i.test(L.coach) ? L.coach : 'Coach ' + L.coach;
     document.title = L.name + ' — Register Your Athlete';
     document.querySelectorAll('.ltype-desc').forEach(el => el.textContent = el.textContent.replace('Coach Steve', COACH));
