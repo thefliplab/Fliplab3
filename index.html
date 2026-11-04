@@ -720,7 +720,7 @@ const sb = supabase.createClient('https://angmtyojkwlrefxpcgoa.supabase.co', 'sb
 const sbFn = sb.functions, sbInvoke = sbFn.invoke.bind(sbFn);
 Object.defineProperty(sb, 'functions', { get: () => sbFn });
 sbFn.invoke = async (name, opts) => {
-  if (!gymSlug || gymSlug === 'fliplab' || !['sms-send', 'send-email', 'voice-send'].includes(name)) return sbInvoke(name, opts);
+  if (!gymSlug || gymSlug === 'fliplab' || !['sms-send', 'send-email', 'voice-send'].includes(name) || (name === 'send-email' && SET.email_from)) return sbInvoke(name, opts);   // connected email → real send
   const b = (opts && opts.body) || {};
   if (b.check) return { data: name === 'voice-send' ? { ok: false } : { checked: 0, changed: 0 }, error: null };
   const list = name === 'voice-send' ? [{ to: b.to, text: b.text, student_id: b.student_id, family: b.family }] : (b.messages || []);
@@ -1274,7 +1274,7 @@ async function revokeInvite(t) {
 }
 // ================= GYM SETTINGS + FIRST-LOGIN SETUP WIZARD =================
 // gym_settings key 'settings' per gym. Flip Lab's row is {setup_done:true} → it keeps every default below.
-const SET_DEF = { color: '#3ecf9e', logo_url: '', lengths: ['30 min', '45 min', '60 min'], class_price: 20, pay_methods: ['Cash', 'Venmo', 'Zelle'], hide_tabs: [], cancel_hrs: 24, c_email: '', c_text: '', c_venmo: '', c_zelle: '', policy_text: '', waiver_text: '', su_header: 'navy', su_welcome: '',
+const SET_DEF = { color: '#3ecf9e', logo_url: '', lengths: ['30 min', '45 min', '60 min'], class_price: 20, pay_methods: ['Cash', 'Venmo', 'Zelle'], hide_tabs: [], cancel_hrs: 24, c_email: '', c_text: '', c_venmo: '', c_zelle: '', policy_text: '', waiver_text: '', su_header: 'navy', su_welcome: '', email_from: '', email_provider: '',
   prices: { Solo: { '30 min': '$40', '45 min': '$60', '60 min': '$80' }, Shared: { '30 min': '$30', '45 min': '$45', '60 min': '$60' } } };
 let SET = JSON.parse(JSON.stringify(SET_DEF)), gymSlug = '', wz = null, wzStep = 0;
 const payList = () => { const m = SET.pay_methods; return m.length > 1 ? m.slice(0, -1).join(', ') + ' or ' + m[m.length - 1] : m[0] || 'Cash'; };
@@ -1376,6 +1376,24 @@ const stFill = (t, o) => t.replace(/\{gym\}/g, gymSlug === 'fliplab' ? 'Flip Lab
 let stPolDef = '', stWavDef = '';   // starter text as last shown (with the hours at that moment)
 function stKeep() { if (!$('st_pol')) return; const p = $('st_pol').value.trim(), w = $('st_wav').value.trim();
   wz.policy_text = p === stPolDef.trim() ? '' : p; wz.waiver_text = w === stWavDef.trim() ? '' : w; wz.su_welcome = $('st_wel').value.trim(); }
+let emProv = '';
+const EM_HELP = {
+  gmail: '<b>Make a Gmail app password</b> (2 minutes):<br>1. Go to <a href="https://myaccount.google.com/apppasswords" target="_blank">myaccount.google.com/apppasswords</a> and sign in.<br>2. If it says app passwords aren\'t available, turn on <b>2-Step Verification</b> first (Security page), then come back.<br>3. Name it <b>FlipLab</b> and tap <b>Create</b>.<br>4. Copy the 16-letter password and paste it below.',
+  yahoo: '<b>Make a Yahoo app password</b> (2 minutes):<br>1. Go to <a href="https://login.yahoo.com/account/security" target="_blank">login.yahoo.com/account/security</a>.<br>2. Tap <b>Generate app password</b> (or "Manage app passwords").<br>3. Name it <b>FlipLab</b> and tap <b>Generate</b>.<br>4. Copy the password and paste it below.',
+  aol: '<b>Make an AOL app password</b> (2 minutes):<br>1. Go to <a href="https://login.aol.com/account/security" target="_blank">login.aol.com/account/security</a>.<br>2. Tap <b>Generate app password</b>.<br>3. Name it <b>FlipLab</b> and tap <b>Generate</b>.<br>4. Copy the password and paste it below.' };
+async function emConnect() {
+  const m = $('em_msg'); m.className = 'msg'; m.textContent = 'Connecting…';
+  const r = await sbInvoke('email-connect', { body: { provider: emProv, address: $('em_addr').value, password: $('em_pw').value } });
+  const d = r.data || {}, err = d.error || (r.error && r.error.message);
+  if (err || !d.ok) { m.className = 'msg err'; m.textContent = err || 'Could not connect'; return; }
+  SET.email_from = wz.email_from = d.address; SET.email_provider = wz.email_provider = emProv; emProv = '';
+  stDraw(); $('em_msg').textContent = '✓ Connected. Check your inbox for the test email.';
+}
+async function emDisconnect() {
+  if (!confirm('Disconnect your email? Messages will go back to sending from your phone.')) return;
+  await sbInvoke('email-connect', { body: { disconnect: true } });
+  SET.email_from = wz.email_from = ''; SET.email_provider = wz.email_provider = ''; stDraw();
+}
 function stTab(t) { stKeep(); const h = wz.hide_tabs = wz.hide_tabs || []; const i = h.indexOf(t); i >= 0 ? h.splice(i, 1) : h.push(t); stDraw(); }
 function stOpen() { wz = JSON.parse(JSON.stringify(SET)); wzSet = true; $('wzCard').innerHTML = ''; show('setupView'); stDraw(); }
 function stDraw() {
@@ -1387,6 +1405,17 @@ function stDraw() {
     + sec('Payment buttons', 'These show when you record a payment.', 2)
     + `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Tabs</b><div style="color:var(--muted);font-size:13px">Tap to turn a tab off or on. Hiding a tab never deletes anything. Dashboard, Schedule and Students always show.</div>
        <div style="margin-top:8px">${ST_TABS.map(([t, n]) => { const off = (wz.hide_tabs || []).includes(t); return `<button class="paybtn" style="margin:0 6px 6px 0;padding:8px 12px;${off ? 'background:#eee;color:#aaa;text-decoration:line-through' : 'background:var(--mint-soft);color:#1c7a5a'}" onclick="stTab('${t}')">${off ? '' : '✓ '}${n}</button>`; }).join('')}</div></div>`
+    + (gymSlug === 'fliplab' ? '' : `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Your email</b>
+       ${SET.email_from ? `<div style="margin-top:6px;background:#eaf6ef;border-radius:8px;padding:10px 12px;font-size:14px">✅ Emails to families come from <b>${esc(SET.email_from)}</b>. Replies land in your inbox.</div>
+         <button class="btn ghost" style="margin-top:8px" onclick="emDisconnect()">Disconnect</button>`
+       : `<div style="color:var(--muted);font-size:13px">Connect your email so messages to families come from your own address. Until then, you send them yourself from your phone.</div>
+         <label>Your email is</label><div>${[['gmail', 'Gmail'], ['yahoo', 'Yahoo'], ['aol', 'AOL']].map(([k, n]) => `<button class="paybtn" style="margin:0 6px 6px 0;padding:8px 12px;${emProv === k ? 'background:var(--mint-soft);color:#1c7a5a' : 'background:#eee;color:#888'}" onclick="emProv='${k}';stDraw()">${n}</button>`).join('')}</div>
+         ${emProv ? `<div style="background:#f7f8fa;border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.6;margin-top:6px">${EM_HELP[emProv]}</div>
+         <label>Email address</label><input id="em_addr" type="email" autocomplete="off" placeholder="you@${emProv === 'gmail' ? 'gmail' : emProv}.com">
+         <label>App password (not your normal password)</label><input id="em_pw" type="password" autocomplete="new-password" placeholder="16 letters">
+         <button class="btn" style="margin-top:10px" onclick="emConnect()">Connect and send me a test</button>` : ''}
+         <div style="font-size:12px;color:var(--muted);margin-top:6px">Outlook, Hotmail or iCloud? Those can't connect yet, so keep sending from your phone.</div>`}
+       <div id="em_msg" class="msg"></div></div>`)
     + `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Policies and contact</b><div style="color:var(--muted);font-size:13px">Shown to families on your sign-up page.</div>
        <label>Cancel at least this far ahead</label><div>${[12, 24, 48].map(h => `<button class="paybtn" style="margin:0 6px 6px 0;padding:8px 12px;${+wz.cancel_hrs === h ? 'background:var(--mint-soft);color:#1c7a5a' : 'background:#eee;color:#888'}" onclick="wz.cancel_hrs=${h};stDraw()">${h} hrs</button>`).join('')}</div>
        <label>Gym email</label><input type="email" value="${esc(wz.c_email)}" onchange="wz.c_email=this.value.trim()">
