@@ -90,7 +90,7 @@ input:focus{outline:none;border-color:var(--btn);box-shadow:0 0 0 3px rgba(67,73
 <body>
 <div id="site-hero">
   <div style="display:flex;align-items:center;gap:12px">
-    <img src="https://fliplabcoachsteve.com/images/logo.png" alt="Flip Lab with Coach Steve" onerror="this.style.display='none';document.getElementById('logoText').style.display='block'">
+    <img id="heroLogo" src="https://fliplabcoachsteve.com/images/logo.png" alt="Flip Lab with Coach Steve" onerror="this.style.display='none';document.getElementById('logoText').style.display='block'">
     <div id="logoText">FLIP LAB</div>
   </div>
   <div id="hero-sub">Tumbling and Training</div>
@@ -98,6 +98,7 @@ input:focus{outline:none;border-color:var(--btn);box-shadow:0 0 0 3px rgba(67,73
 <div class="prog"><div id="dots"></div></div>
 
 <div class="container">
+  <div id="welcome" style="display:none;background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;margin-bottom:14px;font-size:14px;line-height:1.6;color:#444;white-space:pre-line"></div>
   <div class="banner" id="banner"></div>
 
   <!-- STEP 1b — Lesson (first screen) -->
@@ -277,7 +278,7 @@ input:focus{outline:none;border-color:var(--btn);box-shadow:0 0 0 3px rgba(67,73
     <div class="sub">Please review and sign before completing registration.</div>
     <div class="card">
       <div class="lbl" style="margin-bottom:10px">Cancellation Policy</div>
-      <div class="waiver">
+      <div class="waiver" id="polBox">
         <strong>Flip Lab Private Lesson Cancellation Policy</strong><br><br>
         We value the time and commitment of our athletes and families, as well as the time of our coaches. To ensure fairness and consistency, the following cancellation policy is in effect for all private lessons:<br><br>
         <strong>Advance Notice</strong><br>All cancellations must be made at least 24 hours in advance of the scheduled lesson. We understand that emergencies sometimes happen. In such cases, circumstances will be reviewed on a case-by-case basis at the discretion of your coach.<br><br>
@@ -290,7 +291,7 @@ input:focus{outline:none;border-color:var(--btn);box-shadow:0 0 0 3px rgba(67,73
       <div class="checkline"><input type="checkbox" id="cancelAccept"><span>I understand and agree to the cancellation policy above.</span></div>
       <div class="hr"></div>
       <div class="lbl" style="margin-bottom:10px">Liability Waiver</div>
-      <div class="waiver">
+      <div class="waiver" id="wavBox">
         <p>By signing below, I acknowledge that participation in gymnastics, tumbling, and related activities at Flip Lab involves inherent risks of injury. I voluntarily assume all risks associated with participation. I agree to release, waive, and hold harmless Flip Lab, its coaches, staff, and facility from any and all claims, damages, or liability arising from participation, including injuries caused by negligence.</p><br>
         <p>I confirm that the athlete named in this registration is physically fit to participate. I will inform Flip Lab of any medical conditions or limitations that may affect participation.</p><br>
         <p>This waiver is binding on myself, my heirs, and my legal representatives. I have read this agreement and understand its terms.</p>
@@ -569,6 +570,31 @@ async function submitForm() {
     : 'Coach Steve will reach out to confirm your first session. Send payment via Venmo or Zelle (' + ZELLE + ') when you\'re ready, or bring cash. A confirmation email is on its way.';
   show('Done');
 }
+
+// ===== Per-gym look + policy/waiver (⚙ Settings in admin → gym_settings 'settings', read via signup_look) =====
+// Flip Lab keeps its page exactly as written above unless Steve changes these in Settings.
+(async function applyLook() {
+  let L = null; try { L = (await sb.rpc('signup_look', { p_slug: GYM })).data; } catch (e) {}
+  if (!L) return;
+  const E = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const me = GYM !== 'fliplab', hrs = +L.cancel_hrs || 24, hero = document.getElementById('site-hero');
+  if (me) {
+    document.title = L.name + ' — Register Your Athlete';
+    const img = document.getElementById('heroLogo'), txt = document.getElementById('logoText');
+    txt.textContent = L.name; document.getElementById('hero-sub').style.display = 'none';
+    if (L.logo_url) { img.src = L.logo_url; img.alt = L.name; txt.style.display = 'block'; } else { img.style.display = 'none'; txt.style.display = 'block'; }
+    if (L.color) { const r = document.documentElement.style; ['--hero', '--btn', '--accent'].forEach(k => r.setProperty(k, L.color)); }
+  }
+  if (L.su_header === 'white') { hero.style.background = '#fff'; hero.style.borderBottom = '1px solid #eee'; document.getElementById('logoText').style.color = '#1f2933'; }
+  else if (L.su_header === 'main' && L.color) hero.style.background = L.color;
+  if (L.su_welcome) { const w = document.getElementById('welcome'); w.textContent = L.su_welcome; w.style.display = 'block'; }
+  // Plain text from Settings → paragraphs; a short first line of a paragraph becomes its heading
+  const fmt = t => t.trim().split(/\n\s*\n/).map(p => { const ls = p.split('\n').map(E); return (ls.length > 1 && ls[0].length < 70 ? '<strong>' + ls.shift() + '</strong><br>' : '') + ls.join('<br>'); }).join('<br><br>');
+  const pol = document.getElementById('polBox'), wav = document.getElementById('wavBox');
+  const swap = h => (me ? h.replace(/Flip Lab/g, E(L.name)) : h).replace(/24 hours/g, hrs + ' hours');
+  pol.innerHTML = L.policy_text ? fmt(L.policy_text) : swap(pol.innerHTML);
+  wav.innerHTML = L.waiver_text ? fmt(L.waiver_text) : swap(wav.innerHTML);
+})();
 </script>
 </body>
 </html>
