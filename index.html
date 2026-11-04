@@ -495,6 +495,13 @@
       <label>Specialty</label><input id="co_spec" placeholder="e.g. Cheer, jumps">
       <button class="btn" onclick="addCoach()">+ Add coach</button>
       <div id="coMsg" class="msg"></div>
+      <div id="invBox" class="hidden" style="border-top:1px dashed #ddd;margin-top:12px;padding-top:10px"><b>Invite a coach to their own gym</b>
+        <div style="font-size:12px;color:var(--muted)">They get an empty FlipLab of their own. They never see your gym.</div>
+        <div class="row2"><div><label>Coach name</label><input id="iv_name" placeholder="Coach Jamie"></div><div><label>Phone or email</label><input id="iv_contact" placeholder="(513) 555-2210"></div></div>
+        <button class="btn" onclick="makeInvite()">Create invite link</button>
+        <div id="ivMsg" class="msg"></div>
+        <div id="ivList" style="margin-top:8px"></div>
+      </div>
     </div>
     <button class="btn ghost" style="margin-top:14px" onclick="$('acctModal').classList.add('hidden');signOut()">Sign out</button>
   </div>
@@ -742,7 +749,8 @@ async function openAcct() {
   const { data: { user } } = await sb.auth.getUser();
   $('acctEmail').textContent = user ? 'Signed in as ' + user.email : '';
   $('pw1').value = $('pw2').value = ''; $('pwMsg').textContent = '';
-  renderCoaches(); loadCal(); $('acctModal').classList.remove('hidden');
+  renderCoaches(); loadCal(); $('acctModal').classList.remove('hidden')
+  loadInvites();
 }
 
 // ================= PAIRINGS: current solo students + waitlist who could share a lesson =================
@@ -1174,6 +1182,43 @@ async function toggleCoach(id) {
   const r = await sb.from('coaches').update({ active: !c.active }).eq('id', id);
   if (r.error) return alert(r.error.message);
   c.active = !c.active; renderCoaches();
+}
+// ---- Coach invites (only the Flip Lab owner sees this). claim_invite in the database builds the new gym. ----
+const joinUrl = t => location.origin + location.pathname.replace(/[^/]*$/, '') + 'join.html?i=' + t;
+async function loadInvites() {
+  const o = await sb.rpc('is_platform_owner');
+  $('invBox').classList.toggle('hidden', !o.data); if (!o.data) return;
+  $('iv_name').value = $('iv_contact').value = ''; $('ivMsg').textContent = '';
+  const r = await sb.rpc('list_invites');
+  const rows = r.data || [], now = new Date().toISOString();
+  $('ivList').innerHTML = rows.map(i => {
+    const st = i.used_at ? '<span class="pill">Joined · ' + esc(i.gym_name || '') + '</span>'
+      : i.revoked ? '<span class="pill" style="background:#eee;color:#888">Turned off</span>'
+      : i.expires_at < now ? '<span class="pill" style="background:#eee;color:#888">Expired</span>'
+      : `<span class="pill" style="background:#FFF4D6;color:#7A5B00">Not joined</span> <button class="paybtn" onclick="shareInvite('${esc(i.token)}','${esc(i.contact || '')}')">Copy / text</button> <button class="paybtn" style="background:#FCEBEB;color:#A32D2D" onclick="revokeInvite('${esc(i.token)}')">Turn off</button>`;
+    return `<div class="arow" style="padding:6px 0"><div class="who"><b>${esc(i.coach_name)}</b><small>${esc(i.contact || '')}</small></div><div>${st}</div></div>`;
+  }).join('');
+}
+async function makeInvite() {
+  const m = $('ivMsg'); m.className = 'msg err';
+  const name = $('iv_name').value.trim(), contact = $('iv_contact').value.trim();
+  if (!name) return m.textContent = 'Enter the coach\'s name.';
+  const r = await sb.rpc('create_invite', { p_name: name, p_contact: contact });
+  if (r.error) return m.textContent = r.error.message;
+  await loadInvites(); shareInvite(r.data, contact);
+}
+async function shareInvite(t, contact) {
+  const url = joinUrl(t), m = $('ivMsg');
+  try { await navigator.clipboard.writeText(url); m.className = 'msg'; m.textContent = '✓ Link copied — works once, for 7 days'; }
+  catch (e) { prompt('Copy this invite link:', url); }
+  const d = String(contact || '').replace(/\D/g, '');
+  if (d.length >= 10 && confirm('Text the link to ' + contact + ' from your phone?'))
+    location.href = 'sms:' + d + '?&body=' + encodeURIComponent('Here is your FlipLab invite: ' + url);
+}
+async function revokeInvite(t) {
+  if (!confirm('Turn off this invite link?')) return;
+  const r = await sb.rpc('revoke_invite', { p_token: t }); if (r.error) return alert(r.error.message);
+  loadInvites();
 }
 async function changePw() {
   const a = $('pw1').value, b = $('pw2').value, m = $('pwMsg');

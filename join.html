@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Join FlipLab</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  body { margin:0; font-family:-apple-system, system-ui, Segoe UI, Roboto, Arial, sans-serif; background:#f3f5f7; color:#1f2933; }
+  nav { background:#1f2933; color:#fff; padding:14px 18px; font-weight:700; font-size:17px; } nav span { color:#3ecf9e; }
+  .card { max-width:380px; margin:28px auto; background:#fff; border-radius:16px; padding:24px 20px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  h2 { margin:0 0 4px; font-size:20px; } .sub { color:#6b7680; font-size:14px; margin-bottom:8px; }
+  label { display:block; font-size:13px; color:#6b7680; margin:12px 0 4px; }
+  input { width:100%; box-sizing:border-box; padding:11px; font-size:16px; border:1px solid #e2e6ea; border-radius:8px; }
+  button { width:100%; margin-top:18px; padding:13px; font-size:16px; font-weight:600; border:0; border-radius:8px; background:#3ecf9e; color:#fff; }
+  button:disabled { opacity:.6; }
+  .link { background:none; color:#1c7a5a; font-weight:500; font-size:14px; margin-top:12px; padding:6px; }
+  .msg { margin-top:12px; font-size:14px; } .err { color:#d64545; }
+  .box { padding:14px; border-radius:10px; background:#FCEBEB; color:#791F1F; font-size:15px; } .ok { background:#e6f8f1; color:#1c7a5a; }
+</style>
+</head>
+<body>
+<nav>Flip<span>Lab</span> 3.0</nav>
+<div class="card" id="c"><div class="sub">Loading…</div></div>
+<script>
+// Coach invite page. Steve creates the link in Account → Coaches. The coach makes a login here;
+// claim_invite (database) creates their own empty gym, makes them its owner, and marks the link used.
+const sb = supabase.createClient('https://angmtyojkwlrefxpcgoa.supabase.co', 'sb_publishable_fPciNfnNHpHQikB8mqHNpw_hIVRIGo5');
+const tok = new URLSearchParams(location.search).get('i') || '';
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+let info = null, signIn = false;
+const KEY = 'fl3_join_' + tok;   // remembers the gym name typed before an email-confirm round trip
+function saved() { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { return {}; } }
+function save(v) { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch (e) {} }
+
+function form() {
+  const s = saved();
+  $('c').innerHTML = `<h2>${signIn ? 'Sign in to finish' : 'Coach Steve invited you'}</h2>
+    <div class="sub">${signIn ? 'Use the login you already made.' : 'Make your login and your own gym is set up for you.'}</div>
+    ${signIn ? '' : `<label>Your name</label><input id="nm" value="${esc(s.nm || info.coach_name || '')}" autocomplete="name">`}
+    <label>Gym name</label><input id="gn" value="${esc(s.gn || '')}" placeholder="Jamie's Tumbling">
+    <label>Email</label><input id="em" type="email" autocomplete="email" value="${esc(s.em || '')}">
+    <label>Password</label><input id="pw" type="password" autocomplete="${signIn ? 'current-password' : 'new-password'}" placeholder="${signIn ? '' : 'At least 8 characters'}">
+    <button id="go" onclick="go()">${signIn ? 'Sign in and create my gym' : 'Create my gym'}</button>
+    <button class="link" onclick="signIn=!signIn;form()">${signIn ? 'New here? Make a login' : 'Already made your login? Sign in'}</button>
+    <div id="m" class="msg"></div>`;
+}
+function err(t) { $('m').className = 'msg err'; $('m').textContent = t; const b = $('go'); if (b) { b.disabled = false; b.textContent = signIn ? 'Sign in and create my gym' : 'Create my gym'; } }
+
+async function go() {
+  const nm = signIn ? (saved().nm || info.coach_name) : $('nm').value.trim();
+  const gn = $('gn').value.trim(), em = $('em').value.trim(), pw = $('pw').value;
+  if (!signIn && !nm) return err('Enter your name.');
+  if (!gn) return err('Enter your gym name.');
+  if (!em) return err('Enter your email.');
+  if (!signIn && pw.length < 8) return err('Use at least 8 characters for the password.');
+  save({ nm, gn, em });
+  $('go').disabled = true; $('go').textContent = 'Working…'; $('m').className = 'msg'; $('m').textContent = '';
+  const r = signIn ? await sb.auth.signInWithPassword({ email: em, password: pw })
+                   : await sb.auth.signUp({ email: em, password: pw, options: { emailRedirectTo: location.href } });
+  if (r.error) return err(r.error.message);
+  if (!r.data.session) {   // email confirmation is turned on
+    $('c').innerHTML = `<h2>Check your email</h2><div class="box ok">We sent a confirm link to <b>${esc(em)}</b>. Tap it and you'll come back here to finish.</div>
+      <button class="link" onclick="signIn=true;form()">Already confirmed? Sign in</button>`;
+    return;
+  }
+  await claim(gn, nm);
+}
+
+async function claim(gn, nm) {
+  const r = await sb.rpc('claim_invite', { p_token: tok, p_gym_name: gn, p_coach_name: nm });
+  if (r.error) {
+    if (!$('go')) form();
+    return err(r.error.message);
+  }
+  try { localStorage.removeItem(KEY); } catch (e) {}
+  $('c').innerHTML = `<h2>You're in</h2><div class="box ok"><b>${esc(gn)}</b> is ready.</div><button onclick="location.href='index.html'">Open my admin</button>`;
+}
+
+async function load() {
+  const r = await sb.rpc('invite_info', { p_token: tok });
+  info = r.data;
+  if (r.error || !info) return $('c').innerHTML = `<div class="box">This invite link isn't valid.</div>`;
+  if (info.status !== 'ok') {
+    const t = { used: 'This invite link was already used.', expired: 'This invite link expired. Ask Coach Steve for a new one.', revoked: 'This invite link was turned off.' }[info.status];
+    return $('c').innerHTML = `<div class="box">${t}</div><button class="link" onclick="location.href='index.html'">Go to sign in</button>`;
+  }
+  // Came back from the email-confirm link (or already signed in): finish automatically
+  const { data: { session } } = await sb.auth.getSession();
+  const s = saved();
+  if (session && s.gn) { $('c').innerHTML = '<div class="sub">Setting up your gym…</div>'; return claim(s.gn, s.nm || info.coach_name); }
+  signIn = !!session; form();
+}
+load();
+</script>
+</body>
+</html>
