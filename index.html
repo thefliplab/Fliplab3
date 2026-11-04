@@ -716,8 +716,10 @@ const sb = supabase.createClient('https://angmtyojkwlrefxpcgoa.supabase.co', 'sb
 // ===== Other gyms: "send it yourself" (Steve's phone / Yahoo / Voice are Flip Lab only — the server refuses other gyms) =====
 // Every sms-send / send-email / voice-send call from a non-Flip Lab gym opens a list instead: 📱 Text / ✉️ Email buttons
 // that open the coach's own Messages / Mail app with the message filled in. Logged as "Sent by hand" (best effort).
-const sbInvoke = sb.functions.invoke.bind(sb.functions);
-sb.functions.invoke = async (name, opts) => {
+// sb.functions makes a new client on every read, so keep one and pin it to sb
+const sbFn = sb.functions, sbInvoke = sbFn.invoke.bind(sbFn);
+Object.defineProperty(sb, 'functions', { get: () => sbFn });
+sbFn.invoke = async (name, opts) => {
   if (!gymSlug || gymSlug === 'fliplab' || !['sms-send', 'send-email', 'voice-send'].includes(name)) return sbInvoke(name, opts);
   const b = (opts && opts.body) || {};
   if (b.check) return { data: name === 'voice-send' ? { ok: false } : { checked: 0, changed: 0 }, error: null };
