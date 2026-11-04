@@ -265,7 +265,7 @@
   <!-- Messages (incoming texts from parents) -->
   <section id="msgsView" class="hidden">
     <div id="ms_list">
-      <div class="sec" style="margin-top:4px">Messages <span id="ms_cnt" style="font-weight:400;font-size:12px;color:#888"></span> <button class="paybtn" style="background:#fff;color:#d64545;border:1px solid #d64545" onclick="msDeleteAll()">🗑 Delete all</button>
+      <div class="sec" style="margin-top:4px">Messages <span id="ms_cnt" style="font-weight:400;font-size:12px;color:#888"></span> <button class="paybtn" style="background:#fff;color:#d64545;border:1px solid #d64545" onclick="msDeleteAll()">🗑 Delete all</button> <button class="paybtn" style="background:#fff;color:#185FA5;border:1px solid #185FA5" onclick="msSelToggle()">☑ Select</button>
         <select id="ms_f" onchange="ss.set('msF',this.value);msRender()" style="width:auto;margin:0;padding:4px 6px;font-size:13px"><option value="all">All</option><option value="unread">Unread</option></select></div>
       <div class="card" style="padding:0;overflow:hidden" id="ms_threads"><div class="center">Loading…</div></div>
       <small style="color:#888;display:block;margin:6px 2px">Texts parents send to your cell. Only numbers on file as a parent phone show up. Last 60 days.</small>
@@ -2665,12 +2665,29 @@ function msRender() {
   const totU = t.reduce((n, x) => n + x.unread, 0);
   $('ms_cnt').textContent = t.length + ' conversation' + (t.length === 1 ? '' : 's') + (totU ? ' · ' + totU + ' unread' : '');
   if (f === 'unread') t = t.filter(x => x.unread);
-  $('ms_threads').innerHTML = t.length ? t.map(x => `<div class="arow" style="cursor:pointer" onclick="msShow('${x.phone}')">
+  const bar = msSel ? `<div class="arow" style="background:#fff5f5;gap:8px"><b style="flex:1">${msSel.size} selected</b>
+      <button class="paybtn" style="background:#fff;color:#185FA5;border:1px solid #185FA5" onclick="msSelAll()">All</button>
+      <button class="paybtn" style="background:#d64545;color:#fff" onclick="msDeleteSel()">🗑 Delete</button>
+      <button class="paybtn" style="background:#fff;color:#888;border:1px solid #ccc" onclick="msSelToggle()">Cancel</button></div>` : '';
+  $('ms_threads').innerHTML = bar + (t.length ? t.map(x => `<div class="arow" style="cursor:pointer" onclick="${msSel ? 'msTick' : 'msShow'}('${x.phone}')">
+      ${msSel ? `<input type="checkbox" ${msSel.has(x.phone) ? 'checked' : ''} style="pointer-events:none;width:18px;height:18px;flex-shrink:0">` : ''}
       <span style="width:9px;height:9px;border-radius:50%;background:${x.unread ? '#d64545' : 'transparent'};flex-shrink:0"></span>
       <div class="who" style="flex:1;min-width:0"><b>${esc(x.name)}${x.kids ? ' <span style="font-weight:400;color:#888">(' + esc(x.kids) + ')</span>' : ''}</b>
       <small style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${x.last.direction === 'OUT' ? 'You: ' : ''}${esc(x.last.body)}</small></div>
       <small style="color:#888;white-space:nowrap">${msWhen(x.last.received_at)}</small></div>`).join('')
-    : '<div class="center">' + (f === 'unread' ? 'No unread messages' : 'No texts from parents yet') + '</div>';
+    : '<div class="center">' + (f === 'unread' ? 'No unread messages' : 'No texts from parents yet') + '</div>');
+}
+// Tick-to-delete: Select mode shows a checkbox on each conversation
+let msSel = null;
+function msSelToggle() { msSel = msSel ? null : new Set(); msRender(); }
+function msTick(phone) { msSel.has(phone) ? msSel.delete(phone) : msSel.add(phone); msRender(); }
+function msSelAll() { const t = msThreads(), f = $('ms_f').value; (f === 'unread' ? t.filter(x => x.unread) : t).forEach(x => msSel.add(x.phone)); msRender(); }
+async function msDeleteSel() {
+  if (!msSel.size) return alert('Tick the conversations to delete first.');
+  if (!confirm('Delete ' + msSel.size + ' conversation' + (msSel.size === 1 ? '' : 's') + '?')) return;
+  const ids = msRows.filter(r => msSel.has(r.phone)).map(r => r.id);
+  for (let i = 0; i < ids.length; i += 200) { const { error } = await sb.from('text_log').update({ status: 'Deleted' }).in('id', ids.slice(i, i + 200)); if (error) return alert(error.message); }
+  msRows = msRows.filter(r => !ids.includes(r.id)); msSel = null; msBadge(); msRender();
 }
 async function msShow(phone, quiet) {
   const x = msThreads().find(t => t.phone === phone);
