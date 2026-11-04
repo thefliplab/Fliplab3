@@ -330,7 +330,7 @@ input:focus{outline:none;border-color:var(--btn);box-shadow:0 0 0 3px rgba(67,73
 <script>
 const sb = supabase.createClient('https://angmtyojkwlrefxpcgoa.supabase.co', 'sb_publishable_fPciNfnNHpHQikB8mqHNpw_hIVRIGo5');
 const GYM = new URLSearchParams(location.search).get('gym') || 'fliplab';
-const VENMO = 'https://venmo.com/code?user_id=2634245503713280412', ZELLE = '951-317-5158';
+let VENMO = 'https://venmo.com/code?user_id=2634245503713280412', ZELLE = '951-317-5158', COACH = 'Coach Steve', MINE = true;   // other gyms: set from signup_look
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
@@ -423,7 +423,7 @@ async function loadSlots(forWaitlist) {
   const joining = sharingFriend() && friends().length;
   list = allSlots.filter(s => !s.taken || (joining && s.friend));
   if (!list.length) {
-    $('slotGrid').innerHTML = `<div class="err">Coach Steve's private lesson schedule is currently full. We'd love to work with your athlete — tap <b>Join the waitlist</b> below and we'll reach out as soon as a spot opens.</div>`;
+    $('slotGrid').innerHTML = `<div class="err">${COACH}'s private lesson schedule is currently full. We'd love to work with your athlete — tap <b>Join the waitlist</b> below and we'll reach out as soon as a spot opens.</div>`;
     return;
   }
   $('slotGrid').innerHTML = (joining && !list.some(s => s.friend) ? '<div style="font-size:12px;color:#888;margin-bottom:10px">We couldn\'t find your friend\'s time — check the spelling, or pick an open time below.</div>' : '')
@@ -514,7 +514,7 @@ const waitPay = () => path === 'waitlist' && fmt !== 'class';
 function pickPay(p) {
   pay = p; ['Cash','Venmo','Zelle'].forEach(x => $('pay-' + x).classList.toggle('selected', x === p));
   $('payInfo').style.display = 'block';
-  if (waitPay()) { $('payInfo').innerHTML = '<strong>Nothing to pay now.</strong><br>Once Coach Steve finds you a spot, you\'ll pay at each lesson.'; return; }
+  if (waitPay()) { $('payInfo').innerHTML = '<strong>Nothing to pay now.</strong><br>Once ' + COACH + ' finds you a spot, you\'ll pay at each lesson.'; return; }
   $('payInfo').innerHTML = p === 'Cash' ? '<strong>Cash</strong><br>Please bring exact change to your lesson. Payment is due at the time of service.'
     : p === 'Venmo' ? `<strong>Venmo</strong><br>Follow the link below to make a payment, or save the link to pay later. You can pay now or when the lesson is complete. Please include your athlete's name and lesson date in the payment note.<br><br><a class="go" href="${VENMO}" target="_blank">Pay with Venmo →</a>`
     : `<strong>Zelle</strong><br>Send payment to <strong>${ZELLE}</strong><br>Please include your athlete's name and lesson date in the payment note. Payment is due at the time of service.`;
@@ -566,8 +566,9 @@ async function submitForm() {
   $('summaryBox').innerHTML = lines.join('<br>');
   if (res.result === 'waitlist') { $('doneTitle').textContent = "You're on the List!"; $('doneSub').textContent = "We'll reach out as soon as a spot opens that matches your availability."; }
   else if (hasSib) { $('doneTitle').textContent = 'Both Athletes Registered!'; $('doneSub').textContent = 'Both athletes have been registered and linked as a shared lesson.'; }
-  $('doneNext').textContent = res.result === 'waitlist' ? 'Coach Steve will text you when a spot opens up. A confirmation email is on its way.'
-    : 'Coach Steve will reach out to confirm your first session. Send payment via Venmo or Zelle (' + ZELLE + ') when you\'re ready, or bring cash. A confirmation email is on its way.';
+  const conf = MINE ? ' A confirmation email is on its way.' : '', ways = [VENMO && 'Venmo', ZELLE && 'Zelle (' + ZELLE + ')'].filter(Boolean).join(' or ');
+  $('doneNext').textContent = res.result === 'waitlist' ? COACH + ' will text you when a spot opens up.' + conf
+    : COACH + ' will reach out to confirm your first session. ' + (ways ? 'Send payment via ' + ways + ' when you\'re ready, or bring cash.' : 'Payment is due at each lesson.') + conf;
   show('Done');
 }
 
@@ -579,7 +580,15 @@ async function submitForm() {
   const E = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const me = GYM !== 'fliplab', hrs = +L.cancel_hrs || 24, hero = document.getElementById('site-hero');
   if (me) {
+    MINE = false; VENMO = L.c_venmo || ''; ZELLE = L.c_zelle || '';
+    if (L.coach) COACH = /^coach\b/i.test(L.coach) ? L.coach : 'Coach ' + L.coach;
     document.title = L.name + ' — Register Your Athlete';
+    document.querySelectorAll('.ltype-desc').forEach(el => el.textContent = el.textContent.replace('Coach Steve', COACH));
+    document.getElementById('zelleSub').textContent = ZELLE ? '— ' + ZELLE : '';
+    if (!VENMO) document.getElementById('pay-Venmo').style.display = 'none';
+    if (!ZELLE) document.getElementById('pay-Zelle').style.display = 'none';
+    const pd = document.querySelector('#photo-Yes .d'); if (pd) pd.textContent = pd.textContent.replace("Flip Lab's", L.name + "'s");
+    document.getElementById('doneSub').textContent = 'Welcome to ' + L.name + '! ' + COACH + ' will be in touch soon.';
     const img = document.getElementById('heroLogo'), txt = document.getElementById('logoText');
     txt.textContent = L.name; document.getElementById('hero-sub').style.display = 'none';
     if (L.logo_url) { img.src = L.logo_url; img.alt = L.name; txt.style.display = 'block'; } else { img.style.display = 'none'; txt.style.display = 'block'; }

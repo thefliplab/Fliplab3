@@ -486,13 +486,13 @@
     <label>Type it again</label><input id="pw2" type="password" autocomplete="new-password">
     <button class="btn" onclick="changePw()">Change password</button>
     <div id="pwMsg" class="msg"></div>
-    <div style="border-top:1px solid #eee;margin-top:14px;padding-top:10px"><b>Google Calendar sync</b>
+    <div style="border-top:1px solid #eee;margin-top:14px;padding-top:10px"><div id="calBox"><b>Google Calendar sync</b>
       <label>Sync</label><select id="cs_mode"><option value="off">Off</option><option value="test">Test calendar</option><option value="live">Live — real Flip Lab calendar</option></select>
       <label>Test calendar ID</label><input id="cs_test" placeholder="…@group.calendar.google.com">
       <label>Live calendar ID (Flip Lab)</label><input id="cs_live" placeholder="…@group.calendar.google.com">
       <div class="row2"><div><label>Other coaches' color</label><select id="cs_color"></select></div>
         <div><label>&nbsp;</label><label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="cs_class" style="width:auto"> Classes on calendar</label></div></div>
-      <button class="btn" onclick="saveCal()">Save calendar settings</button>
+      <button class="btn" onclick="saveCal()">Save calendar settings</button></div>
       <button class="btn ghost" style="margin-top:8px" onclick="testText()">📱 Send test text to my phone</button>
       <button class="btn ghost" style="margin-top:8px" onclick="testEmail()">✉️ Send test email</button>
       <div id="cs_msg" class="msg"></div>
@@ -1288,7 +1288,8 @@ async function loadSettings() {
   return !!v.setup_done || r.error != null;   // never trap Steve in the wizard if the read fails
 }
 function applySettings() {
-  $('printBtn').classList.toggle('hidden', !!gymSlug && gymSlug !== 'fliplab');   // print boxes are Steve's own (PR_BOXES)
+  const notMine = !!gymSlug && gymSlug !== 'fliplab';   // Print boxes, Google Calendar sync and Friday RSVP email run on Steve's own setup
+  ['printBtn', 'calBox', 'rf_bar'].forEach(id => $(id) && $(id).classList.toggle('hidden', notMine));
   ST_TABS.forEach(([t]) => $('tabBtn_' + t).classList.toggle('hidden', (SET.hide_tabs || []).includes(t)));
   Object.assign(PRICING.Solo, SET.prices.Solo); Object.assign(PRICING.Shared, SET.prices.Shared);
   const root = document.documentElement.style;
