@@ -168,7 +168,7 @@
       <button onclick="shiftWeek(1)">Next →</button>
       <div class="wklabel" id="wkLabel"></div>
       <button onclick="openAdd()" style="background:var(--mint);color:#fff;border:0;font-weight:600">+ Add lesson</button>
-      <button onclick="openPrint()">🖨 Print</button>
+      <button id="printBtn" onclick="openPrint()">🖨 Print</button>
     </div>
     <div class="wk">
       <select id="coachFilter" onchange="renderWeek()"><option value="">All coaches</option></select>
@@ -1230,7 +1230,7 @@ async function revokeInvite(t) {
 }
 // ================= GYM SETTINGS + FIRST-LOGIN SETUP WIZARD =================
 // gym_settings key 'settings' per gym. Flip Lab's row is {setup_done:true} → it keeps every default below.
-const SET_DEF = { color: '#3ecf9e', logo_url: '', lengths: ['30 min', '45 min', '60 min'], class_price: 20, pay_methods: ['Cash', 'Venmo', 'Zelle'], hide_tabs: [],
+const SET_DEF = { color: '#3ecf9e', logo_url: '', lengths: ['30 min', '45 min', '60 min'], class_price: 20, pay_methods: ['Cash', 'Venmo', 'Zelle'], hide_tabs: [], cancel_hrs: 24, c_email: '', c_text: '', c_venmo: '', c_zelle: '',
   prices: { Solo: { '30 min': '$40', '45 min': '$60', '60 min': '$80' }, Shared: { '30 min': '$30', '45 min': '$45', '60 min': '$60' } } };
 let SET = JSON.parse(JSON.stringify(SET_DEF)), gymSlug = '', wz = null, wzStep = 0;
 const payList = () => { const m = SET.pay_methods; return m.length > 1 ? m.slice(0, -1).join(', ') + ' or ' + m[m.length - 1] : m[0] || 'Cash'; };
@@ -1244,6 +1244,7 @@ async function loadSettings() {
   return !!v.setup_done || r.error != null;   // never trap Steve in the wizard if the read fails
 }
 function applySettings() {
+  $('printBtn').classList.toggle('hidden', !!gymSlug && gymSlug !== 'fliplab');   // print boxes are Steve's own (PR_BOXES)
   ST_TABS.forEach(([t]) => $('tabBtn_' + t).classList.toggle('hidden', (SET.hide_tabs || []).includes(t)));
   Object.assign(PRICING.Solo, SET.prices.Solo); Object.assign(PRICING.Shared, SET.prices.Shared);
   const root = document.documentElement.style;
@@ -1310,6 +1311,12 @@ function stDraw() {
     + sec('Payment buttons', 'These show when you record a payment.', 2)
     + `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Tabs</b><div style="color:var(--muted);font-size:13px">Tap to turn a tab off or on. Hiding a tab never deletes anything. Dashboard, Schedule and Students always show.</div>
        <div style="margin-top:8px">${ST_TABS.map(([t, n]) => { const off = (wz.hide_tabs || []).includes(t); return `<button class="paybtn" style="margin:0 6px 6px 0;padding:8px 12px;${off ? 'background:#eee;color:#aaa;text-decoration:line-through' : 'background:var(--mint-soft);color:#1c7a5a'}" onclick="stTab('${t}')">${off ? '' : '✓ '}${n}</button>`; }).join('')}</div></div>`
+    + `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Policies and contact</b><div style="color:var(--muted);font-size:13px">Shown to families on your sign-up page.</div>
+       <label>Cancel at least this far ahead</label><div>${[12, 24, 48].map(h => `<button class="paybtn" style="margin:0 6px 6px 0;padding:8px 12px;${+wz.cancel_hrs === h ? 'background:var(--mint-soft);color:#1c7a5a' : 'background:#eee;color:#888'}" onclick="wz.cancel_hrs=${h};stDraw()">${h} hrs</button>`).join('')}</div>
+       <label>Gym email</label><input type="email" value="${esc(wz.c_email)}" onchange="wz.c_email=this.value.trim()">
+       <label>Texting number</label><input type="tel" inputmode="numeric" value="${esc(wz.c_text)}" oninput="this.value=typingPhone(this.value)" onchange="wz.c_text=this.value.trim()">
+       <label>Venmo link</label><input value="${esc(wz.c_venmo)}" placeholder="https://venmo.com/…" onchange="wz.c_venmo=this.value.trim()">
+       <label>Zelle (phone or email)</label><input value="${esc(wz.c_zelle)}" onchange="wz.c_zelle=this.value.trim()"></div>`
     + `<button class="btn" style="margin-top:18px" onclick="stSave()">Save settings</button>
        <button class="btn ghost" style="margin-top:8px" onclick="stClose()">Cancel</button><div id="st_msg" class="msg"></div>`;
 }
