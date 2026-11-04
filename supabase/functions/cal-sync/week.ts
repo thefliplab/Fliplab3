@@ -50,8 +50,10 @@ function applyExceptions(lessons, exs) {
 
 // One week's lessons as they really are: weekly lessons running that week + that week's changes (Cancel / Move / Add / PriceOverride).
 // lessons = private_lessons not Cancelled/Dropped; exs = schedule_exceptions for week_start ws not Deleted/Expired; we = Sunday of the week.
+// Every-other-week lessons: extra.EveryOther = a Monday (YYYY-MM-DD) it runs; it runs every 2nd week from there.
+const offWeek = (p, ws) => { const a = (p.extra || {}).EveryOther; return !!a && Math.abs(Math.round((Date.parse(ws) - Date.parse(a)) / 6048e5)) % 2 === 1; };
 function buildWeek(lessons, exs, ws, we) {
-  const base = lessons.filter(p => !(p.start_date && p.start_date > we) && !(p.end_date && p.end_date <= ws));
+  const base = lessons.filter(p => !(p.start_date && p.start_date > we) && !(p.end_date && p.end_date <= ws) && !offWeek(p, ws));
   return applyExceptions(base, exs);
 }
 export { applyExceptions, buildWeek, timeVal, DAYS, runsBetween, priceFor, isSpecial };

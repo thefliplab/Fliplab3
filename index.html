@@ -444,6 +444,7 @@
     </div>
     <label>Price per lesson</label><input id="lm_price" type="number" min="0" step="1">
     <div id="lm_priceHint" style="font-size:11px;color:#888;margin:-6px 0 10px"></div>
+    <div id="lm_freqWrap"><label>How often</label><select id="lm_freq"><option value="">Every week</option><option value="2">Every other week (on this week)</option></select></div>
     <div id="lm_pair" class="pairbox hidden">🔗 Shared lesson with <b id="lm_partner"></b>
       <div class="chk" style="margin:6px 0 0"><input type="checkbox" id="lm_movePartner" checked><label for="lm_movePartner" style="color:#185FA5">Also apply to partner</label></div></div>
     <div id="lm_scopeWrap">
@@ -1381,7 +1382,7 @@ function renderSdPanel(t) {
   if (t === 'schedule') {
     const live = sd.lessons.filter(liveLesson), past = sd.lessons.filter(l => !liveLesson(l));
     const cls = sd.cls.filter(e => !['Dropped'].includes(e.status));
-    el.innerHTML = `<div class="sec" style="margin-top:0">Weekly lessons</div><div class="card" style="padding:0;overflow:hidden">${live.length ? live.map(l => row(`<b>${esc(l.day)} ${esc(l.time)}</b><small>${esc(l.coach || 'TBD')} · ${esc(l.duration || '30 min')} · ${esc(l.lesson_type || 'Solo')}${l.matched_with ? ' with ' + esc(l.matched_with) : ''}${l.start_date ? ' · since ' + esc(l.start_date) : ''}</small>`, `<div class="bal ok">${(l.extra || {}).SpecialPrice === 'Yes' ? esc(l.price || '') + ' ★' : l.lesson_type === 'Shared' ? priceFor(l.duration || '30 min', 'Shared') : esc(l.price || priceFor(l.duration || '30 min', 'Solo'))}</div>`)).join('') : '<div class="center">No weekly lessons</div>'}</div>
+    el.innerHTML = `<div class="sec" style="margin-top:0">Weekly lessons</div><div class="card" style="padding:0;overflow:hidden">${live.length ? live.map(l => row(`<b>${esc(l.day)} ${esc(l.time)}</b><small>${esc(l.coach || 'TBD')} · ${esc(l.duration || '30 min')} · ${esc(l.lesson_type || 'Solo')}${l.matched_with ? ' with ' + esc(l.matched_with) : ''}${(l.extra || {}).EveryOther ? ' · every other week' : ''}${l.start_date ? ' · since ' + esc(l.start_date) : ''}</small>`, `<div class="bal ok">${(l.extra || {}).SpecialPrice === 'Yes' ? esc(l.price || '') + ' ★' : l.lesson_type === 'Shared' ? priceFor(l.duration || '30 min', 'Shared') : esc(l.price || priceFor(l.duration || '30 min', 'Solo'))}</div>`)).join('') : '<div class="center">No weekly lessons</div>'}</div>
       <div class="sec">Classes<button class="paybtn" style="background:var(--mint);color:#fff" onclick="sdAddClass()">+ Add to a class</button></div><div class="card" style="padding:0;overflow:hidden">${cls.length ? cls.map(e => row(`<b>${esc(e.class_name || e.schedule_id)}</b><small>${esc(e.status || '')}${e.enroll_date ? ' · since ' + esc(e.enroll_date) : ''}</small>`)).join('') : '<div class="center">No classes</div>'}</div>
       ${past.length ? `<div class="sec">Past lessons</div><div class="card" style="padding:0;overflow:hidden">${past.slice(0, 20).map(l => row(`<span style="color:#888">${esc(l.day)} ${esc(l.time)} · ${esc(l.coach || '')} · ${esc(l.lesson_type || '')}</span><small>${esc(l.start_date || '…')} → ${esc(l.end_date || '')}</small>`)).join('')}</div>` : ''}
       <div style="font-size:12px;color:#888;margin-top:8px">To move, cancel or change a lesson, tap it on the Schedule tab.</div>`;
@@ -1443,9 +1444,8 @@ async function loadWeek(quiet) {
   weekAtt = A.data; weekPay = P.data; waitlist = W.data || [];
   if (C) { const ce = C.find(r => r.error); if (ce) { $('attList').innerHTML = '<div class="msg err">' + esc(ce.error.message) + '</div>'; return; } [clsSched, clsRoster, clsAtt] = C.map(r => r.data); clsOff = new Set((C[3].data || []).map(o => o.schedule_id)); clsRsvp = C[4].data || []; } monthTotal = (M.data || []).reduce((t, x) => t + (+x.amount || 0), 0);
   allLessons = L.data; dashNextMon = null; dashHist = null;
-  const base = L.data.filter(p => !(p.start_date && p.start_date > we) && !(p.end_date && p.end_date <= ws));
   weekEx = X.data;
-  weekRows = applyExceptions(base, X.data);
+  weekRows = buildWeek(L.data, X.data, ws, we);
   if (curTab === 'dashboard') { const C7 = await sb.from('claim_links').select('student_name,day,time,claimed_at').eq('status', 'won').gte('claimed_at', new Date(Date.now() - 7 * 864e5).toISOString()).order('claimed_at', { ascending: false }); recentClaims = C7.data || []; }
   weekSlots = S.data;
   const coaches = coachNames();
@@ -1580,6 +1580,7 @@ function openLesson(id) {
   $('lm_priceHint').textContent = isSpecial(p) ? '★ Special price — kept even in a shared slot. Set it to the regular price to remove it.'
     : 'Regular price. Change it + choose Permanent to give this family a special price going forward.';
   const oneOff = !!addExId(p.id);
+  $('lm_freqWrap').classList.toggle('hidden', oneOff); $('lm_freq').value = (p.extra || {}).EveryOther ? '2' : '';
   $('lm_scopeWrap').classList.toggle('hidden', oneOff); $('lm_oneoff').classList.toggle('hidden', !oneOff);
   $('lm_scope').value = 'week'; $('lm_startWrap').classList.add('hidden'); $('lm_start').value = weekStartStr();
   const pr = oneOff ? [] : partnersOf(p);
@@ -1631,6 +1632,13 @@ async function saveLesson() {
   const other = ch.duration !== (p.duration || '30 min') || ch.lesson_type !== p.lesson_type || priceChanged;
   $('lm_save').disabled = true; lmMsg('Saving…');
   let res;
+  // Every week ↔ every other week (this week = an "on" week); saved on the lesson itself (+ partner if ticked)
+  const freq = $('lm_freq').value;
+  if (!exId && freq !== ((p.extra || {}).EveryOther ? '2' : ''))
+    for (const r of [p, ...($('lm_movePartner').checked ? partnersOf(p) : [])]) {
+      res = await sb.from('private_lessons').update({ extra: { ...(r.extra || {}), EveryOther: freq ? weekStartStr() : '' } }).eq('id', r.id);
+      if (res.error) { $('lm_save').disabled = false; return lmMsg(res.error.message, true); }
+    }
   if (exId) {
     res = await sb.from('schedule_exceptions').update({ new_day: ch.day, new_time: ch.time, new_coach: ch.coach, lesson_type: ch.lesson_type, notes: ch.notes }).eq('id', exId);
   } else if ($('lm_scope').value === 'permanent' && (moved || other)) {
@@ -2237,8 +2245,7 @@ async function miAsk() {
 async function loadNextMonday() {
   const nm = new Date(weekDates()[0].date); nm.setDate(nm.getDate() + 7); const ws = ymd(nm), we = ymd(new Date(nm.getTime() + 6 * 864e5));
   const X = await sb.from('schedule_exceptions').select('*').eq('week_start', ws).not('status', 'in', '("Deleted","Expired")');
-  const base = allLessons.filter(p => !(p.start_date && p.start_date > we) && !(p.end_date && p.end_date <= ws));
-  dashNextMon = applyExceptions(base, X.data || []).filter(p => p.status !== 'Cancelled' && p.day === 'Monday');
+  dashNextMon = buildWeek(allLessons, X.data || [], ws, we).filter(p => p.status !== 'Cancelled' && p.day === 'Monday');
   if (curTab === 'dashboard') renderDash();
 }
 // Last 2 finished weeks: kids absent both weeks, and kids who came but didn't pay both weeks
