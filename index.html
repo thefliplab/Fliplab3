@@ -1230,7 +1230,7 @@ async function revokeInvite(t) {
 }
 // ================= GYM SETTINGS + FIRST-LOGIN SETUP WIZARD =================
 // gym_settings key 'settings' per gym. Flip Lab's row is {setup_done:true} → it keeps every default below.
-const SET_DEF = { color: '#3ecf9e', logo_url: '', lengths: ['30 min', '45 min', '60 min'], class_price: 20, pay_methods: ['Cash', 'Venmo', 'Zelle'], hide_tabs: [], cancel_hrs: 24, c_email: '', c_text: '', c_venmo: '', c_zelle: '',
+const SET_DEF = { color: '#3ecf9e', logo_url: '', lengths: ['30 min', '45 min', '60 min'], class_price: 20, pay_methods: ['Cash', 'Venmo', 'Zelle'], hide_tabs: [], cancel_hrs: 24, c_email: '', c_text: '', c_venmo: '', c_zelle: '', policy_text: '', waiver_text: '', su_header: 'navy', su_welcome: '',
   prices: { Solo: { '30 min': '$40', '45 min': '$60', '60 min': '$80' }, Shared: { '30 min': '$30', '45 min': '$45', '60 min': '$60' } } };
 let SET = JSON.parse(JSON.stringify(SET_DEF)), gymSlug = '', wz = null, wzStep = 0;
 const payList = () => { const m = SET.pay_methods; return m.length > 1 ? m.slice(0, -1).join(', ') + ' or ' + m[m.length - 1] : m[0] || 'Cash'; };
@@ -1301,9 +1301,40 @@ function wzPart(n) {
 let wzSet = false;
 // Tabs a coach can hide (Dashboard, Schedule, Students always show). Hiding only hides the button — no data is touched.
 const ST_TABS = [['openings', 'Openings'], ['slots', 'Slots'], ['classes', 'Classes'], ['pairings', 'Pairings'], ['msgs', 'Messages'], ['comm', 'Communicate'], ['attendance', 'Attendance'], ['payments', 'Payments']];
-function stTab(t) { const h = wz.hide_tabs = wz.hide_tabs || []; const i = h.indexOf(t); i >= 0 ? h.splice(i, 1) : h.push(t); stDraw(); }
-function stOpen() { wz = JSON.parse(JSON.stringify(SET)); wzSet = true; show('setupView'); stDraw(); }
+// Starter text for a gym's sign-up page (register.html has the same wording). Saved as '' while unchanged so the gym name / hours stay current.
+const ST_POLICY = `{gym} Private Lesson Cancellation Policy
+
+We value the time and commitment of our athletes and families, as well as the time of our coaches. To ensure fairness and consistency, the following cancellation policy is in effect for all private lessons:
+
+Advance Notice
+All cancellations must be made at least {hrs} hours in advance of the scheduled lesson. We understand that emergencies sometimes happen. In such cases, circumstances will be reviewed on a case-by-case basis at the discretion of your coach.
+
+Late Cancellations & No-Shows
+Any cancellation made with less than {hrs} hours notice, or failure to attend a scheduled lesson, will result in the full lesson fee being charged, unless otherwise approved under the emergency exception.
+
+Coach Cancellations
+If your coach must cancel a lesson, no fee will be charged. Since lessons are pay-as-you-go, no makeup is required, and we will simply see you at your next scheduled lesson.
+
+Payment Terms
+Lessons are considered pay-as-you-go unless otherwise arranged in writing. Payment is required at the time of service.
+
+Repeated Violations
+Consistent late cancellations or no-shows may result in the suspension or loss of private lesson privileges.
+
+By scheduling a private lesson, the client acknowledges and agrees to follow this cancellation policy.`;
+const ST_WAIVER = `By signing below, I acknowledge that participation in gymnastics, tumbling, and related activities at {gym} involves inherent risks of injury. I voluntarily assume all risks associated with participation. I agree to release, waive, and hold harmless {gym}, its coaches, staff, and facility from any and all claims, damages, or liability arising from participation, including injuries caused by negligence.
+
+I confirm that the athlete named in this registration is physically fit to participate. I will inform {gym} of any medical conditions or limitations that may affect participation.
+
+This waiver is binding on myself, my heirs, and my legal representatives. I have read this agreement and understand its terms.`;
+const stFill = (t, o) => t.replace(/\{gym\}/g, gymSlug === 'fliplab' ? 'Flip Lab' : gymTitle).replace(/\{hrs\}/g, (o || wz).cancel_hrs || 24);
+let stPolDef = '', stWavDef = '';   // starter text as last shown (with the hours at that moment)
+function stKeep() { if (!$('st_pol')) return; const p = $('st_pol').value.trim(), w = $('st_wav').value.trim();
+  wz.policy_text = p === stPolDef.trim() ? '' : p; wz.waiver_text = w === stWavDef.trim() ? '' : w; wz.su_welcome = $('st_wel').value.trim(); }
+function stTab(t) { stKeep(); const h = wz.hide_tabs = wz.hide_tabs || []; const i = h.indexOf(t); i >= 0 ? h.splice(i, 1) : h.push(t); stDraw(); }
+function stOpen() { wz = JSON.parse(JSON.stringify(SET)); wzSet = true; $('wzCard').innerHTML = ''; show('setupView'); stDraw(); }
 function stDraw() {
+  stKeep(); stPolDef = stFill(ST_POLICY); stWavDef = stFill(ST_WAIVER);
   const sec = (t, sub, n) => `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">${t}</b><div style="color:var(--muted);font-size:13px">${sub}</div>${wzPart(n)}</div>`;
   $('wzCard').innerHTML = `<div class="hdr" style="margin-top:0">⚙ Settings</div>`
     + sec('Look', 'Logo and main color for your top bar and buttons.', 0)
@@ -1317,10 +1348,21 @@ function stDraw() {
        <label>Texting number</label><input type="tel" inputmode="numeric" value="${esc(wz.c_text)}" oninput="this.value=typingPhone(this.value)" onchange="wz.c_text=this.value.trim()">
        <label>Venmo link</label><input value="${esc(wz.c_venmo)}" placeholder="https://venmo.com/…" onchange="wz.c_venmo=this.value.trim()">
        <label>Zelle (phone or email)</label><input value="${esc(wz.c_zelle)}" onchange="wz.c_zelle=this.value.trim()"></div>`
+    + `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Cancellation policy and waiver</b><div style="color:var(--muted);font-size:13px">Families agree to these when they sign up. Starter text is filled in. Edit it to fit your gym, and have your own waiver checked for your state.</div>
+       <label>Cancellation policy</label><textarea id="st_pol" rows="8" style="width:100%;font-size:13px">${esc(wz.policy_text || stPolDef)}</textarea>
+       <label>Liability waiver</label><textarea id="st_wav" rows="8" style="width:100%;font-size:13px">${esc(wz.waiver_text || stWavDef)}</textarea>
+       <a href="#" style="font-size:13px;color:var(--muted)" onclick="if(confirm('Put the starter text back?')){$('st_pol').value=stPolDef;$('st_wav').value=stWavDef;stDraw()}return false">Reset to starter text</a></div>`
+    + `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Sign-up page</b><div style="color:var(--muted);font-size:13px">Uses your logo and main color.</div>
+       <label>Header color</label><div>${[['navy', 'Navy'], ['white', 'White'], ['main', 'Main color']].map(([k, n]) => `<button class="paybtn" style="margin:0 6px 6px 0;padding:8px 12px;${wz.su_header === k ? 'background:var(--mint-soft);color:#1c7a5a' : 'background:#eee;color:#888'}" onclick="wz.su_header='${k}';stDraw()">${n}</button>`).join('')}</div>
+       <label>Welcome message</label><textarea id="st_wel" rows="2" style="width:100%" placeholder="Welcome! Pick a lesson time below.">${esc(wz.su_welcome)}</textarea>
+       <div style="margin-top:10px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden"><div style="padding:10px 12px;font-weight:700;${wz.su_header === 'white' ? 'background:#fff;color:#1f2933;border-bottom:1px solid #eee' : 'background:' + (wz.su_header === 'main' ? wz.color : '#0b1020') + ';color:#fff'}">${wz.logo_url ? `<img src="${esc(wz.logo_url)}" style="height:22px;vertical-align:middle;margin-right:6px;border-radius:3px">` : ''}${esc(gymTitle)}</div>
+         <div style="padding:10px 12px;font-size:13px;color:#555">${esc(wz.su_welcome || 'Your welcome message shows here.')}</div><div style="padding:0 12px 12px"><span style="display:inline-block;background:${wz.color};color:#fff;border-radius:6px;padding:6px 12px;font-size:13px">Continue</span></div></div>
+       <div style="font-size:12px;color:var(--muted);margin-top:4px">Preview only. Your sign-up page starts using these in the next update.</div></div>`
     + `<button class="btn" style="margin-top:18px" onclick="stSave()">Save settings</button>
        <button class="btn ghost" style="margin-top:8px" onclick="stClose()">Cancel</button><div id="st_msg" class="msg"></div>`;
 }
 async function stSave() {
+  stKeep();
   if (!wz.pay_methods.length) return alert('Keep at least one payment button.');
   const m = $('st_msg'); m.className = 'msg'; m.textContent = 'Saving…';
   const keep = JSON.parse(JSON.stringify(SET)); Object.assign(SET, wz);
