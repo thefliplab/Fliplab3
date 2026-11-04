@@ -125,11 +125,15 @@
   <!-- First-login setup wizard (new coaches) -->
   <section id="setupView" class="hidden"><div class="card" id="wzCard"></div></section>
 
+  <!-- Import students from another program -->
+  <section id="importView" class="hidden"><div class="card" id="imCard"></div></section>
+
   <!-- Students -->
   <section id="studentsView" class="hidden">
     <div class="toolbar">
       <input id="q" placeholder="Search students or parents" oninput="render()">
       <button class="btn" onclick="openEdit(null)">+ Add</button>
+      <button class="btn ghost" style="width:auto;white-space:nowrap" onclick="imStart()">⬆ Import</button>
     </div>
     <div class="stabs" id="grpTabs" style="margin-top:10px"></div>
     <div class="chk"><input type="checkbox" id="showInactive" onchange="render()"><label for="showInactive">Show inactive &amp; dropped</label></div>
@@ -722,7 +726,7 @@ const $ = id => document.getElementById(id);
 const ss = { get(k, d) { try { const v = sessionStorage.getItem('fl3_' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
              set(k, v) { try { sessionStorage.setItem('fl3_' + k, JSON.stringify(v)); } catch (e) {} } };
 function show(view) {
-  ['loginView','waitView','setupView','studentsView','editView','scheduleView','attendanceView','classesView','paymentsView','openingsView','dashboardView','slotsView','pairingsView','commView','msgsView'].forEach(v => $(v).classList.toggle('hidden', v !== view));
+  ['loginView','waitView','setupView','importView','studentsView','editView','scheduleView','attendanceView','classesView','paymentsView','openingsView','dashboardView','slotsView','pairingsView','commView','msgsView'].forEach(v => $(v).classList.toggle('hidden', v !== view));
   $('outBtn').classList.toggle('hidden', view === 'loginView');
   $('tabs').classList.toggle('hidden', !gymId);
   ['dashboard','schedule','attendance','classes','openings','pairings','comm','msgs','payments','students','slots'].forEach(t => $('tabBtn_' + t).classList.toggle('on', view === t + 'View'));
@@ -1323,7 +1327,158 @@ async function wzFinish(withSlots) {
   if (!(await saveSettings({ setup_done: true }))) return;
   $('wzCard').innerHTML = `<div style="text-align:center;padding:20px 0"><div style="font-size:40px">✅</div><div style="font-weight:600;font-size:18px;margin-top:6px">You're set up</div>
     <div style="color:var(--muted);margin:8px 0 16px">${added ? added + ' weekly times saved. ' : ''}Bringing in your students is coming next.</div>
-    <button class="btn" onclick="ss.set('tab','schedule');location.reload()">Open my schedule</button></div>`;
+    <button class="btn" onclick="ss.set('tab','schedule');ss.set('import',1);location.reload()">Bring in my students</button>
+    <button class="btn ghost" style="margin-top:8px" onclick="ss.set('tab','schedule');location.reload()">Open my schedule</button></div>`;
+}
+
+// ================= IMPORT STUDENTS (from another program's CSV / Excel / pasted rows) =================
+// Only headers + 3 sample rows go to the AI (edge fn import-map). Everything imported is tagged extra.ImportBatch so it can be undone.
+const IM_FIELDS = { full_name: 'Student name (whole)', first_name: 'Student first name', last_name: 'Student last name', dob: 'Birthday', parent_name: 'Parent name', phone: 'Phone', email: 'Email',
+  level: 'Level', notes: 'Notes', lesson_day: 'Lesson day', lesson_time: 'Lesson time', lesson_daytime: 'Lesson day + time', waiver: 'Waiver signed', skip: '— Skip —' };
+let im = null;
+function imStart() { im = { step: 0, head: [], rows: [], map: {} }; show('importView'); imDraw(); }
+function imClose() { im = null; go('students'); }
+function imCsv(t) {   // CSV or tab-separated (pasted) → array of rows; handles quotes
+  const sep = (t.split('\n')[0].match(/\t/g) || []).length >= (t.split('\n')[0].match(/,/g) || []).length && /\t/.test(t) ? '\t' : ',';
+  const out = []; let row = [], cur = '', q = false;
+  for (let i = 0; i < t.length; i++) { const c = t[i];
+    if (q) { if (c === '"' && t[i + 1] === '"') { cur += '"'; i++; } else if (c === '"') q = false; else cur += c; }
+    else if (c === '"') q = true; else if (c === sep) { row.push(cur); cur = ''; } else if (c === '\n' || c === '\r') { if (c === '\r' && t[i + 1] === '\n') i++; row.push(cur); out.push(row); row = []; cur = ''; } else cur += c; }
+  if (cur || row.length) { row.push(cur); out.push(row); }
+  return out.filter(r => r.some(c => String(c).trim()));
+}
+async function imFile(inp) {
+  const f = inp.files[0]; if (!f) return; const m = $('im_msg'); m.className = 'msg'; m.textContent = 'Reading…';
+  try {
+    let rows;
+    if (/\.(xlsx|xls)$/i.test(f.name)) {
+      if (!window.XLSX) await new Promise((ok, no) => { const sc = document.createElement('script'); sc.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'; sc.onload = ok; sc.onerror = no; document.head.appendChild(sc); });
+      const wb = XLSX.read(await f.arrayBuffer(), { cellDates: true });
+      rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, dateNF: 'yyyy-mm-dd', defval: '' });
+      rows = rows.filter(r => r.some(c => String(c).trim()));
+    } else rows = imCsv(await f.text());
+    imLoad(rows);
+  } catch (e) { m.className = 'msg err'; m.textContent = "Couldn't read that file. Try saving it as CSV."; }
+}
+function imPaste() { const t = $('im_paste').value; if (!t.trim()) return; imLoad(imCsv(t)); }
+async function imLoad(rows) {
+  const m = $('im_msg');
+  if (rows.length < 2) { m.className = 'msg err'; return m.textContent = 'Need a header row plus at least one student.'; }
+  im.head = rows[0].map((h, i) => String(h).trim() || 'Column ' + (i + 1)); im.rows = rows.slice(1).map(r => im.head.map((_, i) => String(r[i] ?? '').trim()));
+  m.className = 'msg'; m.textContent = 'Matching columns…';
+  im.map = imGuess(im.head); im.ai = false;
+  try { const r = await sb.functions.invoke('import-map', { body: { headers: im.head, samples: im.rows.slice(0, 3) } }); if (r.data && r.data.map) { im.map = r.data.map; im.ai = true; } } catch (e) {}
+  im.step = 1; imDraw();
+}
+function imGuess(head) {   // fallback when AI is unavailable
+  const used = new Set(), out = {};
+  const rules = [['email', /mail/i], ['phone', /phone|cell|mobile|tel/i], ['dob', /birth|dob|bday/i], ['parent_name', /parent|guardian|mom|dad|mother|father/i], ['waiver', /waiver|release/i],
+    ['first_name', /first/i], ['last_name', /last|surname/i], ['lesson_daytime', /day.*time|schedule|slot/i], ['lesson_day', /^day|weekday/i], ['lesson_time', /time/i], ['level', /level|class|group/i], ['notes', /note|comment/i], ['full_name', /name|athlete|student|child/i]];
+  head.forEach(h => { const r = rules.find(([f, re]) => re.test(h) && !used.has(f)); out[h] = r ? (used.add(r[0]), r[0]) : 'skip'; });
+  return out;
+}
+// ---- value cleanup ----
+function imDate(v) {
+  v = String(v || '').trim(); if (!v) return ''; let m;
+  if ((m = v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) return m[1] + '-' + m[2].padStart(2, '0') + '-' + m[3].padStart(2, '0');
+  if ((m = v.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/))) { let y = +m[3]; if (y < 100) y += y > (new Date().getFullYear() % 100) ? 1900 : 2000; if (+m[1] > 12 || +m[2] > 31 || !+m[1] || !+m[2]) return null; return y + '-' + m[1].padStart(2, '0') + '-' + m[2].padStart(2, '0'); }
+  const d = new Date(v); return isNaN(d) || d.getFullYear() < 1950 ? null : ymd(d);
+}
+function imDay(v) { const t = String(v || '').trim().toLowerCase().slice(0, 2); return DAYS.find(d => d.toLowerCase().startsWith(t)) && t.length === 2 ? DAYS.find(d => d.toLowerCase().startsWith(t)) : null; }
+function imTime(v) {
+  const m = String(v || '').trim().match(/(\d{1,2})(?::(\d{2}))?\s*([ap])?\.?m?\.?/i); if (!m) return null;
+  let h = +m[1], mm = +(m[2] || 0); if (h > 23 || mm > 59) return null;
+  if (m[3]) { if (/p/i.test(m[3]) && h < 12) h += 12; if (/a/i.test(m[3]) && h === 12) h = 0; } else if (h >= 1 && h <= 9) h += 12;   // no am/pm: 1–9 → afternoon
+  return ((h % 12) || 12) + ':' + String(mm).padStart(2, '0') + ' ' + (h < 12 ? 'AM' : 'PM');
+}
+function imParse() {   // rows → clean records + problems
+  const col = f => im.head.find(h => im.map[h] === f), get = (r, f) => { const h = col(f); return h ? r[im.head.indexOf(h)] : ''; };
+  const keyOf = (f, l, d) => (f + '|' + l).toLowerCase().replace(/\s+/g, '') + '|' + (d || '');
+  const seen = {}, times = {};
+  return im.rows.map((r, i) => {
+    let first = get(r, 'first_name'), last = get(r, 'last_name'); const full = get(r, 'full_name');
+    if (!first && full) { if (full.includes(',')) { [last, first] = full.split(',').map(x => x.trim()); } else { const p = full.trim().split(/\s+/); first = p.shift(); last = p.join(' '); } }
+    const rawDob = get(r, 'dob'), dob = imDate(rawDob);
+    let day = imDay(get(r, 'lesson_day')), time = imTime(get(r, 'lesson_time')); const dt = get(r, 'lesson_daytime');
+    if (dt) { day = day || imDay(dt.split(/[\s,@]+/)[0]); time = time || imTime(dt.replace(/^[A-Za-z]+\.?,?\s*/, '')); }
+    const hasLesson = !!(get(r, 'lesson_day') || get(r, 'lesson_time') || dt);
+    const wv = get(r, 'waiver'), wDate = imDate(wv), signed = !!wDate || /^(y|yes|true|signed|x|✓|done|complete)/i.test(wv);
+    const rec = { i, first: (first || '').trim(), last: (last || '').trim(), dob: dob || null, parent: get(r, 'parent_name'), phone: fmtPhone(get(r, 'phone')), email: get(r, 'email').toLowerCase(),
+      level: get(r, 'level'), notes: get(r, 'notes'), day, time, signed, wDate: wDate || null, issues: [], act: 'import' };
+    if (!rec.first) { rec.issues.push(['bad', 'No student name']); rec.act = 'skip'; return rec; }
+    const k = keyOf(rec.first, rec.last, rec.dob);
+    if (seen[k] != null) { rec.issues.push(['bad', 'Same kid as row ' + (seen[k] + 2)]); rec.act = 'skip'; } else seen[k] = i;
+    if (students.some(s => keyOf(s.first_name || '', s.last_name || '', rec.dob ? s.dob : '') === keyOf(rec.first, rec.last, rec.dob ? rec.dob : ''))) { rec.issues.push(['bad', 'Already in your students']); rec.act = 'skip'; }
+    if (!rec.phone && !rec.email) rec.issues.push(['warn', 'No phone or email']);
+    if (rawDob && !dob) rec.issues.push(['warn', "Can't read birthday \"" + rawDob + '"']);
+    if (hasLesson) {
+      if (!day || !time) { rec.issues.push(['warn', "Can't read lesson time — imported without it"]); rec.day = rec.time = null; }
+      else {
+        if (im.slots && !im.slots.has(day + '|' + time)) rec.issues.push(['warn', 'Lesson ' + day.slice(0, 3) + ' ' + time + ' is not one of your slots']);
+        const tk = day + '|' + time, other = (im.taken || {})[tk] || (rec.act !== 'skip' ? times[tk] : null);
+        if (other) { rec.issues.push(['bad', 'Same lesson time as ' + other]); if (rec.act === 'import') rec.act = 'nolesson'; }
+        else if (rec.act !== 'skip') times[tk] = rec.first + ' ' + rec.last;
+      }
+    }
+    return rec;
+  });
+}
+async function imCheck() {
+  const vals = Object.values(im.map);
+  if (!vals.includes('full_name') && !vals.includes('first_name')) return alert('Pick which column has the student name.');
+  const [S, L] = await Promise.all([sb.from('available_slots').select('day,time').eq('active', true), sb.from('private_lessons').select('day,time,student_name,end_date,status')]);
+  const today = ymd(new Date());
+  im.slots = (S.data || []).length ? new Set(S.data.map(x => x.day + '|' + x.time)) : null;
+  im.taken = {}; (L.data || []).filter(l => !['Cancelled', 'Dropped'].includes(l.status) && (!l.end_date || l.end_date > today)).forEach(l => im.taken[l.day + '|' + l.time] = l.student_name);
+  im.recs = imParse(); im.step = 2; imDraw();
+}
+function imDraw() {
+  const n = im.step, last = SET.last_import && (Date.now() - new Date(SET.last_import.at)) < 864e5 ? SET.last_import : null;
+  const top = `<div class="hdr" style="margin-top:0">Bring in your students<span style="font-weight:400;font-size:13px">${n < 3 ? 'Step ' + (n + 1) + ' of 3' : ''}</span></div>`;
+  let b = '';
+  if (n === 0) b = `${last ? `<div class="arow" style="background:#FFF4D6;border-radius:8px;padding:8px 10px;margin-bottom:10px"><div class="who"><b>Last import: ${last.count} students</b><small>Undo removes those students, their lessons and waivers</small></div><button class="paybtn" style="background:#FCEBEB;color:#A32D2D" onclick="imUndo()">Undo</button></div>` : ''}
+    <div style="color:var(--muted);font-size:14px">Export your students from your old program or spreadsheet, then upload it here. Google Sheets: File → Download → CSV.</div>
+    <label>Upload a file</label><input type="file" accept=".csv,.txt,.xlsx,.xls" onchange="imFile(this)">
+    <label>…or paste rows from a spreadsheet (include the header row)</label><textarea id="im_paste" rows="5" style="width:100%;box-sizing:border-box;font-size:14px" placeholder="Name	Birthday	Parent	Phone"></textarea>
+    <button class="btn ghost" style="margin-top:8px" onclick="imPaste()">Use pasted rows</button><div id="im_msg" class="msg"></div>`;
+  if (n === 1) b = `<div style="font-size:14px;background:var(--mint-soft);color:#1c7a5a;padding:8px 10px;border-radius:8px">${im.ai ? '✨ AI matched your columns.' : 'Matched by column name.'} Check each one — ${im.rows.length} rows found.</div>
+    ${im.head.map((h, i) => `<div class="arow" style="padding:6px 0"><div class="who"><b>${esc(h)}</b><small>${esc(im.rows.slice(0, 2).map(r => r[i]).filter(Boolean).join(' · ').slice(0, 40))}</small></div>
+      <select style="width:52%" onchange="im.map['${esc(h).replace(/'/g, '&#39;')}']=this.value">${Object.entries(IM_FIELDS).map(([k, v]) => `<option value="${k}"${im.map[h] === k ? ' selected' : ''}>${v}</option>`).join('')}</select></div>`).join('')}
+    <div class="row2" style="margin-top:14px"><div><button class="btn ghost" onclick="im.step=0;imDraw()">Back</button></div><div><button class="btn" onclick="imCheck()">Next</button></div></div>`;
+  if (n === 2) {
+    const R = im.recs, go_ = R.filter(r => r.act !== 'skip'), probs = R.filter(r => r.issues.length), les = go_.filter(r => r.act === 'import' && r.day).length, wv = go_.filter(r => r.signed).length;
+    b = `<div class="row2"><div class="card" style="margin:0;text-align:center"><small style="color:var(--muted)">Ready</small><div style="font-size:22px;font-weight:700">${go_.length}</div></div><div class="card" style="margin:0;text-align:center"><small style="color:var(--muted)">Need a look</small><div style="font-size:22px;font-weight:700;color:#7A5B00">${probs.length}</div></div></div>
+      <div style="font-size:13px;color:var(--muted);margin:8px 0">${les} weekly lessons · ${wv} waivers${im.slots ? '' : ' · no slots set up yet, so times aren\'t checked'}</div>
+      ${probs.map(r => `<div class="arow" style="padding:7px 0;align-items:flex-start"><div class="who"><b>${esc(r.first + ' ' + r.last)}</b>${r.issues.map(([t, x]) => `<small style="color:${t === 'bad' ? '#A32D2D' : '#7A5B00'}">${esc(x)}</small>`).join('')}</div>
+        <select style="width:44%" onchange="im.recs[${r.i}].act=this.value;imDraw()">${[['import', 'Import'], ['nolesson', 'Import, no lesson'], ['skip', 'Skip']].filter(([k]) => k !== 'nolesson' || r.day).map(([k, v]) => `<option value="${k}"${r.act === k ? ' selected' : ''}>${v}</option>`).join('')}</select></div>`).join('') || '<div class="center">No problems found 🎉</div>'}
+      <div class="row2" style="margin-top:14px"><div><button class="btn ghost" onclick="im.step=1;imDraw()">Back</button></div><div><button class="btn" id="im_go" onclick="imRun()">Import ${go_.length}</button></div></div><div id="im_msg" class="msg"></div>`;
+  }
+  if (n === 3) b = `<div style="text-align:center;padding:16px 0"><div style="font-size:40px">✅</div><div style="font-weight:600;font-size:18px">${im.done.s} students in</div>
+    <div style="color:var(--muted);margin:6px 0 14px">${im.done.l} weekly lessons · ${im.done.w} waivers</div><button class="btn" onclick="imClose()">See my students</button>
+    <button class="btn ghost" style="margin-top:8px" onclick="imUndo()">Undo this import</button><div id="im_msg" class="msg"></div></div>`;
+  $('imCard').innerHTML = top + b + (n < 3 ? '<div style="text-align:center;margin-top:12px"><a href="#" onclick="imClose();return false" style="color:var(--muted);font-size:13px">Cancel</a></div>' : '');
+}
+async function imRun() {
+  const btn = $('im_go'), m = $('im_msg'); btn.disabled = true; btn.textContent = 'Importing…';
+  const batch = 'IMP' + Date.now(), today = ymd(new Date()), recs = im.recs.filter(r => r.act !== 'skip');
+  const coach = mainCoach() || ((coachRows.find(c => c.active) || {}).name) || null, dur = SET.lengths.includes('30 min') ? '30 min' : SET.lengths[0];
+  const S = recs.map((r, k) => ({ id: batch + '-' + k, gym_id: gymId, first_name: r.first, last_name: r.last || null, dob: r.dob, skill_level: r.level || null, parent_name: r.parent || null,
+    parent_phone: r.phone || null, parent_email: r.email || null, notes: r.notes || null, status: 'Active', active: true, join_date: today, extra: { ImportBatch: batch } }));
+  const L = recs.map((r, k) => r.act === 'import' && r.day ? { gym_id: gymId, student_id: S[k].id, student_name: (r.first + ' ' + r.last).trim(), coach, day: r.day, time: r.time, duration: dur,
+    price: priceFor(dur, 'Solo'), lesson_type: 'Solo', status: 'Confirmed', booked_date: today, paid: 'Unpaid', start_date: today, extra: { ImportBatch: batch } } : null).filter(Boolean);
+  const W = recs.map((r, k) => r.signed ? { id: batch + '-W' + k, gym_id: gymId, student_id: S[k].id, parent_name: r.parent || null, signature: 'Imported',
+    signed_at: r.wDate ? r.wDate + 'T12:00:00' : null, extra: { ImportBatch: batch, Imported: true } } : null).filter(Boolean);
+  for (let i = 0; i < S.length; i += 500) { const r = await sb.from('students').insert(S.slice(i, i + 500)); if (r.error) { btn.disabled = false; btn.textContent = 'Try again'; m.className = 'msg err'; return m.textContent = r.error.message; } }
+  const r2 = L.length ? await sb.from('private_lessons').insert(L) : {}, r3 = W.length ? await sb.from('waivers').insert(W) : {};
+  await saveSettings({ last_import: { batch, at: new Date().toISOString(), count: S.length } });
+  if (r2.error || r3.error) alert('Students are in, but ' + (r2.error ? 'lessons' : 'waivers') + ' failed: ' + (r2.error || r3.error).message);
+  im.done = { s: S.length, l: r2.error ? 0 : L.length, w: r3.error ? 0 : W.length }; im.step = 3; imDraw(); loadStudents(true);
+}
+async function imUndo() {
+  const li = SET.last_import; if (!li) return;
+  if (!confirm('Undo the import of ' + li.count + ' students? Their lessons and waivers are removed too.')) return;
+  for (const t of ['waivers', 'private_lessons', 'students']) { const r = await sb.from(t).delete().eq('extra->>ImportBatch', li.batch); if (r.error) return alert(r.error.message); }
+  await saveSettings({ last_import: null }); await loadStudents(true); alert('Import undone.'); imStart();
 }
 
 async function changePw() {
@@ -1353,6 +1508,7 @@ async function boot() {
   const tab = ss.get('tab', 'dashboard'), sid = ss.get('student', null);
   if (tab === 'student' && sid && students.find(x => x.id === sid)) { curTab = 'students'; openEdit(sid); if (!weekRows.length) loadWeek(); }
   else go(['dashboard','schedule','attendance','classes','openings','pairings','comm','msgs','payments','students','slots'].includes(tab) ? tab : 'dashboard');
+  if (ss.get('import', 0)) { ss.set('import', 0); imStart(); }
 }
 let curTab = 'schedule';
 function go(tab) { curTab = tab; ss.set('tab', tab); if (tab === 'classes') { show('classesView'); return loadClasses(); } if (tab === 'pairings') { show('pairingsView'); return loadPairings(); } if (tab === 'comm') { show('commView'); return loadComm(); } if (tab === 'msgs') { show('msgsView'); return loadMsgs(); } if (tab === 'slots') { show('slotsView'); return loadSlots(); } if (tab === 'students') { show('studentsView'); render(); if (!weekRows.length) loadWeek(); return; } show(tab + 'View'); loadWeek(); }
