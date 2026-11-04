@@ -265,7 +265,7 @@
   <!-- Messages (incoming texts from parents) -->
   <section id="msgsView" class="hidden">
     <div id="ms_list">
-      <div class="sec" style="margin-top:4px">Messages <span id="ms_cnt" style="font-weight:400;font-size:12px;color:#888"></span>
+      <div class="sec" style="margin-top:4px">Messages <span id="ms_cnt" style="font-weight:400;font-size:12px;color:#888"></span> <button class="paybtn" style="background:#fff;color:#d64545;border:1px solid #d64545" onclick="msDeleteAll()">🗑 Delete all</button>
         <select id="ms_f" onchange="ss.set('msF',this.value);msRender()" style="width:auto;margin:0;padding:4px 6px;font-size:13px"><option value="all">All</option><option value="unread">Unread</option></select></div>
       <div class="card" style="padding:0;overflow:hidden" id="ms_threads"><div class="center">Loading…</div></div>
       <small style="color:#888;display:block;margin:6px 2px">Texts parents send to your cell. Only numbers on file as a parent phone show up. Last 60 days.</small>
@@ -2693,6 +2693,12 @@ async function msDelete() {
   const ids = x.list.map(r => r.id), { error } = await sb.from('text_log').update({ status: 'Deleted' }).in('id', ids);
   if (error) return alert(error.message);
   msRows = msRows.filter(r => !ids.includes(r.id)); msBadge(); msBack();
+}
+async function msDeleteAll() {
+  const ids = msRows.map(r => r.id); if (!ids.length) return alert('No messages to delete.');
+  if (!confirm('Delete ALL ' + msThreads().length + ' conversations?\n\nMessages will be empty. New texts still come in as usual.')) return;
+  for (let i = 0; i < ids.length; i += 200) { const { error } = await sb.from('text_log').update({ status: 'Deleted' }).in('id', ids.slice(i, i + 200)); if (error) return alert(error.message); }
+  msRows = []; msBadge(); msBack();
 }
 function msBack() { msOpen = null; ss.set('msOpen', null); $('ms_thread').classList.add('hidden'); $('ms_list').classList.remove('hidden'); msRender(); }
 async function msAI() {
