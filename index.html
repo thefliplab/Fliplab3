@@ -1257,7 +1257,7 @@ async function saveSettings(extra) {
   Object.assign(SET, extra || {}); applySettings(); return true;
 }
 const WZ_COLORS = ['#3ecf9e', '#1D9E75', '#4349C6', '#378ADD', '#D4537E', '#D85A30', '#1f2933'];
-function wzStart() { wz = JSON.parse(JSON.stringify(SET)); wzStep = 0; show('setupView'); $('tabs').classList.add('hidden'); wzDraw(); }
+function wzStart() { wz = { ...JSON.parse(JSON.stringify(SET)), days: [], from: 960, to: 1140, every: 30, off: [] }; wzStep = 0; show('setupView'); $('tabs').classList.add('hidden'); wzDraw(); }
 function wzDraw() {
   const n = wzStep, dots = [0, 1, 2, 3].map(i => `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;margin:0 3px;background:${i === n ? 'var(--mint)' : '#d5dadf'}"></span>`).join('');
   const head = (t, sub) => `<div style="text-align:center;margin-bottom:6px">${dots}</div><div class="hdr" style="margin-top:6px">${t}<span style="font-weight:400;font-size:13px">Step ${n + 1} of 4</span></div><div style="color:var(--muted);font-size:13px;margin-bottom:4px">${sub}</div>`;
@@ -1274,14 +1274,22 @@ function wzDraw() {
   if (n === 2) body = head('Payment buttons', 'These show when you record a payment.') + `
     <div style="margin:10px 0">${wz.pay_methods.map((m, i) => `<span class="pill" style="display:inline-block;margin:0 6px 6px 0;padding:6px 10px;font-size:14px">${esc(m)} <a href="#" onclick="wz.pay_methods.splice(${i},1);wzDraw();return false" style="color:#A32D2D;text-decoration:none;margin-left:4px">✕</a></span>`).join('') || '<small style="color:#aaa">None yet</small>'}</div>
     <div class="row2"><div><input id="wz_pm" placeholder="Check, CashApp…"></div><div><button class="btn ghost" onclick="wzAddPm()">+ Add</button></div></div>`;
-  if (n === 3) body = head('Your weekly times', 'Your open times feed your sign-up page and Openings.') + `
-    <div style="margin:14px 0;line-height:1.6">Add the days and times you coach in the <b>Slots</b> tab. Bringing in your students is coming next.</div>
-    <button class="btn" onclick="wzFinish('slots')">Set up my weekly times</button>
-    <button class="btn ghost" style="margin-top:8px" onclick="wzFinish('schedule')">Skip — go to my schedule</button><div id="wz_msg" class="msg"></div>`;
+  if (n === 3) { const sl = wzSlots(); body = head('Your weekly times', 'Your open times show on your sign-up page. Tap a time to leave it out.') + `
+    <label>Days you coach</label><div>${DAYS.map(d => `<button class="paybtn" style="margin:0 6px 6px 0;padding:8px 10px;${wz.days.includes(d) ? 'background:var(--mint-soft);color:#1c7a5a' : 'background:#eee;color:#888'}" onclick="wzDay('${d}')">${d.slice(0, 3)}</button>`).join('')}</div>
+    <div class="row2"><div><label>From</label><select onchange="wz.from=+this.value;wzDraw()">${wzTimeOpts(wz.from)}</select></div><div><label>To</label><select onchange="wz.to=+this.value;wzDraw()">${wzTimeOpts(wz.to)}</select></div></div>
+    <label>Every</label><select onchange="wz.every=+this.value;wzDraw()">${[30, 45, 60].map(m => `<option value="${m}"${wz.every === m ? ' selected' : ''}>${m} min</option>`).join('')}</select>
+    <div style="margin-top:10px">${wz.days.length ? wz.days.map(d => `<div style="margin-top:6px"><b style="font-size:13px">${d}</b><div>${sl.times.map(t => { const k = d + '|' + t, off = wz.off.includes(k); return `<button class="paybtn" style="margin:4px 4px 0 0;${off ? 'background:#eee;color:#aaa;text-decoration:line-through' : 'background:var(--mint-soft);color:#1c7a5a'}" onclick="wzOff('${k}')">${t}</button>`; }).join('') || '<small style="color:#aaa">Pick a To time after From</small>'}</div></div>`).join('') : '<small style="color:#aaa">Tap the days you coach</small>'}</div>
+    <button class="btn" style="margin-top:16px" onclick="wzFinish(true)">Finish${sl.count ? ' — save ' + sl.count + ' times' : ''}</button>
+    <button class="btn ghost" style="margin-top:8px" onclick="wzFinish(false)">Skip — add times later</button><div id="wz_msg" class="msg"></div>`; }
   const nav = n < 3 ? `<div class="row2" style="margin-top:16px"><div>${n ? '<button class="btn ghost" onclick="wzStep--;wzDraw()">Back</button>' : ''}</div><div><button class="btn" onclick="wzNext()">Next</button></div></div>
     <div style="text-align:center;margin-top:10px"><a href="#" onclick="wzStep++;wzDraw();return false" style="color:var(--muted);font-size:13px">Skip this step</a></div>` : (n ? '<div style="margin-top:10px"><button class="btn ghost" onclick="wzStep--;wzDraw()">Back</button></div>' : '');
   $('wzCard').innerHTML = `<div style="font-weight:600;font-size:18px;margin-bottom:8px">Welcome, let's set up ${esc(gymTitle)}</div>` + body + nav;
 }
+const wzT = m => ((Math.floor(m / 60) % 12) || 12) + ':' + String(m % 60).padStart(2, '0') + ' ' + (m < 720 ? 'AM' : 'PM');
+const wzTimeOpts = v => Array.from({ length: 64 }, (_, i) => 360 + i * 15).map(m => `<option value="${m}"${m === v ? ' selected' : ''}>${wzT(m)}</option>`).join('');
+function wzSlots() { const times = []; for (let m = wz.from; m + wz.every <= wz.to; m += wz.every) times.push(wzT(m)); let count = 0; wz.days.forEach(d => times.forEach(t => { if (!wz.off.includes(d + '|' + t)) count++; })); return { times, count }; }
+function wzDay(d) { wz.days = wz.days.includes(d) ? wz.days.filter(x => x !== d) : DAYS.filter(x => x === d || wz.days.includes(x)); wzDraw(); }
+function wzOff(k) { wz.off = wz.off.includes(k) ? wz.off.filter(x => x !== k) : wz.off.concat(k); wzDraw(); }
 function wzLen(l) { const i = wz.lengths.indexOf(l); if (i >= 0) { if (wz.lengths.length > 1) wz.lengths.splice(i, 1); } else wz.lengths = SET_DEF.lengths.filter(x => x === l || wz.lengths.includes(x)); wzDraw(); }
 function wzAddPm() { const v = $('wz_pm').value.trim(); if (v && !wz.pay_methods.some(x => x.toLowerCase() === v.toLowerCase())) wz.pay_methods.push(v); wzDraw(); }
 async function wzLogo(inp) {
@@ -1297,11 +1305,25 @@ async function wzNext() {
   if (wzStep === 2 && !wz.pay_methods.length) return alert('Keep at least one payment button.');
   wzStep++; wzDraw();
 }
-async function wzFinish(tab) {
-  $('wz_msg').textContent = 'Saving…';
+async function wzFinish(withSlots) {
+  const m = $('wz_msg'); m.className = 'msg'; m.textContent = 'Saving…';
+  let added = 0;
+  if (withSlots) {
+    const sl = wzSlots(); if (!sl.count) { m.className = 'msg err'; return m.textContent = 'Pick your days and times first, or tap Skip.'; }
+    // Same times go into every season (school year + summer); summer extras can be added later in Slots
+    const [SE, CO, HV] = await Promise.all([sb.from('seasons').select('id,name'), sb.from('coaches').select('name').eq('active', true).limit(1), sb.from('available_slots').select('day,time,season_id')]);
+    const have = new Set((HV.data || []).map(z => z.season_id + '|' + z.day + '|' + z.time)), coach = ((CO.data || [])[0] || {}).name || null, rows = [];
+    (SE.data || []).forEach(se => wz.days.forEach(d => sl.times.forEach(t => { if (!wz.off.includes(d + '|' + t) && !have.has(se.id + '|' + d + '|' + t))
+      rows.push({ gym_id: gymId, day: d, time: t, coach, season_id: se.id, is_summer: /summer/i.test(se.name || ''), active: true, booked: false }); })));
+    if (rows.length) { const r = await sb.from('available_slots').insert(rows); if (r.error) { m.className = 'msg err'; return m.textContent = r.error.message; } }
+    added = sl.count;
+  }
+  ['days', 'from', 'to', 'every', 'off'].forEach(k => delete wz[k]);
   Object.assign(SET, wz);
   if (!(await saveSettings({ setup_done: true }))) return;
-  ss.set('tab', tab); location.reload();
+  $('wzCard').innerHTML = `<div style="text-align:center;padding:20px 0"><div style="font-size:40px">✅</div><div style="font-weight:600;font-size:18px;margin-top:6px">You're set up</div>
+    <div style="color:var(--muted);margin:8px 0 16px">${added ? added + ' weekly times saved. ' : ''}Bringing in your students is coming next.</div>
+    <button class="btn" onclick="ss.set('tab','schedule');location.reload()">Open my schedule</button></div>`;
 }
 
 async function changePw() {
