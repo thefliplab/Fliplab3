@@ -51,12 +51,13 @@ Deno.serve(async (req) => {
   let gyms: { id: string; name: string }[] = [];
   if (body.test) {
     const user = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: req.headers.get("Authorization") || "" } } });
-    const { data } = await user.from("gyms").select("id,name").limit(1);   // RLS: signed-in owner only
+    const { data } = await user.from("gyms").select("id,name,slug").limit(1);   // RLS: signed-in owner only
     if (!data?.length) return json({ error: "Not signed in" }, 401);
+    if (data[0].slug !== "fliplab") return json({ error: "Automatic emails are not set up for this gym yet" }, 403);
     gyms = data;
   } else if (body.cron) {
     if (now.wd !== "Fri" || now.hour !== 8) return json({ skipped: "not Friday 8 AM in New York" });
-    const { data } = await db.from("gyms").select("id,name");
+    const { data } = await db.from("gyms").select("id,name").eq("slug", "fliplab");   // sends from Steve's Yahoo → Flip Lab only
     gyms = data || [];
   } else return json({ error: "Nothing to do" }, 400);
 

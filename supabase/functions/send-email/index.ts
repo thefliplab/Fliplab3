@@ -17,8 +17,9 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   const user = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: req.headers.get("Authorization") || "" } } });
-  const { data: gyms } = await user.from("gyms").select("id").limit(1);           // RLS: only the signed-in owner's gym
+  const { data: gyms } = await user.from("gyms").select("id,slug").limit(1);           // RLS: only the signed-in owner's gym
   if (!gyms?.length) return json({ error: "Not signed in" }, 401);
+  if (gyms[0].slug !== "fliplab") return json({ error: "Automatic texts and emails are not set up for this gym yet" }, 403);   // Steve's phone/Yahoo/Voice are Flip Lab only
   const gym = gyms[0].id;
   const from = Deno.env.get("YAHOO_USER") || "thefliplab@yahoo.com", pw = Deno.env.get("YAHOO_APP_PASSWORD");
   if (!pw) return json({ error: "Email isn't set up yet (YAHOO_APP_PASSWORD secret missing)" }, 500);

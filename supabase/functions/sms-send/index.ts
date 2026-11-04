@@ -14,8 +14,9 @@ const OPEN = ["Queued", "Pending", "Processed", "Sent"];   // not final yet
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   const user = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: req.headers.get("Authorization") || "" } } });
-  const { data: gyms } = await user.from("gyms").select("id").limit(1);           // RLS: only the signed-in owner's gym
+  const { data: gyms } = await user.from("gyms").select("id,slug").limit(1);           // RLS: only the signed-in owner's gym
   if (!gyms?.length) return json({ error: "Not signed in" }, 401);
+  if (gyms[0].slug !== "fliplab") return json({ error: "Automatic texts and emails are not set up for this gym yet" }, 403);   // Steve's phone/Yahoo/Voice are Flip Lab only
   const gym = gyms[0].id;
   const u = Deno.env.get("SMSGATE_USER"), pw = Deno.env.get("SMSGATE_PASS");
   if (!u || !pw) return json({ error: "Texting isn't set up yet (SMSGATE_USER / SMSGATE_PASS secrets missing)" }, 500);

@@ -18,6 +18,9 @@ Deno.serve(async (req) => {
   const { data: kids } = await db.from("students").select("id,gym_id,first_name,last_name,skill_level,parent_name,parent_phone,parent_email,extra")
     .in("id", (ids as string[]).slice(0, 2)).gte("created_at", since).eq("extra->>Source", "3.0 sign-up").is("extra->>Notified", null);
   if (!kids?.length) return json({ ok: true, skipped: true });
+  // Emails/texts go out as Flip Lab (Steve's Yahoo + phone) → only for Flip Lab sign-ups
+  const { data: g } = await db.from("gyms").select("slug").eq("id", kids[0].gym_id).maybeSingle();
+  if (g?.slug !== "fliplab") return json({ ok: true, skipped: "not Flip Lab" });
   for (const k of kids) await db.from("students").update({ extra: { ...k.extra, Notified: new Date().toISOString(), ...(shareType ? { ShareType: String(shareType).slice(0, 30) } : {}) } }).eq("id", k.id);
 
   const k = kids[0], names = kids.map((x) => x.first_name + " " + x.last_name).join(" & ");
