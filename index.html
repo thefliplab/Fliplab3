@@ -1391,10 +1391,8 @@ function imTime(v) {
   if (m[3]) { if (/p/i.test(m[3]) && h < 12) h += 12; if (/a/i.test(m[3]) && h === 12) h = 0; } else if (h >= 1 && h <= 9) h += 12;   // no am/pm: 1–9 → afternoon
   return ((h % 12) || 12) + ':' + String(mm).padStart(2, '0') + ' ' + (h < 12 ? 'AM' : 'PM');
 }
-function imParse() {   // rows → clean records + problems
+function imParse() {   // rows → clean records (problems are worked out by imValidate)
   const col = f => im.head.find(h => im.map[h] === f), get = (r, f) => { const h = col(f); return h ? r[im.head.indexOf(h)] : ''; };
-  const keyOf = (f, l, d) => (f + '|' + l).toLowerCase().replace(/\s+/g, '') + '|' + (d || '');
-  const seen = {}, times = {};
   return im.rows.map((r, i) => {
     let first = get(r, 'first_name'), last = get(r, 'last_name'); const full = get(r, 'full_name');
     if (!first && full) { if (full.includes(',')) { [last, first] = full.split(',').map(x => x.trim()); } else { const p = full.trim().split(/\s+/); first = p.shift(); last = p.join(' '); } }
@@ -1403,25 +1401,47 @@ function imParse() {   // rows → clean records + problems
     if (dt) { day = day || imDay(dt.split(/[\s,@]+/)[0]); time = time || imTime(dt.replace(/^[A-Za-z]+\.?,?\s*/, '')); }
     const hasLesson = !!(get(r, 'lesson_day') || get(r, 'lesson_time') || dt);
     const wv = get(r, 'waiver'), wDate = imDate(wv), signed = !!wDate || /^(y|yes|true|signed|x|✓|done|complete)/i.test(wv);
-    const rec = { i, first: (first || '').trim(), last: (last || '').trim(), dob: dob || null, parent: get(r, 'parent_name'), phone: fmtPhone(get(r, 'phone')), email: get(r, 'email').toLowerCase(),
-      level: get(r, 'level'), notes: get(r, 'notes'), day, time, signed, wDate: wDate || null, issues: [], act: 'import' };
-    if (!rec.first) { rec.issues.push(['bad', 'No student name']); rec.act = 'skip'; return rec; }
-    const k = keyOf(rec.first, rec.last, rec.dob);
-    if (seen[k] != null) { rec.issues.push(['bad', 'Same kid as row ' + (seen[k] + 2)]); rec.act = 'skip'; } else seen[k] = i;
-    if (students.some(s => keyOf(s.first_name || '', s.last_name || '', rec.dob ? s.dob : '') === keyOf(rec.first, rec.last, rec.dob ? rec.dob : ''))) { rec.issues.push(['bad', 'Already in your students']); rec.act = 'skip'; }
-    if (!rec.phone && !rec.email) rec.issues.push(['warn', 'No phone or email']);
-    if (rawDob && !dob) rec.issues.push(['warn', "Can't read birthday \"" + rawDob + '"']);
-    if (hasLesson) {
-      if (!day || !time) { rec.issues.push(['warn', "Can't read lesson time — imported without it"]); rec.day = rec.time = null; }
-      else {
-        if (im.slots && !im.slots.has(day + '|' + time)) rec.issues.push(['warn', 'Lesson ' + day.slice(0, 3) + ' ' + time + ' is not one of your slots']);
-        const tk = day + '|' + time, other = (im.taken || {})[tk] || (rec.act !== 'skip' ? times[tk] : null);
-        if (other) { rec.issues.push(['bad', 'Same lesson time as ' + other]); if (rec.act === 'import') rec.act = 'nolesson'; }
-        else if (rec.act !== 'skip') times[tk] = rec.first + ' ' + rec.last;
+    return { i, first: (first || '').trim(), last: (last || '').trim(), dob: dob || null, badDob: rawDob && !dob ? rawDob : '', parent: get(r, 'parent_name'), phone: fmtPhone(get(r, 'phone')), email: get(r, 'email').toLowerCase(),
+      level: get(r, 'level'), notes: get(r, 'notes'), day: day && time ? day : null, time: day && time ? time : null, badLesson: hasLesson && !(day && time), signed, wDate: wDate || null, issues: [], act: 'import', userAct: null };
+  });
+}
+function imValidate() {   // (re)work out problems + default choice for every row; a choice the coach picked is kept
+  const keyOf = (f, l, d) => (f + '|' + l).toLowerCase().replace(/\s+/g, '') + '|' + (d || '');
+  const seen = {}, times = {};
+  im.recs.forEach(rec => {
+    rec.issues = []; let act = 'import';
+    if (!rec.first) { rec.issues.push(['bad', 'No student name']); act = 'skip'; }
+    else {
+      const k = keyOf(rec.first, rec.last, rec.dob);
+      if (seen[k] != null && im.recs[seen[k]].userAct !== 'skip') { rec.issues.push(['bad', 'Same kid as row ' + (seen[k] + 2)]); act = 'skip'; } else if (seen[k] == null) seen[k] = rec.i;
+      if (students.some(s => keyOf(s.first_name || '', s.last_name || '', rec.dob ? s.dob : '') === keyOf(rec.first, rec.last, rec.dob || ''))) { rec.issues.push(['bad', 'Already in your students']); act = 'skip'; }
+      if (!rec.phone && !rec.email) rec.issues.push(['warn', 'No phone or email']);
+      if (rec.badDob) rec.issues.push(['warn', "Can't read birthday \"" + rec.badDob + '"']);
+      if (rec.badLesson) rec.issues.push(['warn', "Can't read lesson time"]);
+      if (rec.day) {
+        if (im.slots && !im.slots.has(rec.day + '|' + rec.time)) rec.issues.push(['warn', 'Lesson ' + rec.day.slice(0, 3) + ' ' + rec.time + ' is not one of your slots']);
+        const tk = rec.day + '|' + rec.time, mineAct = rec.userAct || act, other = im.taken[tk] || times[tk];
+        if (other) { rec.issues.push(['bad', 'Same lesson time as ' + other]); if (act === 'import') act = 'nolesson'; }
+        else if (mineAct === 'import') times[tk] = rec.first + ' ' + rec.last;
       }
     }
-    return rec;
+    rec.flagged = rec.flagged || rec.issues.length > 0;   // stays in the list after it's fixed
+    rec.act = rec.userAct || act;
+    if (rec.act === 'nolesson' && !rec.day) rec.act = 'import';
   });
+}
+function imOpenSlots(rec) {   // their slots not taken by a current lesson or another imported kid
+  const used = new Set(Object.keys(im.taken)); im.recs.forEach(r => { if (r !== rec && r.day && r.act === 'import') used.add(r.day + '|' + r.time); });
+  return [...(im.slots || [])].filter(k => !used.has(k)).sort((a, b) => DAYS.indexOf(a.split('|')[0]) - DAYS.indexOf(b.split('|')[0]) || timeVal(a.split('|')[1]) - timeVal(b.split('|')[1]));
+}
+function imEdit(i) { im.edit = im.edit === i ? null : i; imDraw(); }
+function imSaveFix(i) {
+  const r = im.recs[i], ph = $('imf_phone').value.trim(), em = $('imf_email').value.trim(), dob = $('imf_dob').value, ls = $('imf_lesson').value;
+  r.phone = fmtPhone(ph); r.email = em.toLowerCase();
+  if (dob) { r.dob = dob; r.badDob = ''; }
+  if (ls === '') { r.day = r.time = null; r.badLesson = false; } else if (ls !== 'keep') { [r.day, r.time] = ls.split('|'); r.badLesson = false; }
+  if (r.userAct === 'nolesson' || r.act === 'nolesson') r.userAct = r.day ? 'import' : null;
+  im.edit = null; imValidate(); imDraw();
 }
 async function imCheck() {
   const vals = Object.values(im.map);
@@ -1430,7 +1450,7 @@ async function imCheck() {
   const today = ymd(new Date());
   im.slots = (S.data || []).length ? new Set(S.data.map(x => x.day + '|' + x.time)) : null;
   im.taken = {}; (L.data || []).filter(l => !['Cancelled', 'Dropped'].includes(l.status) && (!l.end_date || l.end_date > today)).forEach(l => im.taken[l.day + '|' + l.time] = l.student_name);
-  im.recs = imParse(); im.step = 2; imDraw();
+  im.recs = imParse(); im.edit = null; imValidate(); im.step = 2; imDraw();
 }
 function imDraw() {
   const n = im.step, last = SET.last_import && (Date.now() - new Date(SET.last_import.at)) < 864e5 ? SET.last_import : null;
@@ -1446,11 +1466,17 @@ function imDraw() {
       <select style="width:52%" onchange="im.map['${esc(h).replace(/'/g, '&#39;')}']=this.value">${Object.entries(IM_FIELDS).map(([k, v]) => `<option value="${k}"${im.map[h] === k ? ' selected' : ''}>${v}</option>`).join('')}</select></div>`).join('')}
     <div class="row2" style="margin-top:14px"><div><button class="btn ghost" onclick="im.step=0;imDraw()">Back</button></div><div><button class="btn" onclick="imCheck()">Next</button></div></div>`;
   if (n === 2) {
-    const R = im.recs, go_ = R.filter(r => r.act !== 'skip'), probs = R.filter(r => r.issues.length), les = go_.filter(r => r.act === 'import' && r.day).length, wv = go_.filter(r => r.signed).length;
-    b = `<div class="row2"><div class="card" style="margin:0;text-align:center"><small style="color:var(--muted)">Ready</small><div style="font-size:22px;font-weight:700">${go_.length}</div></div><div class="card" style="margin:0;text-align:center"><small style="color:var(--muted)">Need a look</small><div style="font-size:22px;font-weight:700;color:#7A5B00">${probs.length}</div></div></div>
-      <div style="font-size:13px;color:var(--muted);margin:8px 0">${les} weekly lessons · ${wv} waivers${im.slots ? '' : ' · no slots set up yet, so times aren\'t checked'}</div>
-      ${probs.map(r => `<div class="arow" style="padding:7px 0;align-items:flex-start"><div class="who"><b>${esc(r.first + ' ' + r.last)}</b>${r.issues.map(([t, x]) => `<small style="color:${t === 'bad' ? '#A32D2D' : '#7A5B00'}">${esc(x)}</small>`).join('')}</div>
-        <select style="width:44%" onchange="im.recs[${r.i}].act=this.value;imDraw()">${[['import', 'Import'], ['nolesson', 'Import, no lesson'], ['skip', 'Skip']].filter(([k]) => k !== 'nolesson' || r.day).map(([k, v]) => `<option value="${k}"${r.act === k ? ' selected' : ''}>${v}</option>`).join('')}</select></div>`).join('') || '<div class="center">No problems found 🎉</div>'}
+    const R = im.recs, go_ = R.filter(r => r.act !== 'skip'), probs = R.filter(r => r.flagged), open_ = probs.filter(r => r.issues.length).length, les = go_.filter(r => r.act === 'import' && r.day).length, wv = go_.filter(r => r.signed).length;
+    const fix = r => { const sl = imOpenSlots(r); return `<div style="background:var(--bg);border-radius:8px;padding:8px 10px;margin:4px 0 8px">
+      <div class="row2"><div><label>Phone</label><input id="imf_phone" type="tel" value="${esc(r.phone)}" oninput="this.value=typingPhone(this.value)"></div><div><label>Birthday</label><input id="imf_dob" type="date" value="${esc(r.dob || '')}"></div></div>
+      <label>Email</label><input id="imf_email" type="email" value="${esc(r.email)}">
+      <label>Weekly lesson</label><select id="imf_lesson"><option value="keep">${r.day ? 'Keep ' + esc(r.day.slice(0, 3) + ' ' + r.time) : 'No lesson'}</option>${r.day ? '<option value="">No lesson</option>' : ''}${sl.map(k => `<option value="${esc(k)}">${esc(k.split('|')[0].slice(0, 3) + ' ' + k.split('|')[1])} (open)</option>`).join('')}</select>
+      ${im.slots ? '' : '<small style="color:var(--muted)">Add slots to pick an open time here</small>'}
+      <div class="row2" style="margin-top:8px"><div><button class="btn ghost" onclick="imEdit(${r.i})">Cancel</button></div><div><button class="btn" onclick="imSaveFix(${r.i})">Save</button></div></div></div>`; };
+    b = `<div class="row2"><div class="card" style="margin:0;text-align:center"><small style="color:var(--muted)">Ready</small><div style="font-size:22px;font-weight:700">${go_.length}</div></div><div class="card" style="margin:0;text-align:center"><small style="color:var(--muted)">Need a look</small><div style="font-size:22px;font-weight:700;color:${open_ ? '#7A5B00' : '#3B6D11'}">${open_}</div></div></div>
+      <div style="font-size:13px;color:var(--muted);margin:8px 0">${les} weekly lessons · ${wv} waivers${im.slots ? '' : " · no slots set up yet, so times aren't checked"}<br>Tap a name to fix it here, or choose Import / Skip.</div>
+      ${probs.map(r => `<div class="arow" style="padding:7px 0;align-items:flex-start"><div class="who" style="cursor:pointer" onclick="imEdit(${r.i})"><b>${esc(r.first + ' ' + r.last)} <span style="color:var(--muted);font-weight:400;font-size:12px">✎ fix</span></b>${r.issues.map(([t, x]) => `<small style="color:${t === 'bad' ? '#A32D2D' : '#7A5B00'}">${esc(x)}</small>`).join('') || '<small style="color:#3B6D11">✓ Fixed</small>'}</div>
+        <select style="width:44%" onchange="im.recs[${r.i}].userAct=this.value;imValidate();imDraw()">${[['import', 'Import'], ['nolesson', 'Import, no lesson'], ['skip', 'Skip']].filter(([k]) => k !== 'nolesson' || r.day).map(([k, v]) => `<option value="${k}"${r.act === k ? ' selected' : ''}>${v}</option>`).join('')}</select></div>${im.edit === r.i ? fix(r) : ''}`).join('') || '<div class="center">No problems found 🎉</div>'}
       <div class="row2" style="margin-top:14px"><div><button class="btn ghost" onclick="im.step=1;imDraw()">Back</button></div><div><button class="btn" id="im_go" onclick="imRun()">Import ${go_.length}</button></div></div><div id="im_msg" class="msg"></div>`;
   }
   if (n === 3) b = `<div style="text-align:center;padding:16px 0"><div style="font-size:40px">✅</div><div style="font-weight:600;font-size:18px">${im.done.s} students in</div>
