@@ -1867,7 +1867,7 @@ function renderPay() {
   const f = $('histFilter'), cur = f.value;
   f.innerHTML = '<option value="">This week</option>' + students.filter(isOn).map(s => `<option value="${esc(s.id)}"${s.id === cur ? ' selected' : ''}>${esc(s.first_name)} ${esc(s.last_name)}</option>`).join('');
   loadHistory();
-  if (!finLoaded) finInit();
+  if (!finLoaded) finInit(); else finRun();
 }
 
 // ================= FINANCIAL REPORT (port of 2.0 getFinancialReport / getMonthOverMonth / CSV) =================
@@ -1877,7 +1877,7 @@ const finCat = x => String(x.lesson_id || '').startsWith('CLINIC_') ? 'Clinic' :
 async function fetchAllPayments(from, to) {
   let out = [];
   for (let i = 0; ; i += 1000) {
-    const r = await sb.from('payments').select('id,date,student_name,amount,method,lesson_type,lesson_id,notes').gte('date', from).lte('date', to).order('date').range(i, i + 999);
+    const r = await sb.from('payments').select('id,date,student_name,amount,method,lesson_type,lesson_id,notes').gte('date', from).lte('date', to).order('date').order('id').range(i, i + 999);
     if (r.error) throw r.error;
     out = out.concat(r.data); if (r.data.length < 1000) return out;
   }
