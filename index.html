@@ -53,6 +53,13 @@
   .srow.tap { cursor:pointer; } .srow.tap:hover { background:#f6fbf9; }
   .ovl { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:flex-start; justify-content:center; z-index:20; overflow:auto; padding:30px 12px; }
   .mdl { background:#fff; border-radius:12px; width:100%; max-width:460px; padding:16px; }
+  .skrow { display:flex; align-items:center; gap:10px; padding:10px 4px; border-bottom:1px solid #f0f0f0; cursor:pointer; font-size:14px; }
+  .skbx { width:22px; height:22px; border-radius:6px; border:1.5px solid #b8c0c8; display:flex; align-items:center; justify-content:center; flex-shrink:0; color:#fff; font-size:14px; }
+  .skrow.on .skbx { background:#1D9E75; border-color:#1D9E75; } .skrow .dt { margin-left:auto; font-size:12px; color:#999; }
+  .skbar { height:8px; background:#eef0f2; border-radius:4px; overflow:hidden; } .skbar div { height:100%; background:#1D9E75; }
+  .sklv { display:flex; justify-content:space-between; padding:10px 4px; border-bottom:1px solid #f0f0f0; font-size:14px; cursor:pointer; }
+  .skbtn { display:flex; justify-content:space-between; padding:10px; border:1px solid #5DCAA5; border-radius:8px; background:#E1F5EE; color:#085041; font-size:15px; margin:4px 0 10px; cursor:pointer; }
+  .skchip { font-size:13px; padding:5px 12px; border-radius:20px; border:1px solid var(--line); background:#fff; cursor:pointer; } .skchip.on { background:#E1F5EE; color:#085041; border-color:#5DCAA5; }
   .mdl .mh { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; } .mdl .mh b { font-size:16px; }
   .mdl .x { background:#fff; border:1px solid var(--line); border-radius:6px; padding:4px 10px; }
   .mdl input[readonly] { background:#f9f8f5; }
@@ -339,7 +346,7 @@
     <div id="sdTop"></div>
     <div class="stabs" id="sdTabs">
       <button data-t="profile" onclick="sdTab('profile')">Profile</button><button data-t="schedule" onclick="sdTab('schedule')">Schedule</button>
-      <button data-t="payments" onclick="sdTab('payments')">Payments</button><button data-t="attendance" onclick="sdTab('attendance')">Attendance</button>
+      <button data-t="payments" onclick="sdTab('payments')">Payments</button><button data-t="attendance" onclick="sdTab('attendance')">Attendance</button><button data-t="skills" onclick="sdTab('skills')">Skills</button>
     </div>
     <div id="sdPanel" class="hidden"></div>
     <div class="card" id="sdProfile">
@@ -433,13 +440,21 @@
     <button class="btn" id="ck_save" onclick="ckSave()" disabled>Add to class</button>
   </div>
 </div>
+<div class="ovl hidden" id="skModal" style="z-index:30" onclick="if(event.target===this)skClose()">
+  <div class="mdl">
+    <div class="mh"><b>Skills</b><button class="x" onclick="skClose()">Done</button></div>
+    <div id="skKids" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
+    <div id="skQBody"></div>
+    <div style="font-size:12px;color:#999;margin-top:10px">Full history and other levels are on the Student page.</div>
+  </div>
+</div>
 <div class="ovl hidden" id="lessonModal" onclick="if(event.target===this)closeLesson()">
   <div class="mdl">
     <div class="mh"><b id="lm_title">Edit lesson</b><button class="x" onclick="closeLesson()">✕</button></div>
     <label>Student</label><input id="lm_student" readonly>
     <div class="row2">
       <div><label>Coach</label><select id="lm_coach"></select></div>
-      <div><label>Skill level</label><input id="lm_skill" readonly></div>
+      <div><label>Skill level</label><div id="lm_skill" class="skbtn" onclick="skQuick()">…</div></div>
     </div>
     <div class="row2">
       <div><label>Move to day</label><select id="lm_day"></select></div>
@@ -1016,6 +1031,109 @@ async function openLevels() {
   $('lvBody').innerHTML = (L.data || []).map(l => { const list = sk.filter(x => x.level_id === l.id);
     return `<details style="border-bottom:1px solid #f0f0f0;padding:8px 2px"><summary style="cursor:pointer"><b>${esc(l.code.split('-')[0])}</b> · ${esc(l.name)} <small style="color:#888">${list.length ? list.length + ' skills' : ''}</small></summary>
       ${list.length ? '<ul style="margin:6px 0 2px 18px;padding:0;font-size:13px">' + list.map(x => '<li>' + esc(x.name) + '</li>').join('') + '</ul>' : '<small style="color:#888;display:block;margin-top:4px">Skills not copied to 3.0 yet (run export3Skills).</small>'}</details>`; }).join('');
+}
+// ================= SKILLS CHECKLIST (admin: Student page Skills tab + quick check-off from Edit lesson) =================
+// Same tables the parent portal reads: skill_levels, skills, student_skills (check-offs), skill_log (level moves)
+let SK = null, skStu = null, skOpenLv = null, skKidsList = [];
+async function skLoad() {
+  if (SK) return SK;
+  const [L, S] = await Promise.all([sb.from('skill_levels').select('*').order('sort'), sb.from('skills').select('id,level_id,name,sort,active').order('sort')]);
+  if (L.error || S.error) throw new Error((L.error || S.error).message);
+  SK = { levels: L.data || [], skills: (S.data || []).filter(x => x.active !== false) };
+  return SK;
+}
+const skShort = d => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+const skLvName = l => l ? l.code.split('-')[0] + ' · ' + l.name : 'No level';
+function skCur(s) { return SK.levels.find(l => l.code === s.skill_level) || null; }
+function skNext(l) { const i = SK.levels.indexOf(l); return i > -1 ? SK.levels[i + 1] || null : SK.levels[0] || null; }
+async function skChecks(id) {
+  const r = await sb.from('student_skills').select('skill_id,checked_at').eq('student_id', id);
+  if (r.error) throw new Error(r.error.message);
+  return new Map(r.data.map(x => [x.skill_id, x.checked_at]));
+}
+async function skLabel(stu) {
+  if (!stu.id) return;
+  try {
+    await skLoad(); const l = skCur(stu); if (!l) return;
+    const ch = await skChecks(stu.id), list = SK.skills.filter(x => x.level_id === l.id);
+    if (lmRow && lmRow.student_id === stu.id) $('lm_skill').innerHTML = `<span>${esc(l.code.split('-')[0])} · ${list.filter(x => ch.has(x.id)).length} of ${list.length}</span><span>Skills</span>`;
+  } catch (e) {}
+}
+function skList(lv, ch) {
+  return SK.skills.filter(x => x.level_id === lv.id).map(x => `<div class="skrow ${ch.has(x.id) ? 'on' : ''}" onclick="skToggle('${esc(x.id)}')"><div class="skbx">${ch.has(x.id) ? '✓' : ''}</div><span>${esc(x.name)}</span><span class="dt">${ch.has(x.id) ? skShort(ch.get(x.id)) : ''}</span></div>`).join('')
+    || '<div style="color:#888;font-size:13px;padding:8px 4px">No skills in this level yet.</div>';
+}
+function skUpBtn(s, l, ch) {
+  const list = SK.skills.filter(x => x.level_id === l.id), nx = skNext(l);
+  return list.length && nx && list.every(x => ch.has(x.id)) ? `<button class="btn" style="margin-top:12px" onclick="skMoveUp()">Move up to ${esc(skLvName(nx))}</button>` : '';
+}
+// Student page → Skills tab
+async function skFull(s) {
+  skStu = { s, full: true };
+  try {
+    await skLoad();
+    const [ch, G] = await Promise.all([skChecks(s.id), sb.from('skill_log').select('*').eq('student_id', s.id).order('date', { ascending: false })]);
+    if (!sd || sd.s.id !== s.id) return;
+    skStu.ch = ch;
+    const l = skCur(s), log = (G.data || []).filter(g => g.to_level);
+    if (!skOpenLv || skOpenLv.sid !== s.id) skOpenLv = { sid: s.id, id: null };
+    const head = l ? (() => { const list = SK.skills.filter(x => x.level_id === l.id), n = list.filter(x => ch.has(x.id)).length, since = log.find(g => g.to_level === l.code);
+      return `<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:16px">Skills</b><span class="pill">${esc(skLvName(l))}</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;color:#6b7680;margin:10px 0 4px"><span>${n} of ${list.length} skills</span><span>${since && since.date ? 'On ' + esc(l.code.split('-')[0]) + ' since ' + skShort(since.date + 'T12:00:00') : ''}</span></div>
+        <div class="skbar"><div style="width:${list.length ? Math.round(n / list.length * 100) : 0}%"></div></div>
+        <div style="font-size:12px;color:#999;margin:12px 0 2px">Working on · tap to check off</div>${skList(l, ch)}${skUpBtn(s, l, ch)}`; })()
+      : `<b style="font-size:16px">Skills</b><div style="font-size:13px;color:#6b7680;margin:8px 0">No level set. Pick one on the Profile tab, or start at ${esc(skLvName(SK.levels[0]))}.</div>${SK.levels[0] ? `<button class="btn ghost" onclick="skSetLevel('${esc(SK.levels[0].code)}')">Start at ${esc(skLvName(SK.levels[0]))}</button>` : ''}`;
+    const others = SK.levels.filter(x => x !== l).map(x => { const list = SK.skills.filter(k => k.level_id === x.id), n = list.filter(k => ch.has(k.id)).length, open = skOpenLv.id === x.id;
+      return `<div class="sklv" onclick="skOpenLv.id=${open ? 'null' : `'${esc(x.id)}'`};skFull(sd.s)"><span>${esc(skLvName(x))}</span><span style="color:${list.length && n === list.length ? '#1c7a5a' : '#999'}">${list.length && n === list.length ? 'Done ' : ''}${n}/${list.length}</span></div>${open ? '<div style="padding-left:8px">' + skList(x, ch) + '</div>' : ''}`; }).join('');
+    $('sdPanel').innerHTML = `<div class="card">${head}<div style="font-size:12px;color:#999;margin:16px 0 2px">Other levels · tap to open</div>${others}
+      ${log.length ? `<div style="font-size:12px;color:#999;margin-top:12px">History: ${log.slice(0, 6).map(g => 'Moved to ' + esc(String(g.to_level).split('-')[0]) + (g.date ? ' ' + skShort(g.date + 'T12:00:00') : '')).join(' · ')}</div>` : ''}</div>`;
+  } catch (e) { $('sdPanel').innerHTML = '<div class="card msg err">' + esc(e.message) + '</div>'; }
+}
+// Edit lesson → Skills button (shared lessons: chip per kid)
+async function skQuick() {
+  if (!lmRow) return;
+  skKidsList = [lmRow].concat(partnersOf(lmRow)).filter(r => r.student_id).map(r => r.student_id);
+  $('skModal').classList.remove('hidden');
+  skQuickDraw(lmRow.student_id);
+}
+async function skQuickDraw(id) {
+  const s = students.find(x => x.id === id); if (!s) { $('skQBody').innerHTML = '<div class="center">Student not found.</div>'; return; }
+  skStu = { s, full: false };
+  $('skKids').innerHTML = skKidsList.length > 1 ? skKidsList.map(k => { const x = students.find(y => y.id === k) || {}; return `<span class="skchip ${k === id ? 'on' : ''}" onclick="skQuickDraw('${esc(k)}')">${esc(x.first_name || k)}</span>`; }).join('') + '<span style="font-size:12px;color:#999;align-self:center">Shared lesson</span>' : '';
+  $('skQBody').innerHTML = '<div class="center">Loading…</div>';
+  try {
+    await skLoad(); const ch = await skChecks(id); if (skStu.s.id !== id) return;
+    skStu.ch = ch;
+    const l = skCur(s);
+    if (!l) { $('skQBody').innerHTML = `<div style="font-size:13px;color:#6b7680;margin-bottom:8px">${esc(s.first_name)} has no level yet.</div>${SK.levels[0] ? `<button class="btn ghost" onclick="skSetLevel('${esc(SK.levels[0].code)}')">Start at ${esc(skLvName(SK.levels[0]))}</button>` : ''}`; return; }
+    const list = SK.skills.filter(x => x.level_id === l.id), n = list.filter(x => ch.has(x.id)).length;
+    $('skQBody').innerHTML = `<div style="font-size:13px;color:#6b7680;margin-bottom:4px"><b style="color:var(--text)">${esc(s.first_name)}</b> · ${esc(skLvName(l))} · ${n} of ${list.length} skills</div>
+      <div class="skbar"><div style="width:${list.length ? Math.round(n / list.length * 100) : 0}%"></div></div>${skList(l, ch)}${skUpBtn(s, l, ch)}`;
+  } catch (e) { $('skQBody').innerHTML = '<div class="msg err">' + esc(e.message) + '</div>'; }
+}
+function skClose() { $('skModal').classList.add('hidden'); if (lmRow) skLabel(students.find(s => s.id === lmRow.student_id) || {}); }
+function skRedraw() { if (skStu.full) skFull(skStu.s); else skQuickDraw(skStu.s.id); }
+async function skToggle(skillId) {
+  const s = skStu.s, on = skStu.ch.has(skillId);
+  const r = on ? await sb.from('student_skills').delete().eq('student_id', s.id).eq('skill_id', skillId)
+    : await sb.from('student_skills').upsert({ gym_id: gymId, student_id: s.id, skill_id: skillId, checked_at: new Date().toISOString() }, { onConflict: 'student_id,skill_id' });
+  if (r.error) return alert(r.error.message);
+  if (on) skStu.ch.delete(skillId); else skStu.ch.set(skillId, new Date().toISOString());
+  skRedraw();
+}
+async function skSetLevel(code, from) {
+  const s = skStu.s;
+  const r = await sb.from('students').update({ skill_level: code }).eq('id', s.id);
+  if (r.error) return alert(r.error.message);
+  await sb.from('skill_log').insert({ id: 'SKLOG_' + Date.now(), gym_id: gymId, date: ymd(new Date()), student_id: s.id, student_name: ((s.first_name || '') + ' ' + (s.last_name || '')).trim(), event: from ? 'Moved up' : 'Level set', from_level: from || null, to_level: code });
+  s.skill_level = code; const st = students.find(x => x.id === s.id); if (st) st.skill_level = code;
+  if (sd && sd.s.id === s.id) { sd.s.skill_level = code; if ($('f_skill_level')) { if (![...$('f_skill_level').options].some(o => o.value === code)) $('f_skill_level').add(new Option(code, code)); $('f_skill_level').value = code; } renderSdTop(sd.s); }
+  skRedraw();
+}
+async function skMoveUp() {
+  const s = skStu.s, l = skCur(s), nx = l && skNext(l); if (!nx) return;
+  if (!confirm('Move ' + s.first_name + ' up to ' + skLvName(nx) + '?\n\nTheir parent sees it in the portal.')) return;
+  await skSetLevel(nx.code, l.code);
 }
 // ================= COMMUNICATE: text blasts to a group (dedup by parent phone, skip unsubscribed) =================
 const CM_AUD = [['active','Everyone active'],['day','A day'],['class','A class'],['wl','Waitlist'],['di','Drop-In'],['pick','Pick kids']];
@@ -1874,6 +1992,7 @@ async function sdStatus(st) {
 }
 function renderSdPanel(t) {
   const el = $('sdPanel');
+  if (t === 'skills') { el.innerHTML = '<div class="card center">Loading…</div>'; skFull(sd.s); return; }
   if (!sd || sd.loading) { el.innerHTML = '<div class="card center">Loading…</div>'; return; }
   const row = (a, b, c) => `<div class="arow"><div class="who">${a}</div>${b || ''}${c || ''}</div>`;
   if (t === 'schedule') {
@@ -2067,7 +2186,7 @@ function openLesson(id) {
   const coaches = coachNames();
   $('lm_title').textContent = p.student_name + ' — ' + p.day + ' ' + p.time;
   $('lm_student').value = p.student_name || '';
-  $('lm_skill').value = stu.skill_level || p.focus || '';
+  $('lm_skill').innerHTML = '<span>' + esc(stu.skill_level ? stu.skill_level.split('-')[0] : 'No level') + '</span><span>Skills</span>'; skLabel(stu);
   $('lm_coach').innerHTML = opts(coaches.concat('TBD'), p.coach || 'TBD');
   $('lm_day').innerHTML = opts(DAYS, p.day);
   $('lm_time').innerHTML = opts(TIMES, p.time);
