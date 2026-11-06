@@ -11,6 +11,8 @@
 //   { action: 'class_enroll', schedule_id, student_id }  → { ok }  waitlisted kid takes an open spot right away
 //   { action: 'waitlist_leave', schedule_id, student_id } → { ok }
 //   { action: 'clinic_signup', schedule_id, student_id } → { ok }
+//   { action: 'messages' }                               → { list: [{ me, body, at, portal }] }  last 60 days with this phone
+//   { action: 'message', body }                          → { ok }  saved to text_log IN "Unread" (extra.via 'Portal'); max 10/hour
 // Every change texts gym_settings 'portal_notify' (Steve's 214 phone) through SMSGate and is saved in schedule_exceptions
 // with extra.by = 'parent' (Dashboard shows them).
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -274,6 +276,27 @@ Deno.serve(async (req) => {
     const { error: ue } = await db.from("schedule_exceptions").update({ status: "Deleted" }).eq("id", ex.id);
     if (ue) return json({ error: "Couldn't undo. Try again or text Coach Steve." }, 500);
     await notify(`Parent portal: ${kidName(ex.student_id)} UNDID their ${ex.type === "Cancel" ? "cancel" : "move"} — back on ${nice(ex.week_start, ex.base_day, ex.base_time)}`);
+    return json({ ok: true });
+  }
+
+  // ---------- messages (thread with Coach Steve = text_log rows for this phone, last 60 days) ----------
+  if (b.action === "messages") {
+    const since = new Date(Date.now() - 60 * 864e5).toISOString();
+    const { data: m } = await db.from("text_log").select("direction,body,status,received_at,extra").eq("gym_id", gym).eq("phone", acct.phone)
+      .gte("received_at", since).not("status", "in", '("Deleted","Portal code","Failed")').order("received_at").limit(300);
+    return json({ list: (m || []).map(r => ({ me: r.direction === "IN", body: r.body, at: r.received_at, portal: r.extra?.via === "Portal" })) });
+  }
+  if (b.action === "message") {
+    const body = String(b.body || "").trim().slice(0, 1000);
+    if (!body) return json({ error: "Type a message first." });
+    const { count } = await db.from("text_log").select("id", { count: "exact", head: true }).eq("gym_id", gym).eq("phone", acct.phone).eq("direction", "IN")
+      .eq("extra->>via", "Portal").gte("received_at", new Date(Date.now() - 3600e3).toISOString());
+    if ((count || 0) >= 10) return json({ error: "That's a lot of messages this hour. Please text Coach Steve instead." });
+    const first = kids[0];
+    const { error } = await db.from("text_log").insert({ gym_id: gym, direction: "IN", phone: acct.phone, body, status: "Unread", student_id: first.id,
+      family_name: first.parent_name, received_at: new Date().toISOString(), extra: { line: "Portal", via: "Portal", kids: kids.map(k => k.first_name) } });
+    if (error) return json({ error: "Couldn't send. Try again." });
+    await notify(`Parent portal message from ${first.parent_name || "a parent"} (${kids.map(k => k.first_name).join(" & ")}): ${body}`.slice(0, 600));
     return json({ ok: true });
   }
 

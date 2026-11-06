@@ -71,6 +71,13 @@ body.in .wrap{padding-bottom:90px}
 .wkchips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .wkchip{background:var(--surface);border:1px solid var(--line);color:var(--white);border-radius:4px;padding:7px 10px;font-size:13px;font-family:'DM Sans',sans-serif;cursor:pointer}
 .wkchip.no{border-color:rgba(255,181,71,.5);color:var(--warn)}.wkchip.off{color:var(--muted);cursor:default;text-decoration:line-through}
+.thread{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:12px;display:flex;flex-direction:column;gap:8px;max-height:52vh;overflow-y:auto}
+.bub{max-width:80%;padding:9px 11px;border-radius:4px;font-size:15px;line-height:1.4;white-space:pre-wrap;word-wrap:break-word}
+.bub.me{align-self:flex-start;background:var(--surface);border:1px solid var(--line)}.bub.co{align-self:flex-end;background:var(--blue);color:#03101f}
+.bub small{display:block;font-size:11px;margin-top:3px;color:var(--muted)}.bub.co small{color:rgba(3,16,31,.7)}
+.dday{text-align:center;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-top:4px}
+textarea{width:100%;background:var(--surface);color:var(--white);border:1px solid var(--line);border-radius:4px;padding:12px;font-size:16px;font-family:'DM Sans',sans-serif;outline:none;resize:vertical;margin-top:10px}
+textarea:focus{border-color:var(--blue)}
 .sec{border-top:1px solid var(--line);margin-top:12px;padding-top:12px}
 .foot{text-align:center;color:var(--muted);font-size:13px;margin-top:22px}
 .foot a{color:var(--blue-light)}
@@ -157,7 +164,19 @@ body.in .wrap{padding-bottom:90px}
     <div class="tab" id="tLessons"><div id="lessonList"></div>
       <p class="tip" id="policyLine" style="margin-top:4px"></p></div>
     <div class="tab" id="tClasses"><div id="classList"></div></div>
-    <div class="tab" id="tMsg"><div class="card"><p class="tip" style="margin:0">Messaging Coach Steve is coming here soon. For now, text <a style="color:var(--blue-light)" href="sms:+15134432674">(513) 443-2674</a>.</p></div></div>
+    <div class="tab" id="tMsg">
+      <div class="ltitle">Message Coach Steve</div>
+      <p class="eyebrow" style="color:var(--muted);margin:2px 0 10px">Replies 8 AM – 5 PM</p>
+      <div class="thread" id="msgList"><p class="tip" style="margin:0">Loading…</p></div>
+      <div class="wkchips" id="msgQuick">
+        <button class="wkchip" data-q="We're running a few minutes late.">Running late</button>
+        <button class="wkchip" data-q="Question about payment: ">Payment question</button>
+        <button class="wkchip" data-q="Question about skills: ">Skills question</button>
+      </div>
+      <textarea id="msgBox" rows="3" maxlength="1000" placeholder="Type a message…"></textarea>
+      <button class="btn btn-primary" id="bSend">Send</button>
+      <div class="msg" id="mMsg"></div>
+    </div>
     <div class="tab" id="tAcct"><div class="card"><p class="tip" style="margin:0">Payments, skills and family info are coming here soon.</p></div>
       <button class="btn btn-ghost" id="bOut">Log out</button></div>
 
@@ -464,7 +483,34 @@ document.querySelectorAll('#nav button').forEach(b => b.onclick = () => {
   document.querySelectorAll('#nav button').forEach(x => x.classList.toggle('on', x === b));
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.id === b.dataset.t));
   window.scrollTo(0, 0);
+  if (b.dataset.t === 'tMsg') loadMsgs();
 });
+
+// ================= Message =================
+async function loadMsgs() {
+  const r = await act({ action: 'messages' }), box = $('msgList');
+  if (r.error) { box.innerHTML = `<p class="msg err" style="margin:0">${esc(r.error)}</p>`; return; }
+  if (!r.list.length) { box.innerHTML = '<p class="tip" style="margin:0">No messages yet. Send Coach Steve a message below.</p>'; return; }
+  let last = '';
+  box.innerHTML = r.list.map(m => {
+    const d = new Date(m.at), day = d.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
+    const tm = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    const head = day !== last ? `<div class="dday">${d.toDateString() === new Date().toDateString() ? 'Today' : esc(day)}</div>` : ''; last = day;
+    return head + `<div class="bub ${m.me ? 'me' : 'co'}">${esc(m.body)}<small>${m.me ? (m.portal ? 'Portal' : 'Text') : 'Coach Steve'} · ${tm}</small></div>`;
+  }).join('');
+  box.scrollTop = box.scrollHeight;
+}
+document.querySelectorAll('#msgQuick [data-q]').forEach(c => c.onclick = () => { const t = $('msgBox'); t.value = c.dataset.q + t.value; t.focus(); t.setSelectionRange(t.value.length, t.value.length); });
+$('bSend').onclick = async () => {
+  const t = $('msgBox'), body = t.value.trim(), b = $('bSend');
+  if (!body) return say('mMsg', 'Type a message first.');
+  busy(b, true); say('mMsg', '');
+  const x = await act({ action: 'message', body });
+  busy(b, false);
+  if (x.error) return say('mMsg', x.error);
+  t.value = ''; say('mMsg', 'Sent to Coach Steve.', true);
+  loadMsgs();
+};
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
 $('bOut').onclick = async () => { await sb.auth.signOut(); ME = DATA = CL = null; KID = ''; document.body.classList.remove('in'); $('nav').classList.remove('on'); $('foot').style.display = ''; $('who').textContent = ''; $('phone').value = ''; show('vPhone'); };

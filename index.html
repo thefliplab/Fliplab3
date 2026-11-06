@@ -3189,9 +3189,9 @@ async function msShow(phone, quiet) {
   $('ms_who').textContent = x.name + (x.kids ? ' (' + x.kids + ')' : '') + ' · ' + fmtPhone(phone);
   $('ms_bubbles').innerHTML = x.list.map(r => { const me = r.direction === 'OUT';
     return `<div style="align-self:${me ? 'flex-end' : 'flex-start'};max-width:82%;background:${me ? '#e6f8f1' : '#f1f3f5'};border-radius:12px;padding:7px 10px;font-size:14px;white-space:pre-wrap">${esc(r.body)}
-      <div style="font-size:11px;color:#888;margin-top:2px;text-align:${me ? 'right' : 'left'}">${msWhen(r.received_at)}${r.extra?.line === 'Voice' ? ' · ☎️ Voice' : ''}${me && r.status === 'Failed' ? ' · <span style="color:#d64545">Failed</span>' : ''}</div></div>`; }).join('');
+      <div style="font-size:11px;color:#888;margin-top:2px;text-align:${me ? 'right' : 'left'}">${msWhen(r.received_at)}${r.extra?.line === 'Voice' ? ' · ☎️ Voice' : r.extra?.via === 'Portal' ? ' · 💬 Portal' : ''}${me && r.status === 'Failed' ? ' · <span style="color:#d64545">Failed</span>' : ''}</div></div>`; }).join('');
   const bx = $('ms_bubbles'); bx.scrollTop = bx.scrollHeight;
-  if (!quiet) { $('ms_msg').value = ''; $('ms_idea').value = ''; const li = [...x.list].reverse().find(r => r.direction === 'IN'); $('ms_line').value = li?.extra?.line === 'Voice' ? 'Voice' : 'Cell'; }
+  if (!quiet) { $('ms_msg').value = ''; $('ms_idea').value = ''; const li = [...x.list].reverse().find(r => r.direction === 'IN' && r.extra?.via !== 'Portal'); $('ms_line').value = li?.extra?.line === 'Voice' ? 'Voice' : 'Cell'; }
   const ids = x.list.filter(r => r.direction === 'IN' && r.status === 'Unread').map(r => r.id);
   if (ids.length) { await sb.from('text_log').update({ status: 'Read' }).in('id', ids); ids.forEach(id => { const r = msRows.find(y => y.id === id); if (r) r.status = 'Read'; }); msBadge(); }
 }
