@@ -3802,6 +3802,8 @@ function rtStart() {
   rtChan = sb.channel('fl3-admin');
   ['private_lessons','schedule_exceptions','attendance','payments','students','waitlist','available_slots','class_attendance','class_enrollments','coaches','class_schedule','class_rsvp','clinic_kids']
     .forEach(t => rtChan.on('postgres_changes', { event: '*', schema: 'public', table: t }, rtQueue));
+  rtChan.on('postgres_changes', { event: '*', schema: 'public', table: 'student_extra_skills' }, () => loadSkReqs());
+  loadSkReqs();   // logged in now — first check may have run before login and found nothing
   rtChan.on('postgres_changes', { event: '*', schema: 'public', table: 'text_log' }, () => { msBadge(); if (curTab === 'msgs') { clearTimeout(msRt); msRt = setTimeout(() => loadMsgs(true), 800); } });
   rtChan.subscribe();
 }
