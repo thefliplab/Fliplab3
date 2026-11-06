@@ -2646,6 +2646,9 @@ function renderDash() {
   if (recentClaims.length) alerts.push(['#1D9E75', recentClaims.length + ' spot' + (recentClaims.length === 1 ? '' : 's') + ' claimed from a text', recentClaims.slice(0, 4).map(c => (c.student_name || '').split(' ')[0] + ' ' + SHORT[c.day] + ' ' + c.time).join(' · '), "go('schedule')"]);
   const out = weekRows.filter(p => p.status === 'Cancelled' && p.exType !== 'MoveOrigin' && !slotPast(p.day, p.time));
   if (out.length) alerts.push(['#B45309', out.length + ' out this week — spot' + (out.length === 1 ? '' : 's') + ' to fill', out.map(p => p.student_name.split(' ')[0] + ' ' + SHORT[p.day] + ' ' + p.time).join(' · '), "go('openings')"]);
+  // Changes parents made in the parent portal this week
+  const pp = weekEx.filter(e => (e.extra || {}).by === 'parent' && e.status === 'Active');
+  if (pp.length) alerts.push(['#1e8cff', pp.length + ' change' + (pp.length === 1 ? '' : 's') + ' from the parent portal', pp.map(e => String(e.student_name || '').split(' ')[0] + (e.type === 'Cancel' ? ' cancelled ' + SHORT[e.base_day] + ' ' + e.base_time : ' moved ' + SHORT[e.base_day] + ' → ' + SHORT[e.new_day] + ' ' + e.new_time) + (e.extra.late ? ' (LATE)' : '')).join(' · '), "go('schedule')"]);
   if (dashHist) {
     const { absent, unpaid2 } = dashHist;
     if (absent.length) alerts.push(['#A32D2D', absent.length + ' kid' + (absent.length === 1 ? '' : 's') + ' missed the last 2 weeks', absent.join(' · '), "go('students')"]);
