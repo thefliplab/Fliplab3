@@ -1086,7 +1086,9 @@ async function skFull(s) {
     const others = SK.levels.filter(x => x !== l).map(x => { const list = SK.skills.filter(k => k.level_id === x.id), n = list.filter(k => ch.has(k.id)).length, open = skOpenLv.id === x.id;
       return `<div class="sklv" onclick="skOpenLv.id=${open ? 'null' : `'${esc(x.id)}'`};skFull(sd.s)"><span>${esc(skLvName(x))}</span><span style="color:${list.length && n === list.length ? '#1c7a5a' : '#999'}">${list.length && n === list.length ? 'Done ' : ''}${n}/${list.length}</span></div>${open ? '<div style="padding-left:8px">' + skList(x, ch) + '</div>' : ''}`; }).join('');
     $('sdPanel').innerHTML = `<div class="card">${head}<div style="font-size:12px;color:#999;margin:16px 0 2px">Other levels · tap to open</div>${others}
-      ${log.length ? `<div style="font-size:12px;color:#999;margin-top:12px">History: ${log.slice(0, 6).map(g => 'Moved to ' + esc(String(g.to_level).split('-')[0]) + (g.date ? ' ' + skShort(g.date + 'T12:00:00') : '')).join(' · ')}</div>` : ''}</div>`;
+      ${log.length ? `<div style="font-size:12px;color:#999;margin-top:12px">History: ${log.slice(0, 6).map(g => 'Moved to ' + esc(String(g.to_level).split('-')[0]) + (g.date ? ' ' + skShort(g.date + 'T12:00:00') : '')).join(' · ')}</div>` : ''}</div>
+      <div class="card" id="xsBox"><div class="center">Loading…</div></div>`;
+    xsDraw(s);
   } catch (e) { $('sdPanel').innerHTML = '<div class="card msg err">' + esc(e.message) + '</div>'; }
 }
 // Edit lesson → Skills button (shared lessons: chip per kid)
@@ -1134,6 +1136,88 @@ async function skMoveUp() {
   const s = skStu.s, l = skCur(s), nx = l && skNext(l); if (!nx) return;
   if (!confirm('Move ' + s.first_name + ' up to ' + skLvName(nx) + '?\n\nTheir parent sees it in the portal.')) return;
   await skSetLevel(nx.code, l.code);
+}
+// ---- Extra skills for one kid (student_extra_skills) + parent requests ----
+let xsTag = 'Cheer', skReqs = null;
+const XS_TAG = { Cheer: 'background:#E1F5EE;color:#085041', Dance: 'background:#EEEDFE;color:#3C3489' };
+async function xsDraw(s) {
+  const r = await sb.from('student_extra_skills').select('*').eq('student_id', s.id).neq('status', 'Not now').order('created_at');
+  const box = $('xsBox'); if (!box || !sd || sd.s.id !== s.id) return;
+  if (r.error) { box.innerHTML = '<div class="msg err">' + esc(r.error.message) + '</div>'; return; }
+  const req = r.data.filter(x => x.status === 'Requested'), list = r.data.filter(x => x.status !== 'Requested');
+  const tag = t => t ? `<span class="tag" style="margin-left:auto;${XS_TAG[t] || ''}">${esc(t)}</span>` : '<span style="margin-left:auto"></span>';
+  box.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:16px">Extra skills for ${esc(s.first_name)}</b><span style="font-size:12px;color:#999">Not part of the level</span></div>
+    ${req.map(x => `<div style="background:#FAEEDA;border-radius:8px;padding:10px;margin:10px 0 0;font-size:13px;color:#633806">Parent asked: <b>${esc(x.name)}</b> ${x.tag ? `<span class="tag" style="${XS_TAG[x.tag] || ''}">${esc(x.tag)}</span>` : ''}${x.note ? `<div style="margin-top:4px">"${esc(x.note)}"</div>` : ''}
+      <div style="display:flex;gap:6px;margin-top:8px"><button class="btn" style="flex:1;padding:8px" onclick="xsAnswer('${esc(x.id)}','Working')">Add to list</button><button class="btn ghost" style="flex:1;padding:8px" onclick="xsAnswer('${esc(x.id)}','Not now')">Not now</button></div></div>`).join('')}
+    <div style="margin-top:8px">${list.map(x => `<div class="skrow ${x.status === 'Done' ? 'on' : ''}"><div class="skbx" onclick="xsDone('${esc(x.id)}',${x.status === 'Done' ? 'false' : 'true'})">${x.status === 'Done' ? '✓' : ''}</div><span onclick="xsDone('${esc(x.id)}',${x.status === 'Done' ? 'false' : 'true'})" style="flex:1">${esc(x.name)}${x.source === 'parent' ? ' <small style="color:#999">· parent asked</small>' : ''}</span>${tag(x.tag)}<a href="#" style="font-size:12px;color:#999;margin-left:8px" onclick="xsRemove('${esc(x.id)}');return false">Remove</a></div>`).join('')
+      || (req.length ? '' : '<div style="color:#888;font-size:13px;padding:6px 4px">No extra skills yet. Add one for something they need for cheer or dance.</div>')}</div>
+    <div style="display:flex;gap:6px;margin-top:10px;align-items:center"><input id="xs_name" placeholder="Add a skill for ${esc(s.first_name)}" style="flex:1;margin:0" oninput="$('xs_msg').textContent=''">${['Cheer', 'Dance'].map(t => `<span class="skchip ${xsTag === t ? 'on' : ''}" onclick="xsTag=xsTag==='${t}'?'':'${t}';xsDraw(sd.s)">${t}</span>`).join('')}</div>
+    <div id="xs_msg" class="msg err"></div><button class="btn ghost" style="margin-top:6px" onclick="xsAdd()">Add skill</button>`;
+}
+async function xsAdd() {
+  const s = sd.s, name = $('xs_name').value.trim();
+  if (!name) { $('xs_msg').textContent = 'Enter a skill name first.'; return; }
+  const r = await sb.from('student_extra_skills').insert({ gym_id: gymId, student_id: s.id, name, tag: xsTag || null, status: 'Working', source: 'coach' });
+  if (r.error) return alert(r.error.message);
+  xsDraw(s);
+}
+async function xsAnswer(id, st) {
+  const r = await sb.from('student_extra_skills').update({ status: st, answered_at: new Date().toISOString() }).eq('id', id);
+  if (r.error) return alert(r.error.message);
+  skReqs = null; xsDraw(sd.s);
+}
+async function xsDone(id, done) {
+  const r = await sb.from('student_extra_skills').update({ status: done ? 'Done' : 'Working', done_at: done ? new Date().toISOString() : null }).eq('id', id);
+  if (r.error) return alert(r.error.message);
+  xsDraw(sd.s);
+}
+async function xsRemove(id) {
+  if (!confirm('Remove this extra skill? It also goes away in the parent portal.')) return;
+  const r = await sb.from('student_extra_skills').delete().eq('id', id);
+  if (r.error) return alert(r.error.message);
+  xsDraw(sd.s);
+}
+async function loadSkReqs() {
+  skReqs = [];
+  const r = await sb.from('student_extra_skills').select('student_id').eq('status', 'Requested');
+  if (r.error) return;
+  skReqs = r.data.map(x => { const st = students.find(y => y.id === x.student_id) || {}; return { student_id: x.student_id, who: ((st.first_name || '') + ' ' + (st.last_name || '')).trim() || x.student_id }; });
+  if (skReqs.length && typeof renderDash === 'function') renderDash();
+}
+// ---- Settings → Skills: master list per level ----
+let skMOpen = null;
+async function skMasterDraw() {
+  const el = $('st_skills'); if (!el) return;
+  try { await skLoad(); } catch (e) { el.innerHTML = '<div class="msg err">' + esc(e.message) + '</div>'; return; }
+  if (!$('st_skills')) return;
+  if (!SK.levels.length) { el.innerHTML = '<div style="color:#888;font-size:13px;padding:8px 0">No skill levels set up yet.</div>'; return; }
+  el.innerHTML = SK.levels.map(l => { const list = SK.skills.filter(x => x.level_id === l.id), open = skMOpen === l.id;
+    return `<div class="sklv" onclick="skMOpen=${open ? 'null' : `'${esc(l.id)}'`};skMasterDraw()"><span${open ? ' style="font-weight:600"' : ''}>${esc(skLvName(l))}</span><span style="color:#999">${open ? 'close' : list.length + ' skills'}</span></div>
+      ${open ? `<div style="padding-left:6px">${list.map((x, i) => `<div style="display:flex;gap:6px;align-items:center;padding:4px 0;border-bottom:1px solid #f0f0f0">
+        <input value="${esc(x.name)}" style="flex:1;margin:0;font-size:14px;padding:8px" onchange="skMRename('${esc(x.id)}',this.value)">
+        <button class="paybtn" style="padding:8px 10px" ${i ? '' : 'disabled'} onclick="skMMove('${esc(l.id)}',${i},-1)">Up</button>
+        <button class="paybtn" style="padding:8px 10px" ${i < list.length - 1 ? '' : 'disabled'} onclick="skMMove('${esc(l.id)}',${i},1)">Down</button>
+        <button class="paybtn" style="padding:8px 10px;background:#FCEBEB;color:#A32D2D" onclick="skMHide('${esc(x.id)}')">Remove</button></div>`).join('')}
+        <div style="display:flex;gap:6px;margin:8px 0"><input id="skm_new" placeholder="New ${esc(l.code.split('-')[0])} skill" style="flex:1;margin:0"><button class="paybtn" style="padding:8px 14px" onclick="skMAdd('${esc(l.id)}')">Add</button></div></div>` : ''}`; }).join('')
+    + '<div style="font-size:12px;color:#999;margin-top:8px">Removing a skill hides it. Kids who already checked it keep it in their history. Adding a skill changes "X of Y" for kids in that level.</div>';
+}
+async function skMDone(r) { if (r && r.error) { alert(r.error.message); } SK = null; skMasterDraw(); }
+async function skMRename(id, v) { v = v.trim(); if (!v) return skMasterDraw(); skMDone(await sb.from('skills').update({ name: v }).eq('id', id)); }
+async function skMHide(id) {
+  const x = SK.skills.find(k => k.id === id);
+  if (!confirm('Remove "' + (x ? x.name : '') + '" from the list for everyone?\n\nKids who already checked it keep it in their history.')) return;
+  skMDone(await sb.from('skills').update({ active: false }).eq('id', id));
+}
+async function skMMove(lvId, i, d) {
+  const list = SK.skills.filter(x => x.level_id === lvId), j = i + d; if (j < 0 || j >= list.length) return;
+  [list[i], list[j]] = [list[j], list[i]];
+  const res = await Promise.all(list.map((x, k) => sb.from('skills').update({ sort: (k + 1) * 10 }).eq('id', x.id)));
+  skMDone(res.find(r => r.error));
+}
+async function skMAdd(lvId) {
+  const v = ($('skm_new').value || '').trim(); if (!v) return alert('Enter a skill name first.');
+  const max = Math.max(0, ...SK.skills.filter(x => x.level_id === lvId).map(x => x.sort || 0));
+  skMDone(await sb.from('skills').insert({ id: 'SK_' + Date.now(), gym_id: gymId, level_id: lvId, name: v, sort: max + 10, active: true, created_at: new Date().toISOString() }));
 }
 // ================= COMMUNICATE: text blasts to a group (dedup by parent phone, skip unsubscribed) =================
 const CM_AUD = [['active','Everyone active'],['day','A day'],['class','A class'],['wl','Waitlist'],['di','Drop-In'],['pick','Pick kids']];
@@ -1521,6 +1605,7 @@ function stDraw() {
     + sec('Look', 'Logo and main color for your top bar and buttons.', 0)
     + sec('Lessons and prices', 'Prices for new lessons. Lessons you already have and ★ special prices are never changed.', 1)
     + sec('Payment buttons', 'These show when you record a payment.', 2)
+    + `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Skills</b><div style="color:var(--muted);font-size:13px">Every kid in a level works on these. Changes apply to everyone and save right away.</div><div id="st_skills"><div class="center">Loading…</div></div></div>`
     + `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Tabs</b><div style="color:var(--muted);font-size:13px">Tap to turn a tab off or on. Hiding a tab never deletes anything. Dashboard, Schedule and Students always show.</div>
        <div style="margin-top:8px">${ST_TABS.map(([t, n]) => { const off = (wz.hide_tabs || []).includes(t); return `<button class="paybtn" style="margin:0 6px 6px 0;padding:8px 12px;${off ? 'background:#eee;color:#aaa;text-decoration:line-through' : 'background:var(--mint-soft);color:#1c7a5a'}" onclick="stTab('${t}')">${off ? '' : '✓ '}${n}</button>`; }).join('')}</div></div>`
     + (gymSlug === 'fliplab' ? '' : `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Your email</b>
@@ -1552,6 +1637,7 @@ function stDraw() {
        <div style="font-size:12px;color:var(--muted);margin-top:4px">Preview only. Your sign-up page starts using these in the next update.</div></div>`
     + `<button class="btn" style="margin-top:18px" onclick="stSave()">Save settings</button>
        <button class="btn ghost" style="margin-top:8px" onclick="stClose()">Cancel</button><div id="st_msg" class="msg"></div>`;
+  skMasterDraw();
 }
 async function stSave() {
   stKeep();
@@ -2785,6 +2871,8 @@ function renderDash() {
     if (absent.length) alerts.push(['#A32D2D', absent.length + ' kid' + (absent.length === 1 ? '' : 's') + ' missed the last 2 weeks', absent.join(' · '), "go('students')"]);
     if (unpaid2.length) alerts.push(['#854F0B', unpaid2.length + ' unpaid 2+ weeks running', unpaid2.join(' · '), "go('payments')"]);
   } else loadDashHist();
+  if (skReqs === null) loadSkReqs();
+  else if (skReqs.length) alerts.push(['#185FA5', skReqs.length + ' skill request' + (skReqs.length === 1 ? '' : 's') + ' from ' + (skReqs.length === 1 ? 'a parent' : 'parents'), [...new Set(skReqs.map(r => r.who))].join(' · ') + ' · tap to answer', `openEdit('${esc(skReqs[0].student_id)}');sdTab('skills')`]);
   if (msUnread) alerts.push(['#d64545', msUnread + ' unread text' + (msUnread === 1 ? '' : 's') + ' from parents', 'Tap to open Messages', "go('msgs')"]);
   const mi = miKids();
   if (mi.length) alerts.push(['#7F77DD', mi.length + ' kid' + (mi.length === 1 ? '' : 's') + ' missing info', 'Birthdate or level · tap to fill in', 'openMissing()']);
