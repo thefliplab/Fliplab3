@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Parent Portal · Flip Lab</title>
+<meta name="theme-color" content="#05070d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Flip Lab">
+<link rel="apple-touch-icon" href="https://fliplabcoachsteve.com/images/apple-touch-icon.png">
+<link rel="icon" href="https://fliplabcoachsteve.com/images/favicon.png">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+/* Colors + fonts match fliplabcoachsteve.com */
+:root{--bg:#05070d;--surface:#0b1020;--card:#101827;--blue:#1e8cff;--blue-light:#63b3ff;--white:#f5f8ff;--muted:#8b97ad;--line:rgba(245,248,255,.12);--ok:#3ddc97;--warn:#ffb547;--bad:#ff6b6b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--white);font-family:'DM Sans',sans-serif;font-size:16px;-webkit-font-smoothing:antialiased;min-height:100vh}
+.top{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+.top img{height:34px}
+.top .who{font-family:'DM Mono',monospace;font-size:12px;color:var(--muted)}
+.wrap{max-width:440px;margin:0 auto;padding:22px 18px 40px}
+h1{font-family:'Bebas Neue',sans-serif;font-weight:400;font-size:40px;letter-spacing:1px;line-height:1;margin:6px 0 6px}
+h1 span{color:var(--blue)}
+.eyebrow{font-family:'DM Mono',monospace;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:var(--blue-light);margin:0}
+.sub{color:var(--muted);font-size:15px;margin:0 0 20px;line-height:1.5}
+.card{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:16px;margin-bottom:12px}
+label{display:block;font-family:'DM Mono',monospace;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin:0 0 6px}
+input{width:100%;background:var(--surface);color:var(--white);border:1px solid var(--line);border-radius:4px;padding:14px;font-size:20px;font-family:'DM Sans',sans-serif;outline:none}
+input:focus{border-color:var(--blue)}
+input.code{letter-spacing:10px;text-align:center;font-family:'DM Mono',monospace}
+.btn{display:block;width:100%;margin-top:14px;padding:15px;border-radius:4px;border:none;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:800;letter-spacing:1.4px;text-transform:uppercase;cursor:pointer}
+.btn-primary{background:var(--blue);color:#03101f}
+.btn-ghost{background:transparent;color:var(--white);border:1px solid rgba(245,248,255,.22)}
+.btn:disabled{opacity:.6}
+.link{background:none;border:none;color:var(--blue-light);font-size:14px;padding:12px 0 0;cursor:pointer;font-family:'DM Sans',sans-serif}
+.msg{font-size:14px;margin-top:10px;min-height:18px}
+.msg.err{color:var(--bad)} .msg.ok{color:var(--ok)}
+.kids{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.chip{padding:7px 14px;border-radius:20px;border:1px solid var(--line);font-size:14px;background:var(--card)}
+.chip.on{background:var(--blue);color:#03101f;border-color:var(--blue);font-weight:700}
+.tip{font-size:13px;color:var(--muted);line-height:1.5}
+.tip b{color:var(--white);font-weight:500}
+.view{display:none}.view.on{display:block}
+.foot{text-align:center;color:var(--muted);font-size:13px;margin-top:22px}
+.foot a{color:var(--blue-light)}
+</style>
+</head>
+<body>
+<div class="top">
+  <img src="https://fliplabcoachsteve.com/images/logo.png" alt="Flip Lab with Coach Steve">
+  <span class="who" id="who"></span>
+</div>
+
+<div class="wrap">
+  <!-- 1. Phone -->
+  <div class="view" id="vPhone">
+    <p class="eyebrow">Parent portal</p>
+    <h1>Welcome <span>back</span></h1>
+    <p class="sub">Cancel or move lessons, sign up for classes, pay and message Coach Steve.</p>
+    <div class="card">
+      <label for="phone">Your phone number</label>
+      <input id="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(513) 555-1234">
+      <button class="btn btn-primary" id="bPhone">Next</button>
+      <div class="msg" id="mPhone"></div>
+    </div>
+  </div>
+
+  <!-- 2. Their own code -->
+  <div class="view" id="vPin">
+    <p class="eyebrow" id="pinPhone"></p>
+    <h1>Enter your <span>code</span></h1>
+    <p class="sub">The 4–6 number code you picked.</p>
+    <div class="card">
+      <label for="pin">Your code</label>
+      <input id="pin" class="code" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password">
+      <button class="btn btn-primary" id="bPin">Log in</button>
+      <div class="msg" id="mPin"></div>
+      <button class="link" id="bForgot">Forgot my code</button><br>
+      <button class="link" data-go="vPhone">Use a different number</button>
+    </div>
+  </div>
+
+  <!-- 3. Texted one-time code -->
+  <div class="view" id="vCode">
+    <p class="eyebrow" id="codeFor">First time here</p>
+    <h1>Check your <span>texts</span></h1>
+    <p class="sub" id="codeSub">We'll text a 6-number code to prove this phone is yours.</p>
+    <div class="card">
+      <button class="btn btn-primary" id="bSend">Text me a code</button>
+      <div id="codeBox" style="display:none">
+        <label for="code" style="margin-top:4px">6-number code</label>
+        <input id="code" class="code" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code">
+        <button class="btn btn-primary" id="bCode">Continue</button>
+        <button class="link" id="bResend">Send a new code</button>
+      </div>
+      <div class="msg" id="mCode"></div>
+      <button class="link" data-go="vPhone">Use a different number</button>
+    </div>
+  </div>
+
+  <!-- 4. Pick their own code -->
+  <div class="view" id="vNew">
+    <p class="eyebrow">Almost done</p>
+    <h1>Pick your <span>code</span></h1>
+    <p class="sub">4 to 6 numbers. You'll use it to log in from now on.</p>
+    <div class="card">
+      <label for="new1">New code</label>
+      <input id="new1" class="code" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password">
+      <label for="new2" style="margin-top:12px">Type it again</label>
+      <input id="new2" class="code" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password">
+      <button class="btn btn-primary" id="bNew">Save and log in</button>
+      <div class="msg" id="mNew"></div>
+    </div>
+  </div>
+
+  <!-- 5. Home (placeholder until step 2) -->
+  <div class="view" id="vHome">
+    <p class="eyebrow" id="homeGym">Flip Lab Studios</p>
+    <h1 id="homeHi">Hi <span>there</span></h1>
+    <div class="kids" id="kids"></div>
+    <div class="card"><p class="tip" style="margin:0">Lessons, classes, payments and messages are coming here next.</p></div>
+    <div class="card" id="a2hs"><p class="tip" style="margin:0"><b>Tip:</b> add this to your home screen so it opens like an app.<br>iPhone: tap Share → <b>Add to Home Screen</b>. Android: tap ⋮ → <b>Add to Home screen</b>.</p></div>
+    <button class="btn btn-ghost" id="bOut">Log out</button>
+  </div>
+
+  <div class="foot">Questions? Text Coach Steve <a href="sms:+15134432674">(513) 443-2674</a></div>
+</div>
+
+<script>
+const GYM = new URLSearchParams(location.search).get('gym') || 'fliplab';
+const SB_URL = 'https://angmtyojkwlrefxpcgoa.supabase.co';
+const sb = supabase.createClient(SB_URL, 'sb_publishable_fPciNfnNHpHQikB8mqHNpw_hIVRIGo5', { auth: { storageKey: 'fl3-portal', persistSession: true, autoRefreshToken: true } });
+const $ = id => document.getElementById(id);
+let PHONE = '', TOKEN = '';
+
+function show(v) { document.querySelectorAll('.view').forEach(x => x.classList.toggle('on', x.id === v)); window.scrollTo(0, 0); const f = $(v).querySelector('input'); if (f) setTimeout(() => f.focus(), 50); }
+function say(id, t, ok) { const m = $(id); m.textContent = t || ''; m.className = 'msg ' + (ok ? 'ok' : 'err'); }
+function fmt(p) { return '(' + p.slice(0, 3) + ') ' + p.slice(3, 6) + '-' + p.slice(6); }
+function busy(b, on) { b.disabled = on; }
+async function call(body) {
+  try {
+    const r = await fetch(SB_URL + '/functions/v1/portal-auth', { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: 'sb_publishable_fPciNfnNHpHQikB8mqHNpw_hIVRIGo5' }, body: JSON.stringify({ gym: GYM, phone: PHONE, ...body }) });
+    return await r.json();
+  } catch (e) { return { error: 'No connection. Try again.' }; }
+}
+const NOT_FOUND = "We don't have that number. Use the phone number you signed up with, or text Coach Steve.";
+
+$('bPhone').onclick = async () => {
+  PHONE = $('phone').value.replace(/\D/g, '').slice(-10);
+  if (PHONE.length !== 10) return say('mPhone', 'Enter your 10-digit phone number.');
+  busy($('bPhone'), true); say('mPhone', '');
+  const r = await call({ action: 'check' });
+  busy($('bPhone'), false);
+  if (r.error) return say('mPhone', r.error === 'not_found' ? NOT_FOUND : r.error);
+  if (r.has_pin) { $('pinPhone').textContent = fmt(PHONE); $('pin').value = ''; say('mPin', ''); show('vPin'); }
+  else openCode(false);
+};
+$('phone').onkeydown = e => { if (e.key === 'Enter') $('bPhone').click(); };
+
+function openCode(forgot) {
+  $('codeFor').textContent = forgot ? 'Forgot your code' : 'First time here';
+  $('codeSub').textContent = "We'll text a 6-number code to " + fmt(PHONE) + ' to prove this phone is yours.';
+  $('codeBox').style.display = 'none'; $('bSend').style.display = 'block'; $('code').value = ''; say('mCode', '');
+  show('vCode');
+}
+$('bForgot').onclick = () => openCode(true);
+
+async function sendCode() {
+  busy($('bSend'), true); say('mCode', 'Sending…', true);
+  const r = await call({ action: 'send_code' });
+  busy($('bSend'), false);
+  if (r.error) return say('mCode', r.error === 'not_found' ? NOT_FOUND : r.error);
+  $('bSend').style.display = 'none'; $('codeBox').style.display = 'block'; say('mCode', 'Code sent. It can take a minute.', true); $('code').focus();
+}
+$('bSend').onclick = sendCode; $('bResend').onclick = sendCode;
+
+$('bCode').onclick = async () => {
+  const code = $('code').value.replace(/\D/g, '');
+  if (code.length !== 6) return say('mCode', 'Enter the 6-number code from the text.');
+  busy($('bCode'), true);
+  const r = await call({ action: 'verify', code });
+  busy($('bCode'), false);
+  if (r.error) return say('mCode', r.error);
+  TOKEN = r.token; $('new1').value = $('new2').value = ''; say('mNew', ''); show('vNew');
+};
+$('code').oninput = () => { if ($('code').value.replace(/\D/g, '').length === 6) $('bCode').click(); };
+
+$('bNew').onclick = async () => {
+  const a = $('new1').value, b = $('new2').value;
+  if (!/^\d{4,6}$/.test(a)) return say('mNew', 'Your code must be 4 to 6 numbers.');
+  if (a !== b) return say('mNew', "The two codes don't match.");
+  busy($('bNew'), true);
+  const r = await call({ action: 'set_pin', token: TOKEN, pin: a });
+  busy($('bNew'), false);
+  if (r.error) return say('mNew', r.error);
+  await startSession(r.session);
+};
+
+$('bPin').onclick = async () => {
+  const pin = $('pin').value;
+  if (!/^\d{4,6}$/.test(pin)) return say('mPin', 'Enter your 4–6 number code.');
+  busy($('bPin'), true);
+  const r = await call({ action: 'login', pin });
+  busy($('bPin'), false);
+  if (r.error === 'no_pin') return openCode(false);
+  if (r.error) return say('mPin', r.error);
+  await startSession(r.session);
+};
+$('pin').onkeydown = e => { if (e.key === 'Enter') $('bPin').click(); };
+
+async function startSession(s) {
+  await sb.auth.setSession(s);
+  localStorage.setItem('fl3-portal-phone', PHONE);
+  loadHome();
+}
+
+async function loadHome() {
+  const { data: me, error } = await sb.rpc('portal_me');
+  if (error || !me || me.error) { await sb.auth.signOut(); return show('vPhone'); }
+  const first = String(me.parent_name || '').trim().split(/\s+/)[0];
+  $('homeHi').innerHTML = 'Hi <span>' + esc(first || 'there') + '</span>';
+  $('homeGym').textContent = me.gym_name || 'Flip Lab Studios';
+  $('who').textContent = fmt(me.phone);
+  $('kids').innerHTML = (me.kids || []).map((k, i) => '<span class="chip' + (i ? '' : ' on') + '">' + esc(k.first_name) + '</span>').join('');
+  if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) $('a2hs').style.display = 'none';
+  show('vHome');
+}
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+$('bOut').onclick = async () => { await sb.auth.signOut(); $('who').textContent = ''; $('phone').value = ''; show('vPhone'); };
+document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => show(b.dataset.go));
+
+(async () => {
+  const { data } = await sb.auth.getSession();
+  if (data.session) return loadHome();
+  const last = localStorage.getItem('fl3-portal-phone');
+  if (last) $('phone').value = fmt(last);
+  show('vPhone');
+})();
+</script>
+</body>
+</html>
