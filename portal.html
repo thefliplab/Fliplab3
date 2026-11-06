@@ -498,11 +498,11 @@ async function openExtra() {
   if (r.error) return sheet(top + `<div class="msg err">${esc(r.error)}</div><button class="btn btn-ghost" onclick="closeSheet()">Close</button>`);
   const all = r.weeks.flatMap((w, wi) => w.slots.map(s => ({ ...s, ws: w.ws, wi })));
   const sub = `<div class="lsub">30 minutes · ${esc(r.price)} · ${esc(r.coach)}</div>`;
-  if (!all.length) return sheet(top + sub + `<p class="tip" style="margin-top:12px">No open times this week or next. Text <a style="color:var(--blue-light)" href="sms:+15134432674">Coach Steve</a>.</p><button class="btn btn-ghost" onclick="closeSheet()">Close</button>`);
+  if (!all.length) return sheet(top + sub + r.weeks.map((w, wi) => `<div class="wk">${wi ? 'Next week' : 'This week'}</div><p class="tip" style="margin:0">${w.used ? 'Already booked an extra lesson this week.' : 'No open times.'}</p>`).join('') + `<p class="tip" style="margin-top:12px">Text <a style="color:var(--blue-light)" href="sms:+15134432674">Coach Steve</a> if you need another time.</p><button class="btn btn-ghost" onclick="closeSheet()">Close</button>`);
   let pick = null;
   const wkHtml = r.weeks.map((w, wi) => `<div class="wk">${wi ? 'Next week' : 'This week'}</div>` + (w.slots.length
     ? `<div class="slots" style="grid-template-columns:1fr">${all.map((s, i) => s.wi === wi ? `<button data-i="${i}">${dlabel(s.date, s.day)} · ${esc(s.time)}</button>` : '').join('')}</div>`
-    : '<p class="tip" style="margin:0">No open times.</p>')).join('');
+    : `<p class="tip" style="margin:0">${w.used ? 'Already booked an extra lesson this week. Text Coach Steve if you need another.' : 'No open times.'}</p>`)).join('');
   sheet(top + sub + `<div class="warnbox"><b>This is an extra lesson, in addition to your current one.</b> One time only. Not a move and not a weekly spot.</div>${wkHtml}
     <label style="display:flex;gap:10px;align-items:flex-start;margin-top:14px;text-transform:none;letter-spacing:0;font-family:inherit;font-size:14px;color:var(--white)"><input type="checkbox" id="xOk" style="width:18px;height:18px;margin-top:2px;flex:none"><span id="xOkTxt">I understand this is one time only.</span></label>
     <button class="btn btn-primary" id="xBook">Book one-time lesson</button><button class="link" onclick="closeSheet()">Never mind</button>

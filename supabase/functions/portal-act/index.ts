@@ -5,7 +5,7 @@
 //   { action: 'options', lesson_id, ws }                 → { slots: [{ day, time }] }  open times that week, same coach
 //   { action: 'cancel',  lesson_id, ws, ok_late? }       → { ok } | { late: true }  (late = under cancel_hrs; parent must confirm)
 //   { action: 'move',    lesson_id, ws, day, time }      → { ok }
-//   { action: 'extra_options', student_id }              → { weeks: [{ ws, slots: [{ day, time, date }] }], price, coach }  30-min one-time openings, main coach, this + next week
+//   { action: 'extra_options', student_id }              → { weeks: [{ ws, slots: [{ day, time, date }] }], price, coach }  30-min one-time openings, main coach, this + next week; used:true = already has one that week (limit 1)
 //   { action: 'extra_book', student_id, ws, day, time, ok_once } → { ok }  saved as a one-week Add (drop-in), never weekly
 //   { action: 'undo',    ex_id }                         → { ok }  (only the parent's own change, before the lesson)
 //   { action: 'classes' }                                → { classes, clinics }  the kids' weekly classes (enrolled / waitlisted) + upcoming clinics
@@ -178,9 +178,14 @@ Deno.serve(async (req) => {
     const sid = String(b.student_id || "");
     if (!kidIds.has(sid)) return json({ error: "Pick a student." });
     const wk2 = [thisMon, addDays(thisMon, 7)];
+    // Limit: 1 portal extra lesson per kid per week (cancelled ones don't count)
+    const { data: had } = await db.from("schedule_exceptions").select("week_start").eq("gym_id", gym).eq("student_id", sid)
+      .eq("type", "Add").eq("status", "Active").eq("extra->>extra_lesson", "true").in("week_start", wk2);
+    const usedWk = new Set((had || []).map(x => String(x.week_start)));
     if (b.action === "extra_options") {
       const weeks = [];
       for (const ws of wk2) {
+        if (usedWk.has(ws)) { weeks.push({ ws, slots: [], used: true }); continue; }
         const { rows } = await week(ws);
         weeks.push({ ws, slots: (await openSlots(ws, main, rows)).map(s => ({ ...s, date: dateOf(ws, s.day) })) });
       }
@@ -189,6 +194,7 @@ Deno.serve(async (req) => {
     const ws = String(b.ws || ""), day = String(b.day || ""), time = String(b.time || "");
     if (!wk2.includes(ws)) return json({ error: "Pick this week or next week." });
     if (!b.ok_once) return json({ error: "Check the box to confirm this is one time only." });
+    if (usedWk.has(ws)) return json({ error: "Already booked an extra lesson that week. Text Coach Steve if you need another." });
     const { rows } = await week(ws);
     if (!(await openSlots(ws, main, rows)).some(s => s.day === day && s.time === time)) return json({ error: "That time was just taken. Pick another." });
     const { error } = await db.from("schedule_exceptions").insert({ gym_id: gym, id: crypto.randomUUID(), type: "Add", lesson_id: null,
