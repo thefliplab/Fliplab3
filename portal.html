@@ -174,7 +174,7 @@ textarea:focus{border-color:var(--blue)}
         <button class="wkchip" data-q="Question about skills: ">Skills question</button>
       </div>
       <textarea id="msgBox" rows="3" maxlength="1000" placeholder="Type a message…"></textarea>
-      <button class="btn btn-primary" id="bSend">Send</button>
+      <button class="btn btn-primary" id="bMsgSend">Send</button>
       <div class="msg" id="mMsg"></div>
     </div>
     <div class="tab" id="tAcct"><div class="card"><p class="tip" style="margin:0">Payments, skills and family info are coming here soon.</p></div>
@@ -501,8 +501,8 @@ async function loadMsgs() {
   box.scrollTop = box.scrollHeight;
 }
 document.querySelectorAll('#msgQuick [data-q]').forEach(c => c.onclick = () => { const t = $('msgBox'); t.value = c.dataset.q + t.value; t.focus(); t.setSelectionRange(t.value.length, t.value.length); });
-$('bSend').onclick = async () => {
-  const t = $('msgBox'), body = t.value.trim(), b = $('bSend');
+$('bMsgSend').onclick = async () => {
+  const t = $('msgBox'), body = t.value.trim(), b = $('bMsgSend');
   if (!body) return say('mMsg', 'Type a message first.');
   busy(b, true); say('mMsg', '');
   const x = await act({ action: 'message', body });
