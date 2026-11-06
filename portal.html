@@ -71,7 +71,7 @@ body.in .wrap{padding-bottom:90px}
 .wkchips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .wkchip{background:var(--surface);border:1px solid var(--line);color:var(--white);border-radius:4px;padding:7px 10px;font-size:13px;font-family:'DM Sans',sans-serif;cursor:pointer}
 .wkchip.no{border-color:rgba(255,181,71,.5);color:var(--warn)}.wkchip.off{color:var(--muted);cursor:default;text-decoration:line-through}
-.thread{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:12px;display:flex;flex-direction:column;gap:8px;max-height:52vh;overflow-y:auto}
+.thread{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:12px;display:flex;flex-direction:column;gap:8px}
 .bub{max-width:80%;padding:9px 11px;border-radius:4px;font-size:15px;line-height:1.4;white-space:pre-wrap;word-wrap:break-word}
 .bub.me{align-self:flex-start;background:var(--surface);border:1px solid var(--line)}.bub.co{align-self:flex-end;background:var(--blue);color:#03101f}
 .bub small{display:block;font-size:11px;margin-top:3px;color:var(--muted)}.bub.co small{color:rgba(3,16,31,.7)}
@@ -167,7 +167,6 @@ textarea:focus{border-color:var(--blue)}
     <div class="tab" id="tMsg">
       <div class="ltitle">Message Coach Steve</div>
       <p class="eyebrow" style="color:var(--muted);margin:2px 0 10px">Replies 8 AM – 5 PM</p>
-      <div class="thread" id="msgList"><p class="tip" style="margin:0">Loading…</p></div>
       <div class="wkchips" id="msgQuick">
         <button class="wkchip" data-q="We're running a few minutes late.">Running late</button>
         <button class="wkchip" data-q="Question about payment: ">Payment question</button>
@@ -176,6 +175,9 @@ textarea:focus{border-color:var(--blue)}
       <textarea id="msgBox" rows="3" maxlength="1000" placeholder="Type a message…"></textarea>
       <button class="btn btn-primary" id="bMsgSend">Send</button>
       <div class="msg" id="mMsg"></div>
+      <div class="lrow" style="margin-top:6px"><span class="wk" style="margin:0">Messages</span><button class="link" id="bMsgClear" style="padding:0">Clear</button></div>
+      <div class="thread" id="msgList" style="margin-top:8px"><p class="tip" style="margin:0">Loading…</p></div>
+      <button class="btn btn-ghost" id="bMsgMore" style="display:none">Show earlier messages</button>
     </div>
     <div class="tab" id="tAcct"><div class="card"><p class="tip" style="margin:0">Payments, skills and family info are coming here soon.</p></div>
       <button class="btn btn-ghost" id="bOut">Log out</button></div>
@@ -487,19 +489,30 @@ document.querySelectorAll('#nav button').forEach(b => b.onclick = () => {
 });
 
 // ================= Message =================
-async function loadMsgs() {
-  const r = await act({ action: 'messages' }), box = $('msgList');
+let MSGS = [], MSG_MORE = false;
+async function loadMsgs(older) {
+  const box = $('msgList');
+  const r = await act(older && MSGS.length ? { action: 'messages', before: MSGS[MSGS.length - 1].at } : { action: 'messages' });
   if (r.error) { box.innerHTML = `<p class="msg err" style="margin:0">${esc(r.error)}</p>`; return; }
-  if (!r.list.length) { box.innerHTML = '<p class="tip" style="margin:0">No messages yet. Send Coach Steve a message below.</p>'; return; }
+  MSGS = older ? MSGS.concat(r.list) : r.list; MSG_MORE = r.more;
+  $('bMsgMore').style.display = MSG_MORE ? 'block' : 'none';
+  $('bMsgClear').style.display = MSGS.length ? '' : 'none';
+  if (!MSGS.length) { box.innerHTML = '<p class="tip" style="margin:0">No messages yet.</p>'; return; }
   let last = '';
-  box.innerHTML = r.list.map(m => {
+  box.innerHTML = MSGS.map(m => {   // newest first
     const d = new Date(m.at), day = d.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
     const tm = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
     const head = day !== last ? `<div class="dday">${d.toDateString() === new Date().toDateString() ? 'Today' : esc(day)}</div>` : ''; last = day;
     return head + `<div class="bub ${m.me ? 'me' : 'co'}">${esc(m.body)}<small>${m.me ? (m.portal ? 'Portal' : 'Text') : 'Coach Steve'} · ${tm}</small></div>`;
   }).join('');
-  box.scrollTop = box.scrollHeight;
 }
+$('bMsgMore').onclick = async () => { busy($('bMsgMore'), true); await loadMsgs(true); busy($('bMsgMore'), false); };
+$('bMsgClear').onclick = async () => {
+  if (!confirm('Clear your messages? Coach Steve still keeps a copy.')) return;
+  const x = await act({ action: 'clear_msgs' });
+  if (x.error) return say('mMsg', x.error);
+  say('mMsg', ''); loadMsgs();
+};
 document.querySelectorAll('#msgQuick [data-q]').forEach(c => c.onclick = () => { const t = $('msgBox'); t.value = c.dataset.q + t.value; t.focus(); t.setSelectionRange(t.value.length, t.value.length); });
 $('bMsgSend').onclick = async () => {
   const t = $('msgBox'), body = t.value.trim(), b = $('bMsgSend');

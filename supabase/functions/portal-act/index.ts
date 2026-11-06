@@ -11,7 +11,8 @@
 //   { action: 'class_enroll', schedule_id, student_id }  → { ok }  waitlisted kid takes an open spot right away
 //   { action: 'waitlist_leave', schedule_id, student_id } → { ok }
 //   { action: 'clinic_signup', schedule_id, student_id } → { ok }
-//   { action: 'messages' }                               → { list: [{ me, body, at, portal }] }  last 60 days with this phone
+//   { action: 'messages', before? }                      → { list: [{ me, body, at, portal }], more }  newest first, 20 per page, after msgs_cleared_at
+//   { action: 'clear_msgs' }                             → { ok }  hides messages in the portal only
 //   { action: 'message', body }                          → { ok }  saved to text_log IN "Unread" (extra.via 'Portal'); max 10/hour
 // Every change texts gym_settings 'portal_notify' (Steve's 214 phone) through SMSGate and is saved in schedule_exceptions
 // with extra.by = 'parent' (Dashboard shows them).
@@ -279,12 +280,20 @@ Deno.serve(async (req) => {
     return json({ ok: true });
   }
 
-  // ---------- messages (thread with Coach Steve = text_log rows for this phone, last 60 days) ----------
-  if (b.action === "messages") {
-    const since = new Date(Date.now() - 60 * 864e5).toISOString();
-    const { data: m } = await db.from("text_log").select("direction,body,status,received_at,extra").eq("gym_id", gym).eq("phone", acct.phone)
-      .gte("received_at", since).not("status", "in", '("Deleted","Portal code","Failed")').order("received_at").limit(300);
-    return json({ list: (m || []).map(r => ({ me: r.direction === "IN", body: r.body, at: r.received_at, portal: r.extra?.via === "Portal" })) });
+  // ---------- messages (thread with Coach Steve = text_log rows for this phone) ----------
+  if (b.action === "messages") {   // newest first, 20 per page; b.before = received_at of the oldest one shown
+    const { data: pa } = await db.from("parent_accounts").select("msgs_cleared_at").eq("user_id", u.user.id).maybeSingle();
+    let q = db.from("text_log").select("direction,body,status,received_at,extra").eq("gym_id", gym).eq("phone", acct.phone)
+      .not("status", "in", '("Deleted","Portal code","Failed")').order("received_at", { ascending: false }).limit(21);
+    if (pa?.msgs_cleared_at) q = q.gt("received_at", pa.msgs_cleared_at);
+    if (b.before) q = q.lt("received_at", String(b.before));
+    const { data: m } = await q;
+    const rows = m || [];
+    return json({ more: rows.length > 20, list: rows.slice(0, 20).map(r => ({ me: r.direction === "IN", body: r.body, at: r.received_at, portal: r.extra?.via === "Portal" })) });
+  }
+  if (b.action === "clear_msgs") {   // hides them in the portal only; Steve's Messages tab keeps everything
+    const { error } = await db.from("parent_accounts").update({ msgs_cleared_at: new Date().toISOString() }).eq("user_id", u.user.id);
+    return json(error ? { error: "Couldn't clear. Try again." } : { ok: true });
   }
   if (b.action === "message") {
     const body = String(b.body || "").trim().slice(0, 1000);
