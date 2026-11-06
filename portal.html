@@ -344,11 +344,12 @@ function tagFor(it) {
 function lessonCard(it, big) {
   const what = [it.duration || '30 min', it.lesson_type === 'Shared' ? 'Shared' : 'Private', it.coach].filter(Boolean).join(' · ');
   const moved = it.from ? `<div class="lsub">Moved from ${SH[it.from.day]} ${esc(it.from.time)}</div>` : '';
-  const undo = it.undo_id ? `<div class="lsub">${it.status === 'Cancelled' ? 'You cancelled' : 'You moved it'}${it.late ? ' (late)' : ''} · <button class="link" style="padding:0" data-undo="${esc(it.undo_id)}">Undo</button></div>` : '';
+  const lateFee = it.status === 'Cancelled' && it.late ? `<div class="lsub" style="color:var(--bad);font-weight:600">Late cancel · a late-cancel fee applies</div>` : '';
+  const undo = it.undo_id ? `<div class="lsub">${it.status === 'Cancelled' ? 'You cancelled' : 'You moved it'}${it.late && it.status !== 'Cancelled' ? ' (late)' : ''} · <button class="link" style="padding:0" data-undo="${esc(it.undo_id)}">Undo</button></div>` : '';
   const btns = it.can_change ? `<div class="btns"><button class="btn btn-ghost" data-cancel="${esc(it.id)}" data-ws="${it.ws}">Can't make it</button><button class="btn btn-primary" data-move="${esc(it.id)}" data-ws="${it.ws}">Move it</button></div>`
     : (!it.past && it.status !== 'Cancelled' && !it.undo_id ? '<div class="lsub" style="margin-top:8px">To change this one, text Coach Steve.</div>' : '');
   return `<div class="card">${big ? '<label>Next lesson' + ((ME.kids || []).length > 1 ? ' · ' + esc(kidFirst(it.student_id)) : '') + '</label>' : ''}
-    <div class="lrow"><div><div class="ltitle">${dlabel(it.date, it.day)} · ${esc(it.time)}</div><div class="lsub">${esc(what)}</div>${moved}</div>${tagFor(it)}</div>${undo}${btns}</div>`;
+    <div class="lrow"><div><div class="ltitle">${dlabel(it.date, it.day)} · ${esc(it.time)}</div><div class="lsub">${esc(what)}</div>${moved}</div>${tagFor(it)}</div>${lateFee}${undo}${btns}</div>`;
 }
 function draw() {
   if (!DATA) return;
