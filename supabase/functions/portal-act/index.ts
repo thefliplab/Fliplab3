@@ -136,7 +136,10 @@ Deno.serve(async (req) => {
       week_start: ws, original_date: dateOf(ws, p.day), status: "Active", created_at: new Date().toISOString() };
     if (b.action === "cancel") {
       if (late && !b.ok_late) return json({ late: true, cancel_hrs: cancelHrs });
-      if (old) await db.from("schedule_exceptions").update({ status: "Deleted" }).eq("id", old.id);   // a price change doesn't matter once cancelled
+      if (old) {   // a price change doesn't matter once cancelled
+        const { error: oe } = await db.from("schedule_exceptions").update({ status: "Deleted" }).eq("id", old.id);
+        if (oe) return json({ error: "Couldn't save. Try again." }, 500);
+      }
       const { error } = await db.from("schedule_exceptions").insert({ ...base, id: crypto.randomUUID(), type: "Cancel", notes: "Cancelled by parent (portal)" + (late ? " — LATE" : ""),
         extra: { by: "parent", late, phone: acct.phone } });
       if (error) return json({ error: "Couldn't save. Try again." }, 500);
@@ -167,7 +170,8 @@ Deno.serve(async (req) => {
       const taken = rows.some(p => p.status !== "Cancelled" && p.day === ex.base_day && p.time === ex.base_time && p.student_id !== ex.student_id && (p.exType === "Add" || p.exType === "Move"));
       if (taken) return json({ error: "Someone already took that spot. Text Coach Steve." });
     }
-    await db.from("schedule_exceptions").update({ status: "Deleted" }).eq("id", ex.id);
+    const { error: ue } = await db.from("schedule_exceptions").update({ status: "Deleted" }).eq("id", ex.id);
+    if (ue) return json({ error: "Couldn't undo. Try again or text Coach Steve." }, 500);
     await notify(`Parent portal: ${kidName(ex.student_id)} UNDID their ${ex.type === "Cancel" ? "cancel" : "move"} — back on ${nice(ex.week_start, ex.base_day, ex.base_time)}`);
     return json({ ok: true });
   }
