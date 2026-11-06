@@ -338,10 +338,10 @@ Deno.serve(async (req) => {
       if (bal > 0) owedBy[sid].push({ label, amt: bal });
     };
     const md = (ymd: string) => { const d = new Date(ymd + "T12:00:00Z"); return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`; };
-    for (let ws = SINCE; ws <= thisMon; ws = addDays(ws, 7)) {
+    for (let ws = SINCE; ws <= addDays(thisMon, 7); ws = addDays(ws, 7)) {   // +1 week so a late cancel for next week shows right away
       const { exs, rows } = await week(ws);
       const skip = new Set((att || []).filter(a => a.week_start === ws).map(a => a.lesson_id));
-      rows.filter(p => kidIds.has(p.student_id) && minsUntil(ws, p.day, p.time) <= 0).forEach(p => {
+      rows.filter(p => kidIds.has(p.student_id) && (minsUntil(ws, p.day, p.time) <= 0 || p.status === "Cancelled")).forEach(p => {
         const kid = kids.find(k => k.id === p.student_id)!;
         if ((main && p.coach && p.coach !== main) || kid.extra?.Trade === "Yes") return;   // other coach's lesson / trade family
         const key = p.id.startsWith("EX_ONLY_") ? `ATT_${p.student_id}_${p.day}_${p.time}_${ws}` : p.id;
