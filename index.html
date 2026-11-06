@@ -1138,7 +1138,7 @@ async function skMoveUp() {
   await skSetLevel(nx.code, l.code);
 }
 // ---- Extra skills for one kid (student_extra_skills) + parent requests ----
-let xsTag = 'Cheer', skReqs = null;
+let xsTag = 'Cheer', skReqs = null, skReqsAt = 0;
 const XS_TAG = { Cheer: 'background:#E1F5EE;color:#085041', Dance: 'background:#EEEDFE;color:#3C3489' };
 async function xsDraw(s) {
   const r = await sb.from('student_extra_skills').select('*').eq('student_id', s.id).neq('status', 'Not now').order('created_at');
@@ -1164,7 +1164,7 @@ async function xsAdd() {
 async function xsAnswer(id, st) {
   const r = await sb.from('student_extra_skills').update({ status: st, answered_at: new Date().toISOString() }).eq('id', id);
   if (r.error) return alert(r.error.message);
-  skReqs = null; xsDraw(sd.s);
+  skReqsAt = 0; xsDraw(sd.s);
 }
 async function xsDone(id, done) {
   const r = await sb.from('student_extra_skills').update({ status: done ? 'Done' : 'Working', done_at: done ? new Date().toISOString() : null }).eq('id', id);
@@ -1178,11 +1178,13 @@ async function xsRemove(id) {
   xsDraw(sd.s);
 }
 async function loadSkReqs() {
-  skReqs = [];
+  skReqsAt = Date.now();
+  const before = skReqs ? skReqs.length : -1;
+  if (!skReqs) skReqs = [];
   const r = await sb.from('student_extra_skills').select('student_id').eq('status', 'Requested');
   if (r.error) return;
   skReqs = r.data.map(x => { const st = students.find(y => y.id === x.student_id) || {}; return { student_id: x.student_id, who: ((st.first_name || '') + ' ' + (st.last_name || '')).trim() || x.student_id }; });
-  if (skReqs.length && typeof renderDash === 'function') renderDash();
+  if (skReqs.length !== before && typeof renderDash === 'function') renderDash();
 }
 // ---- Settings → Skills: master list per level ----
 let skMOpen = null;
@@ -2871,8 +2873,8 @@ function renderDash() {
     if (absent.length) alerts.push(['#A32D2D', absent.length + ' kid' + (absent.length === 1 ? '' : 's') + ' missed the last 2 weeks', absent.join(' · '), "go('students')"]);
     if (unpaid2.length) alerts.push(['#854F0B', unpaid2.length + ' unpaid 2+ weeks running', unpaid2.join(' · '), "go('payments')"]);
   } else loadDashHist();
-  if (skReqs === null) loadSkReqs();
-  else if (skReqs.length) alerts.push(['#185FA5', skReqs.length + ' skill request' + (skReqs.length === 1 ? '' : 's') + ' from ' + (skReqs.length === 1 ? 'a parent' : 'parents'), [...new Set(skReqs.map(r => r.who))].join(' · ') + ' · tap to answer', `openEdit('${esc(skReqs[0].student_id)}');sdTab('skills')`]);
+  if (skReqs === null || Date.now() - skReqsAt > 30000) loadSkReqs();
+  if (skReqs && skReqs.length) alerts.push(['#185FA5', skReqs.length + ' skill request' + (skReqs.length === 1 ? '' : 's') + ' from ' + (skReqs.length === 1 ? 'a parent' : 'parents'), [...new Set(skReqs.map(r => r.who))].join(' · ') + ' · tap to answer', `openEdit('${esc(skReqs[0].student_id)}');sdTab('skills')`]);
   if (msUnread) alerts.push(['#d64545', msUnread + ' unread text' + (msUnread === 1 ? '' : 's') + ' from parents', 'Tap to open Messages', "go('msgs')"]);
   const mi = miKids();
   if (mi.length) alerts.push(['#7F77DD', mi.length + ' kid' + (mi.length === 1 ? '' : 's') + ' missing info', 'Birthdate or level · tap to fill in', 'openMissing()']);
