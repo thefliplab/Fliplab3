@@ -6,6 +6,11 @@
 //   { action: 'cancel',  lesson_id, ws, ok_late? }       → { ok } | { late: true }  (late = under cancel_hrs; parent must confirm)
 //   { action: 'move',    lesson_id, ws, day, time }      → { ok }
 //   { action: 'undo',    ex_id }                         → { ok }  (only the parent's own change, before the lesson)
+//   { action: 'classes' }                                → { classes, clinics }  the kids' weekly classes (enrolled / waitlisted) + upcoming clinics
+//   { action: 'rsvp', schedule_id, student_id, ws, answer } → { ok }  answer 'yes' | 'no' | null (no text to Steve; shows on Schedule)
+//   { action: 'class_enroll', schedule_id, student_id }  → { ok }  waitlisted kid takes an open spot right away
+//   { action: 'waitlist_leave', schedule_id, student_id } → { ok }
+//   { action: 'clinic_signup', schedule_id, student_id } → { ok }
 // Every change texts gym_settings 'portal_notify' (Steve's 214 phone) through SMSGate and is saved in schedule_exceptions
 // with extra.by = 'parent' (Dashboard shows them).
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -47,7 +52,7 @@ Deno.serve(async (req) => {
   const b = await req.json().catch(() => ({}));
 
   // The parent's kids
-  const { data: st } = await db.from("students").select("id,first_name,last_name,parent_phone,active").eq("gym_id", gym).ilike("parent_phone", `%${acct.phone.slice(-4)}%`);
+  const { data: st } = await db.from("students").select("id,first_name,last_name,parent_phone,parent_name,parent_email,active").eq("gym_id", gym).ilike("parent_phone", `%${acct.phone.slice(-4)}%`);
   const kids = (st || []).filter(s => p10(s.parent_phone) === acct.phone && s.active !== false);
   const kidIds = new Set(kids.map(k => k.id));
   if (!kids.length) return json({ error: "No students found for this phone." });
@@ -155,6 +160,102 @@ Deno.serve(async (req) => {
       notes: "Moved by parent (portal)" + (late ? " — LATE" : ""), extra: { by: "parent", late, phone: acct.phone } });
     if (error) return json({ error: "Couldn't save. Try again." }, 500);
     await notify(`Parent portal: ${kidName(L.student_id)} MOVED ${nice(ws, p.day, p.time)} → ${nice(ws, day, time)}${late ? " (late notice)" : ""}`);
+    return json({ ok: true });
+  }
+
+  // ---------- classes + clinics ----------
+  const fmtP = (p: string) => p.length === 10 ? `(${p.slice(0, 3)}) ${p.slice(3, 6)}-${p.slice(6)}` : p;
+  const minsUntilDate = (ymd: string, time: string) => minsUntil(mondayOf(ymd), DAYS[(new Date(ymd + "T12:00:00Z").getUTCDay() + 6) % 7], time || "11:59 PM");
+  const money = (c: any) => +String(c.price || "").replace(/[^0-9.]/g, "") || +(setRow?.value?.class_price) || 20;
+  async function classInfo() {
+    const [{ data: cs }, { data: en }] = await Promise.all([
+      db.from("class_schedule").select("id,class_name,kind,day,time,duration,coach,price,max_students,clinic_date,age_group,active,ended_at,extra").eq("gym_id", gym).eq("active", true).is("ended_at", null),
+      db.from("class_enrollments").select("id,schedule_id,student_id,status,enroll_date").eq("gym_id", gym).neq("status", "Dropped")]);
+    const enr = en || [];
+    const roster = (id: string) => enr.filter(e => e.schedule_id === id && e.status !== "Waitlisted");
+    const wait = (id: string) => enr.filter(e => e.schedule_id === id && e.status === "Waitlisted").sort((a, c) => String(a.enroll_date || "").localeCompare(String(c.enroll_date || "")) || a.id.localeCompare(c.id));
+    // a waitlisted kid can take a spot if their place in line fits in the open spots
+    const canEnroll = (c: any, sid: string) => { const max = +c.max_students || 0, pos = wait(c.id).findIndex(e => e.student_id === sid) + 1;
+      return pos > 0 && (!max || pos <= max - roster(c.id).length); };
+    const all = (cs || []).filter(c => !!(c.extra?.test) === isTest || c.kind !== "clinic");   // test clinics only for test families (and only those)
+    return { cs: all.filter(c => c.kind !== "clinic"), clin: all.filter(c => c.kind === "clinic"), enr, roster, wait, canEnroll };
+  }
+  // the next 4 class weeks (skips this week once the class has started)
+  const classWeeks = (c: any) => { const out: string[] = []; for (let i = 0; i < 5 && out.length < 4; i++) { const ws = addDays(thisMon, i * 7); if (minsUntil(ws, c.day, c.time) > 0) out.push(ws); } return out; };
+
+  if (b.action === "classes") {
+    const I = await classInfo();
+    const mine = I.cs.filter(c => I.enr.some(e => e.schedule_id === c.id && kidIds.has(e.student_id)));
+    const wss = [...new Set(mine.flatMap(classWeeks))];
+    const [{ data: rs }, { data: off }] = wss.length ? await Promise.all([
+      db.from("class_rsvp").select("schedule_id,student_id,week_start,answer").eq("gym_id", gym).in("week_start", wss).in("student_id", [...kidIds]),
+      db.from("class_week_off").select("schedule_id,week_start").eq("gym_id", gym).in("week_start", wss)]) : [{ data: [] }, { data: [] }];
+    const classes = mine.flatMap(c => I.enr.filter(e => e.schedule_id === c.id && kidIds.has(e.student_id)).map(e => {
+      const waiting = e.status === "Waitlisted", max = +c.max_students || 0;
+      return { id: c.id, student_id: e.student_id, name: c.class_name, day: c.day, time: c.time, duration: c.duration, coach: c.coach, price: money(c),
+        status: waiting ? "waitlist" : "enrolled", spots: max ? Math.max(0, max - I.roster(c.id).length) : null,
+        pos: waiting ? I.wait(c.id).findIndex(x => x.student_id === e.student_id) + 1 : null, can_enroll: waiting && I.canEnroll(c, e.student_id),
+        weeks: waiting ? [] : classWeeks(c).map(ws => ({ ws, date: dateOf(ws, c.day), off: (off || []).some(o => o.schedule_id === c.id && o.week_start === ws),
+          answer: ((rs || []).find(r => r.schedule_id === c.id && r.student_id === e.student_id && r.week_start === ws) || {}).answer || null })) };
+    }));
+    const up = I.clin.filter(c => c.clinic_date && minsUntilDate(c.clinic_date, c.time) > 0).sort((a, c) => a.clinic_date.localeCompare(c.clinic_date));
+    const { data: ck } = up.length ? await db.from("clinic_kids").select("schedule_id,student_id,paid").eq("gym_id", gym).in("schedule_id", up.map(c => c.id)) : { data: [] };
+    const clinics = up.map(c => { const max = +c.max_students || 0, n = (ck || []).filter(k => k.schedule_id === c.id).length;
+      return { id: c.id, name: c.class_name, date: c.clinic_date, time: c.time, duration: c.duration, coach: c.coach, ages: c.age_group, price: money(c),
+        spots: max ? Math.max(0, max - n) : null, signed: (ck || []).filter(k => k.schedule_id === c.id && kidIds.has(k.student_id)).map(k => ({ student_id: k.student_id, paid: !!k.paid })) }; });
+    return json({ classes, clinics });
+  }
+
+  if (["rsvp", "class_enroll", "waitlist_leave", "clinic_signup"].includes(b.action)) {
+    const sid = String(b.student_id || ""), cid = String(b.schedule_id || "");
+    if (!kidIds.has(sid)) return json({ error: "That can't be changed here. Text Coach Steve." });
+    const I = await classInfo(), kid = kids.find(k => k.id === sid)!;
+    const nm = kidName(sid);
+
+    if (b.action === "clinic_signup") {
+      const c = I.clin.find(x => x.id === cid);
+      if (!c || !c.clinic_date || minsUntilDate(c.clinic_date, c.time) <= 0) return json({ error: "That clinic isn't open for sign-up. Text Coach Steve." });
+      const { data: ck } = await db.from("clinic_kids").select("student_id").eq("gym_id", gym).eq("schedule_id", c.id);
+      if ((ck || []).some(k => k.student_id === sid)) return json({ ok: true });
+      const max = +c.max_students || 0;
+      if (max && (ck || []).length >= max) return json({ error: "Sorry, that clinic just filled up. Text Coach Steve." });
+      const { error } = await db.from("clinic_kids").insert({ gym_id: gym, schedule_id: c.id, kid_name: nm, student_id: sid, parent_name: kid.parent_name || null,
+        phone: fmtP(acct.phone), email: kid.parent_email || null, amount: money(c), paid: false, notes: "Signed up in parent portal" });
+      if (error) return json({ error: "Couldn't save. Try again." }, 500);
+      const d = new Date(c.clinic_date + "T12:00:00Z");
+      await notify(`Parent portal: ${nm} SIGNED UP for ${c.class_name} clinic (${d.getUTCMonth() + 1}/${d.getUTCDate()}) — ${(ck || []).length + 1}${max ? "/" + max : ""} kids`);
+      return json({ ok: true });
+    }
+
+    const c = I.cs.find(x => x.id === cid), e = I.enr.find(x => x.schedule_id === cid && x.student_id === sid);
+    if (!c || !e) return json({ error: "That can't be changed here. Text Coach Steve." });
+    const when = `${SHORT[c.day] || c.day} ${c.time}`;
+
+    if (b.action === "rsvp") {
+      const ws = String(b.ws || ""), ans = b.answer === "yes" || b.answer === "no" ? b.answer : null;
+      if (e.status === "Waitlisted" || !classWeeks(c).includes(ws)) return json({ error: "That class can't be changed now. Text Coach Steve." });
+      const { data: off } = await db.from("class_week_off").select("schedule_id").eq("gym_id", gym).eq("schedule_id", cid).eq("week_start", ws);
+      if ((off || []).length) return json({ error: "There's no class that week." });
+      const { data: cur } = await db.from("class_rsvp").select("once").eq("gym_id", gym).eq("schedule_id", cid).eq("student_id", sid).eq("week_start", ws).maybeSingle();
+      const { error } = await db.from("class_rsvp").upsert({ gym_id: gym, schedule_id: cid, student_id: sid, student_name: nm, week_start: ws, answer: ans,
+        once: cur?.once || false, source: "portal", updated_at: new Date().toISOString() }, { onConflict: "gym_id,schedule_id,student_id,week_start" });
+      if (error) return json({ error: "Couldn't save. Try again." }, 500);
+      return json({ ok: true });
+    }
+    if (b.action === "class_enroll") {
+      if (e.status !== "Waitlisted") return json({ ok: true });
+      if (!I.canEnroll(c, sid)) return json({ error: "Sorry, that spot was just taken." });
+      const { error } = await db.from("class_enrollments").update({ status: "Enrolled", enroll_date: nyNow().ymd }).eq("id", e.id);
+      if (error) return json({ error: "Couldn't save. Try again." }, 500);
+      const max = +c.max_students || 0;
+      await notify(`Parent portal: ${nm} ENROLLED in ${c.class_name} (${when}) from the waitlist — ${I.roster(cid).length + 1}${max ? "/" + max : ""} kids`);
+      return json({ ok: true });
+    }
+    // waitlist_leave
+    if (e.status !== "Waitlisted") return json({ error: "To stop the class, text Coach Steve." });
+    const { error } = await db.from("class_enrollments").update({ status: "Dropped", notes: "Left waitlist (parent portal)" }).eq("id", e.id);
+    if (error) return json({ error: "Couldn't save. Try again." }, 500);
+    await notify(`Parent portal: ${nm} LEFT the waitlist for ${c.class_name} (${when})`);
     return json({ ok: true });
   }
 

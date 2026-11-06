@@ -66,6 +66,12 @@ body.in .wrap{padding-bottom:90px}
 .slots button{background:var(--surface);border:1px solid var(--line);color:var(--white);border-radius:4px;padding:13px 6px;font-size:15px;font-family:'DM Sans',sans-serif;cursor:pointer}
 .slots button.sel{border-color:var(--blue);background:rgba(30,140,255,.16)}
 .warnbox{background:rgba(255,181,71,.1);border:1px solid rgba(255,181,71,.4);color:var(--warn);border-radius:4px;padding:10px 12px;font-size:14px;line-height:1.45;margin-top:12px}
+.rsvp{display:flex;gap:8px;margin-top:8px}.rsvp .btn{margin-top:0;padding:11px 6px}
+.btn-pick{background:transparent;color:var(--blue-light);border:1px solid var(--blue)}.btn-pick.on{background:var(--blue);color:#03101f}
+.wkchips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.wkchip{background:var(--surface);border:1px solid var(--line);color:var(--white);border-radius:4px;padding:7px 10px;font-size:13px;font-family:'DM Sans',sans-serif;cursor:pointer}
+.wkchip.no{border-color:rgba(255,181,71,.5);color:var(--warn)}.wkchip.off{color:var(--muted);cursor:default;text-decoration:line-through}
+.sec{border-top:1px solid var(--line);margin-top:12px;padding-top:12px}
 .foot{text-align:center;color:var(--muted);font-size:13px;margin-top:22px}
 .foot a{color:var(--blue-light)}
 </style>
@@ -150,7 +156,7 @@ body.in .wrap{padding-bottom:90px}
     </div>
     <div class="tab" id="tLessons"><div id="lessonList"></div>
       <p class="tip" id="policyLine" style="margin-top:4px"></p></div>
-    <div class="tab" id="tClasses"><div class="card"><p class="tip" style="margin:0">Classes and clinics are coming here next.</p></div></div>
+    <div class="tab" id="tClasses"><div id="classList"></div></div>
     <div class="tab" id="tMsg"><div class="card"><p class="tip" style="margin:0">Messaging Coach Steve is coming here soon. For now, text <a style="color:var(--blue-light)" href="sms:+15134432674">(513) 443-2674</a>.</p></div></div>
     <div class="tab" id="tAcct"><div class="card"><p class="tip" style="margin:0">Payments, skills and family info are coming here soon.</p></div>
       <button class="btn btn-ghost" id="bOut">Log out</button></div>
@@ -273,13 +279,13 @@ async function loadHome() {
   if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) $('a2hs').style.display = 'none';
   document.body.classList.add('in'); $('nav').classList.add('on'); $('foot').style.display = 'none';
   show('vHome');
-  $('homeNext').innerHTML = $('lessonList').innerHTML = '<div class="card"><p class="tip" style="margin:0">Loading…</p></div>';
-  await refresh();
+  $('homeNext').innerHTML = $('lessonList').innerHTML = $('classList').innerHTML = '<div class="card"><p class="tip" style="margin:0">Loading…</p></div>';
+  await Promise.all([refresh(), refreshClasses()]);
 }
 function drawKids() {
   const ks = ME.kids || [];
   $('kids').innerHTML = ks.length > 1 ? ks.map(k => `<span class="chip${k.id === KID ? ' on' : ''}" data-k="${esc(k.id)}">${esc(k.first_name)}</span>`).join('') : '';
-  $('kids').querySelectorAll('[data-k]').forEach(c => c.onclick = () => { KID = c.dataset.k; drawKids(); draw(); });
+  $('kids').querySelectorAll('[data-k]').forEach(c => c.onclick = () => { KID = c.dataset.k; drawKids(); draw(); drawClasses(); });
 }
 async function act(body) {
   try { const r = await sb.functions.invoke('portal-act', { body }); return r.data || { error: (r.error && r.error.message) || 'Something went wrong.' }; }
@@ -330,6 +336,74 @@ function draw() {
   document.querySelectorAll('[data-move]').forEach(b => b.onclick = () => openMove(b.dataset.move, b.dataset.ws));
   document.querySelectorAll('[data-undo]').forEach(b => b.onclick = () => doUndo(b.dataset.undo));
 }
+// ================= Classes =================
+let CL = null;
+async function refreshClasses() {
+  const r = await act({ action: 'classes' });
+  if (r.error) { $('classList').innerHTML = `<div class="card"><p class="msg err" style="margin:0">${esc(r.error)}</p></div>`; return; }
+  CL = r; drawClasses();
+}
+const ymdLabel = d => { const x = new Date(d + 'T12:00:00Z'); return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][x.getUTCDay()] + ', ' + MON[x.getUTCMonth()] + ' ' + x.getUTCDate(); };
+const shortD = d => MON[+d.slice(5, 7) - 1] + ' ' + (+d.slice(8, 10));
+function classCard(c) {
+  const nm = esc(kidFirst(c.student_id));
+  const sub = `<div class="lsub">${esc(c.day)}s ${esc(c.time)} · $${c.price} per class</div>`;
+  if (c.status === 'waitlist') {
+    return `<div class="card"><div class="lrow"><div class="ltitle">${esc(c.name)}</div><span class="tag t-away">Waitlist #${c.pos}</span></div>${sub}
+      ${c.can_enroll ? `<div class="sec"><p class="tip" style="margin:0"><b>A spot opened up!</b> Grab it now and ${nm} is in the class every ${esc(c.day)}.</p>
+        <button class="btn btn-primary" data-enroll="${esc(c.id)}" data-s="${esc(c.student_id)}">Enroll ${nm}</button></div>`
+      : `<p class="tip" style="margin:10px 0 0">${nm} is #${c.pos} on the waitlist. The class is full right now.</p>`}
+      <button class="link" data-leave="${esc(c.id)}" data-s="${esc(c.student_id)}">Leave the waitlist</button></div>`;
+  }
+  const [first, ...later] = c.weeks;
+  let wk = '';
+  if (first) {
+    const lbl = `<label style="margin:0">${first.ws === c.weeks[0].ws && first.date <= addD(todayYmd(), 6) ? 'This ' + esc(c.day) : 'Next class'} · ${shortD(first.date)}</label>`;
+    wk = first.off ? `<div class="sec">${lbl}<p class="tip" style="margin:6px 0 0">No class that week.</p></div>`
+      : `<div class="sec">${lbl}<div style="font-size:15px;margin-top:6px">Is ${nm} coming?</div>
+        <div class="rsvp"><button class="btn btn-pick${first.answer === 'yes' ? ' on' : ''}" data-rsvp="yes" data-c="${esc(c.id)}" data-s="${esc(c.student_id)}" data-ws="${first.ws}">Yes</button>
+        <button class="btn btn-pick${first.answer === 'no' ? ' on' : ''}" data-rsvp="no" data-c="${esc(c.id)}" data-s="${esc(c.student_id)}" data-ws="${first.ws}">No, skip it</button></div></div>`;
+  }
+  if (later.length) wk += `<div class="sec" style="border:none;padding-top:4px"><label style="margin:0">Later ${esc(c.day)}s · tap one ${nm} will miss</label><div class="wkchips">${later.map(w => w.off
+      ? `<span class="wkchip off">${shortD(w.date)} no class</span>`
+      : `<button class="wkchip${w.answer === 'no' ? ' no' : ''}" data-rsvp="${w.answer === 'no' ? '' : 'no'}" data-c="${esc(c.id)}" data-s="${esc(c.student_id)}" data-ws="${w.ws}">${shortD(w.date)} ${w.answer === 'no' ? '✕ missing' : '✓'}</button>`).join('')}</div></div>`;
+  return `<div class="card"><div class="lrow"><div class="ltitle">${esc(c.name)}</div><span class="tag t-on">Enrolled</span></div>${sub}${wk}
+    <p class="tip" style="margin:12px 0 0">Need to stop the class? Text <a style="color:var(--blue-light)" href="sms:+15134432674">Coach Steve</a>.</p></div>`;
+}
+function clinicCard(c) {
+  const me = c.signed.find(k => k.student_id === KID);
+  const nm = esc(kidFirst(KID));
+  const sub = [ymdLabel(c.date), c.time, '$' + c.price, c.ages].filter(Boolean).map(esc).join(' · ');
+  const act_ = me ? `<p class="tip" style="margin:10px 0 0">${nm} is signed up${me.paid ? ' and paid' : ''}. To cancel, text Coach Steve.</p>`
+    : c.spots === 0 ? `<p class="tip" style="margin:10px 0 0">This clinic is full. Text Coach Steve to get on the list.</p>`
+    : `<button class="btn btn-primary" data-clinic="${esc(c.id)}">Sign up ${nm}</button>`;
+  return `<div class="card"><div class="lrow"><div class="ltitle">${esc(c.name)}</div>${me ? `<span class="tag t-on">${me.paid ? 'Paid' : 'Signed up'}</span>` : ''}</div>
+    <div class="lsub">${sub}${c.spots != null && !me ? ' · ' + (c.spots ? c.spots + ' spot' + (c.spots === 1 ? '' : 's') + ' left' : 'full') : ''}</div>${act_}</div>`;
+}
+function drawClasses() {
+  if (!CL) return;
+  const mine = CL.classes.filter(c => !KID || c.student_id === KID);
+  let h = mine.length ? mine.map(classCard).join('')
+    : `<div class="card"><p class="tip" style="margin:0">${esc(kidFirst(KID) || 'Your kid')} isn't in a weekly class right now. Text <a style="color:var(--blue-light)" href="sms:+15134432674">Coach Steve</a> to join one.</p></div>`;
+  if (CL.clinics.length) h += '<div class="wk">Upcoming clinics</div>' + CL.clinics.map(clinicCard).join('');
+  $('classList').innerHTML = h;
+  const run = async (btn, body, ask) => {
+    if (ask && !confirm(ask)) return;
+    btn.disabled = true;
+    const x = await act(body);
+    btn.disabled = false;
+    if (x.error) return alert(x.error);
+    await refreshClasses();
+  };
+  $('classList').querySelectorAll('[data-rsvp]').forEach(b => b.onclick = () => run(b, { action: 'rsvp', schedule_id: b.dataset.c, student_id: b.dataset.s, ws: b.dataset.ws, answer: b.dataset.rsvp || null }));
+  $('classList').querySelectorAll('[data-enroll]').forEach(b => b.onclick = () => run(b, { action: 'class_enroll', schedule_id: b.dataset.enroll, student_id: b.dataset.s }, 'Enroll ' + kidFirst(b.dataset.s) + ' in this class every week?'));
+  $('classList').querySelectorAll('[data-leave]').forEach(b => b.onclick = () => run(b, { action: 'waitlist_leave', schedule_id: b.dataset.leave, student_id: b.dataset.s }, 'Take ' + kidFirst(b.dataset.s) + ' off the waitlist?'));
+  $('classList').querySelectorAll('[data-clinic]').forEach(b => b.onclick = () => { const c = CL.clinics.find(x => x.id === b.dataset.clinic);
+    run(b, { action: 'clinic_signup', schedule_id: c.id, student_id: KID }, `Sign ${kidFirst(KID)} up for ${c.name} on ${ymdLabel(c.date)}? ($${c.price})`); });
+}
+const todayYmd = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+const addD = (d, n) => { const x = new Date(d + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+
 const findIt = (id, ws) => items().find(it => it.id === id && it.ws === ws);
 
 // ---- pop-up ----
@@ -393,7 +467,7 @@ document.querySelectorAll('#nav button').forEach(b => b.onclick = () => {
 });
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
-$('bOut').onclick = async () => { await sb.auth.signOut(); ME = DATA = null; KID = ''; document.body.classList.remove('in'); $('nav').classList.remove('on'); $('foot').style.display = ''; $('who').textContent = ''; $('phone').value = ''; show('vPhone'); };
+$('bOut').onclick = async () => { await sb.auth.signOut(); ME = DATA = CL = null; KID = ''; document.body.classList.remove('in'); $('nav').classList.remove('on'); $('foot').style.display = ''; $('who').textContent = ''; $('phone').value = ''; show('vPhone'); };
 document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => show(b.dataset.go));
 
 (async () => {
