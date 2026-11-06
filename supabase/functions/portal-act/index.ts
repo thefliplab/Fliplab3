@@ -14,10 +14,13 @@
 //   { action: 'messages', before? }                      → { list: [{ me, body, at, portal }], more }  newest first, 20 per page, after msgs_cleared_at
 //   { action: 'clear_msgs' }                             → { ok }  hides messages in the portal only
 //   { action: 'message', body }                          → { ok }  saved to text_log IN "Unread" (extra.via 'Portal'); max 10/hour
+//   { action: 'account' }                                → { since, kids: [{ id, ..., owed, owed_items, payments, levels, waiver }], policy_text, waiver_text, cancel_hrs, contact }
+//   { action: 'family_save', student_id, ...fields }     → { ok, relogin? }  parent fields go to every kid; kid fields to that kid; texts Steve
+//   { action: 'waiver_sign', student_id, signature, photo } → { ok }  adds a waivers row; texts Steve
 // Every change texts gym_settings 'portal_notify' (Steve's 214 phone) through SMSGate and is saved in schedule_exceptions
 // with extra.by = 'parent' (Dashboard shows them).
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { buildWeek, timeVal, DAYS } from "./week.ts";
+import { buildWeek, timeVal, DAYS, priceFor } from "./week.ts";
 
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 const json = (o: unknown, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { ...cors, "Content-Type": "application/json" } });
@@ -55,7 +58,7 @@ Deno.serve(async (req) => {
   const b = await req.json().catch(() => ({}));
 
   // The parent's kids
-  const { data: st } = await db.from("students").select("id,first_name,last_name,parent_phone,parent_name,parent_email,active").eq("gym_id", gym).ilike("parent_phone", `%${acct.phone.slice(-4)}%`);
+  const { data: st } = await db.from("students").select("id,first_name,last_name,parent_phone,parent_name,parent_email,active,dob,emergency_name,emergency_phone,skill_level,extra").eq("gym_id", gym).ilike("parent_phone", `%${acct.phone.slice(-4)}%`);
   const kids = (st || []).filter(s => p10(s.parent_phone) === acct.phone && s.active !== false);
   const kidIds = new Set(kids.map(k => k.id));
   if (!kids.length) return json({ error: "No students found for this phone." });
@@ -306,6 +309,115 @@ Deno.serve(async (req) => {
       family_name: first.parent_name, received_at: new Date().toISOString(), extra: { line: "Portal", via: "Portal", kids: kids.map(k => k.first_name) } });
     if (error) return json({ error: "Couldn't send. Try again." });
     await notify(`Parent portal message from ${first.parent_name || "a parent"} (${kids.map(k => k.first_name).join(" & ")}): ${body}`.slice(0, 600));
+    return json({ ok: true });
+  }
+
+  // ---------- account: balance owed, payments, skills, family info, waiver ----------
+  if (b.action === "account") {
+    const SINCE = "2026-11-02";   // 3.0 went live this week — older 2.0 weeks never count as owed
+    const S = setRow?.value || {};
+    const ids = [...kidIds];
+    const [{ data: cal }, { data: pays }, { data: att }, { data: catt }, { data: cls }, { data: lv }, { data: sk }, { data: ss }, { data: wv }] = await Promise.all([
+      db.from("cal_settings").select("main_coach").eq("gym_id", gym).maybeSingle(),
+      db.from("payments").select("id,student_id,lesson_id,amount,method,date,week_start,lesson_type,extra").eq("gym_id", gym).in("student_id", ids).order("date", { ascending: false }).limit(500),
+      db.from("attendance").select("lesson_id,week_start,status").eq("gym_id", gym).in("student_id", ids).gte("week_start", SINCE).in("status", ["Cancelled", "Absent"]),
+      db.from("class_attendance").select("schedule_id,student_id,week_start,status").eq("gym_id", gym).in("student_id", ids).gte("week_start", SINCE).eq("status", "Attended"),
+      db.from("class_schedule").select("id,class_name,day,time,price").eq("gym_id", gym),
+      db.from("skill_levels").select("id,code,name,sort").eq("gym_id", gym).order("sort"),
+      db.from("skills").select("id,level_id,name,sort").eq("gym_id", gym).eq("active", true).order("sort"),
+      db.from("student_skills").select("student_id,skill_id,checked_at").eq("gym_id", gym).in("student_id", ids),
+      db.from("waivers").select("student_id,parent_name,signature,signed_at,photo_permission").eq("gym_id", gym).in("student_id", ids).order("signed_at", { ascending: false })]);
+    const main = String(cal?.main_coach || "");
+    const allPay = pays || [];
+    const priceNum = (p: any) => parseFloat(String(p.price || "").replace(/[^0-9.]/g, "")) || +priceFor(p.duration || "30 min", p.lesson_type === "Shared" ? "Shared" : "Solo").slice(1);
+    const paidOf = (id: string, ws: string) => allPay.filter(x => x.lesson_id === id && x.week_start === ws)
+      .reduce((t, x) => ({ amt: t.amt + (+x.amount || 0), adj: t.adj || x.extra?.Adjusted === "Yes" }), { amt: 0, adj: false });
+    const owedBy: Record<string, { label: string; amt: number }[]> = {}; ids.forEach(id => owedBy[id] = []);
+    const add = (sid: string, label: string, price: number, id: string, ws: string) => {
+      const pd = paidOf(id, ws), owe = pd.adj ? pd.amt : price, bal = Math.round((owe - pd.amt) * 100) / 100;
+      if (bal > 0) owedBy[sid].push({ label, amt: bal });
+    };
+    const md = (ymd: string) => { const d = new Date(ymd + "T12:00:00Z"); return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`; };
+    for (let ws = SINCE; ws <= thisMon; ws = addDays(ws, 7)) {
+      const { exs, rows } = await week(ws);
+      const skip = new Set((att || []).filter(a => a.week_start === ws).map(a => a.lesson_id));
+      rows.filter(p => kidIds.has(p.student_id) && minsUntil(ws, p.day, p.time) <= 0).forEach(p => {
+        const kid = kids.find(k => k.id === p.student_id)!;
+        if ((main && p.coach && p.coach !== main) || kid.extra?.Trade === "Yes") return;   // other coach's lesson / trade family
+        const key = p.id.startsWith("EX_ONLY_") ? `ATT_${p.student_id}_${p.day}_${p.time}_${ws}` : p.id;
+        const when = `${SHORT[p.day] || p.day} ${md(dateOf(ws, p.day))}`;
+        if (p.status === "Cancelled") {   // late cancel from the portal = full lesson price
+          const ex = exs.find(e => e.lesson_id === p.id && e.type === "Cancel");
+          if (p.exType === "Cancel" && ex?.extra?.late) add(p.student_id, `${when} late cancel`, priceNum(p), p.id, ws);
+          return;
+        }
+        if (skip.has(key) && paidOf(p.id, ws).amt <= 0) return;
+        add(p.student_id, `${when} lesson`, priceNum(p), p.id, ws);
+      });
+      (catt || []).filter(a => a.week_start === ws).forEach(a => {
+        const c = (cls || []).find(x => x.id === a.schedule_id); if (!c) return;
+        add(a.student_id, `${SHORT[c.day] || c.day} ${md(dateOf(ws, c.day))} ${c.class_name || "class"}`, money(c), `CLS_${c.id}_${a.student_id}_${ws}`, ws);
+      });
+    }
+    const out = kids.map(k => {
+      const mine = new Set((ss || []).filter(x => x.student_id === k.id).map(x => x.skill_id));
+      const w = (wv || []).find(x => x.student_id === k.id);
+      const items = owedBy[k.id];
+      return { id: k.id, first_name: k.first_name, last_name: k.last_name, dob: k.dob, skill_level: k.skill_level,
+        parent_name: k.parent_name, parent_phone: p10(k.parent_phone), parent_email: k.parent_email, emergency_name: k.emergency_name, emergency_phone: p10(k.emergency_phone),
+        owed: Math.round(items.reduce((t, x) => t + x.amt, 0) * 100) / 100, owed_items: items,
+        payments: allPay.filter(x => x.student_id === k.id).slice(0, 50).map(x => ({ date: x.date, amount: +x.amount || 0, method: x.method, type: x.lesson_type })),
+        levels: (lv || []).map(l => ({ code: l.code, name: l.name, current: l.code === k.skill_level,
+          skills: (sk || []).filter(s => s.level_id === l.id).map(s => ({ name: s.name, done: mine.has(s.id) })) })),
+        waiver: w ? { parent_name: w.parent_name, signature: w.signature, signed_at: w.signed_at, photo: w.photo_permission } : null };
+    });
+    return json({ since: SINCE, kids: out, cancel_hrs: cancelHrs, policy_text: S.policy_text || "", waiver_text: S.waiver_text || "",
+      contact: { text: S.c_text || "", email: S.c_email || "", venmo: S.c_venmo || "", zelle: S.c_zelle || "" } });
+  }
+
+  if (b.action === "family_save") {
+    const sid = String(b.student_id || "");
+    const kid = kids.find(k => k.id === sid);
+    if (!kid) return json({ error: "That can't be changed here. Text Coach Steve." });
+    const t = (v: unknown, n = 120) => String(v ?? "").trim().slice(0, n);
+    const phone = p10(b.parent_phone), ePhone = p10(b.emergency_phone);
+    if (phone.length !== 10) return json({ error: "Enter a 10-digit phone number." });
+    if (b.emergency_phone && ePhone.length !== 10) return json({ error: "Enter a 10-digit emergency phone, or leave it blank." });
+    const email = t(b.parent_email);
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ error: "That email doesn't look right." });
+    const dob = t(b.dob, 10);
+    if (dob && (!/^\d{4}-\d{2}-\d{2}$/.test(dob) || dob > nyNow().ymd || dob < "1990-01-01")) return json({ error: "Check the birthday." });
+    if (!t(b.first_name) || !t(b.parent_name)) return json({ error: "Names can't be blank." });
+    const fam = { parent_name: t(b.parent_name), parent_phone: fmtP(phone), parent_email: email || null, emergency_name: t(b.emergency_name) || null, emergency_phone: ePhone ? fmtP(ePhone) : null };
+    const me = { first_name: t(b.first_name), last_name: t(b.last_name) || null, dob: dob || null };
+    // what changed (for the text to Steve)
+    const was: Record<string, unknown> = { ...kid, parent_phone: fmtP(p10(kid.parent_phone)), emergency_phone: kid.emergency_phone ? fmtP(p10(kid.emergency_phone)) : null };
+    const LBL: Record<string, string> = { parent_name: "parent", parent_phone: "phone", parent_email: "email", emergency_name: "emergency name", emergency_phone: "emergency phone", first_name: "first name", last_name: "last name", dob: "birthday" };
+    const diff = Object.entries({ ...fam, ...me }).filter(([k, v]) => String(was[k] ?? "") !== String(v ?? "")).map(([k, v]) => `${LBL[k]} ${was[k] || "(blank)"} → ${v || "(blank)"}`);
+    if (!diff.length) return json({ ok: true });
+    const { error: e1 } = await db.from("students").update(me).eq("gym_id", gym).eq("id", sid);
+    const { error: e2 } = await db.from("students").update(fam).eq("gym_id", gym).in("id", [...kidIds]);
+    if (e1 || e2) return json({ error: "Couldn't save. Try again." }, 500);
+    let relogin = false;
+    if (phone !== acct.phone) {   // new phone = new login; keep their code, they log in again with the new number
+      const { data: taken } = await db.from("parent_accounts").select("id").eq("gym_id", gym).eq("phone", phone).maybeSingle();
+      if (!taken) await db.from("parent_accounts").update({ phone, user_id: null }).eq("user_id", u.user.id);
+      relogin = true;
+    }
+    await notify(`Parent portal: ${kidName(sid)} family info changed — ${diff.join("; ")}`.slice(0, 600));
+    return json({ ok: true, relogin });
+  }
+
+  if (b.action === "waiver_sign") {
+    const sid = String(b.student_id || ""), sig = String(b.signature || "").trim().slice(0, 120);
+    const kid = kids.find(k => k.id === sid);
+    if (!kid) return json({ error: "That can't be signed here. Text Coach Steve." });
+    if (sig.length < 3) return json({ error: "Type your full name to sign." });
+    const photo = b.photo === "No" ? "No" : "Yes";
+    const { error } = await db.from("waivers").insert({ id: "WV_" + crypto.randomUUID(), gym_id: gym, student_id: sid, parent_name: kid.parent_name || sig,
+      signature: sig, signed_at: new Date().toISOString(), photo_permission: photo, extra: { via: "Portal", phone: acct.phone } });
+    if (error) return json({ error: "Couldn't save. Try again." }, 500);
+    await notify(`Parent portal: waiver SIGNED for ${kidName(sid)} by ${sig} (photos: ${photo})`);
     return json({ ok: true });
   }
 
