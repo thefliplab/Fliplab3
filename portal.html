@@ -53,7 +53,7 @@ input.code{letter-spacing:10px;text-align:center;font-family:'DM Mono',monospace
 .wk{font-family:'DM Mono',monospace;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin:18px 0 8px}
 .small{background:none;border:1px solid rgba(245,248,255,.22);color:var(--white);border-radius:4px;padding:7px 12px;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;font-family:'DM Sans',sans-serif}
 .small.blue{border-color:var(--blue);color:var(--blue-light)}
-.nav{position:fixed;left:0;right:0;bottom:0;display:none;grid-template-columns:repeat(5,1fr);background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);z-index:6}
+.nav{position:fixed;left:0;right:0;bottom:0;display:none;grid-template-columns:repeat(6,1fr);background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);z-index:6}
 .nav.on{display:grid}
 .nav button{background:none;border:none;color:var(--muted);font-family:'DM Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;padding:10px 0 9px;cursor:pointer}
 .nav button svg{display:block;margin:0 auto 4px;width:22px;height:22px}
@@ -168,11 +168,13 @@ textarea:focus{border-color:var(--blue)}
 
     <div class="tab on" id="tHome">
       <div id="homeNext"></div>
+      <div id="homeSkill"></div>
       <div class="card" id="a2hs"><p class="tip" style="margin:0"><b>Tip:</b> add this to your home screen so it opens like an app.<br>iPhone: tap Share → <b>Add to Home Screen</b>. Android: tap ⋮ → <b>Add to Home screen</b>.</p></div>
     </div>
     <div class="tab" id="tLessons"><div id="lessonList"></div>
       <p class="tip" id="policyLine" style="margin-top:4px"></p></div>
     <div class="tab" id="tClasses"><div id="classList"></div></div>
+    <div class="tab" id="tSkills"><div id="skillsBox"><div class="card"><p class="tip" style="margin:0">Loading…</p></div></div></div>
     <div class="tab" id="tMsg">
       <div class="lrow"><div class="ltitle">Message Coach Steve</div><button class="link" id="bMsgClear" style="padding:0">Clear</button></div>
       <p class="eyebrow" style="color:var(--muted);margin:2px 0 10px">Replies 8 AM – 5 PM</p>
@@ -200,6 +202,7 @@ textarea:focus{border-color:var(--blue)}
   <button data-t="tHome" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Home</button>
   <button data-t="tLessons"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Lessons</button>
   <button data-t="tClasses"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M15 14.5c3 0 6 1.8 6 5.5"/></svg>Classes</button>
+  <button data-t="tSkills"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg>Skills</button>
   <button data-t="tMsg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16v11H8l-4 4z"/></svg>Message</button>
   <button data-t="tAcct"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>Account</button>
 </nav>
@@ -308,7 +311,8 @@ async function loadHome() {
   document.body.classList.add('in'); $('nav').classList.add('on'); $('foot').style.display = 'none';
   show('vHome');
   $('homeNext').innerHTML = $('lessonList').innerHTML = $('classList').innerHTML = '<div class="card"><p class="tip" style="margin:0">Loading…</p></div>';
-  await Promise.all([refresh(), refreshClasses()]);
+  $('homeSkill').innerHTML = '';
+  await Promise.all([refresh(), refreshClasses(), loadAcct()]);
 }
 function drawKids() {
   const ks = ME.kids || [];
@@ -494,6 +498,7 @@ document.querySelectorAll('#nav button').forEach(b => b.onclick = () => {
   window.scrollTo(0, 0);
   if (b.dataset.t === 'tMsg') loadMsgs();
   if (b.dataset.t === 'tAcct') { if (ACCT) drawAcct(); loadAcct(); }
+  if (b.dataset.t === 'tSkills' && ACCT) drawAcct();
 });
 
 // ================= Account =================
@@ -525,13 +530,6 @@ function drawAcct() {
   const ps = PAY_ALL ? k.payments : k.payments.slice(0, 10);
   h.push(`<div class="card"><label>Payments</label>` + (ps.length ? ps.map(x => `<div class="prow"><span>${esc(fmtD(x.date))}</span><span class="tip" style="font-size:14px">${esc(x.method || '')}</span><span>${usd(x.amount)}</span></div>`).join('') : '<p class="tip" style="margin:0">No payments yet.</p>') +
     (!PAY_ALL && k.payments.length > 10 ? '<button class="link" id="bPayMore">Show more</button>' : '') + '</div>');
-  // Skills: every level, tap to open; the level they're working on starts open
-  const lv = k.levels.filter(l => l.skills.length || l.current);
-  h.push(`<div class="card"><label>Skills</label>` + (lv.length ? lv.map(l => {
-    const done = l.skills.filter(s => s.done).length, open = LVL_OPEN[k.id + l.code] ?? l.current;
-    return `<div class="lvl" data-l="${esc(l.code)}"><div class="nm"><span>${esc(l.name)}${l.current ? ' <span class="tag t-move">Working on</span>' : ''}</span><span class="tip" style="font-size:14px">${done}/${l.skills.length} ${open ? '▾' : '▸'}</span></div>` +
-      (open ? (l.skills.length ? `<div class="bar"><div style="width:${Math.round(done / l.skills.length * 100)}%"></div></div>` + l.skills.map(s => `<div class="sk${s.done ? '' : ' no'}">${s.done ? '✓' : '○'} ${esc(s.name)}</div>`).join('') : '<p class="tip" style="margin:6px 0 0">No skills listed yet.</p>') : '') + '</div>';
-  }).join('') : '<p class="tip" style="margin:0">Skills are coming soon.</p>') + '</div>');
   // Family info
   const ph = p => p && p.length === 10 ? fmt(p) : '';
   h.push(`<div class="card"><div class="ahd"><label>Family info</label><button class="link" id="bFamEdit" style="padding:0">Edit</button></div>
@@ -553,8 +551,30 @@ function drawAcct() {
   on('bWavView', () => { WAV_SHOW = !WAV_SHOW; drawAcct(); });
   on('bFamEdit', () => openFam(k));
   on('bWavSign', () => openWav(k));
-  $('acctBox').querySelectorAll('[data-l]').forEach(d => d.onclick = () => { const key = k.id + d.dataset.l, l = k.levels.find(x => x.code === d.dataset.l); LVL_OPEN[key] = !(LVL_OPEN[key] ?? l.current); drawAcct(); });
+  drawSkills(k); drawHomeSkill(k);
 }
+function drawSkills(k) {
+  const h = [];
+  const lv = k.levels.filter(l => l.skills.length || l.current);
+  h.push(`<div class="card"><label>Skills</label>` + (lv.length ? lv.map(l => {
+    const done = l.skills.filter(s => s.done).length, open = LVL_OPEN[k.id + l.code] ?? l.current;
+    return `<div class="lvl" data-l="${esc(l.code)}"><div class="nm"><span>${esc(l.name)}${l.current ? ' <span class="tag t-move">Working on</span>' : ''}</span><span class="tip" style="font-size:14px">${done}/${l.skills.length} ${open ? '▾' : '▸'}</span></div>` +
+      (open ? (l.skills.length ? `<div class="bar"><div style="width:${Math.round(done / l.skills.length * 100)}%"></div></div>` + l.skills.map(s => `<div class="sk${s.done ? '' : ' no'}">${s.done ? '✓' : '○'} ${esc(s.name)}</div>`).join('') : '<p class="tip" style="margin:6px 0 0">No skills listed yet.</p>') : '') + '</div>';
+  }).join('') : '<p class="tip" style="margin:0">Skills are coming soon.</p>') + '</div>');
+  $('skillsBox').innerHTML = (ACCT.kids.length > 1 ? `<p class="eyebrow" style="margin:0 0 8px">${esc(k.first_name)}</p>` : '') + h.join('');
+  $('skillsBox').querySelectorAll('[data-l]').forEach(d => d.onclick = () => { const key = k.id + d.dataset.l, l = k.levels.find(x => x.code === d.dataset.l); LVL_OPEN[key] = !(LVL_OPEN[key] ?? l.current); drawSkills(k); });
+}
+// Home: one tap-able line — current level + progress; opens the Skills tab
+function drawHomeSkill(k) {
+  const l = k.levels.find(x => x.current);
+  if (!l || !l.skills.length) { $('homeSkill').innerHTML = ''; return; }
+  const done = l.skills.filter(s => s.done).length;
+  $('homeSkill').innerHTML = `<div class="card" id="bHomeSkill" style="cursor:pointer"><div class="ahd" style="margin-bottom:4px"><label>${esc(k.first_name)}'s level</label><span class="tip" style="font-size:14px;color:var(--blue-light)">Skills ›</span></div>
+    <div class="ltitle">${esc(l.name)} <span class="tip" style="font-family:'DM Sans',sans-serif;font-size:14px">· ${done} of ${l.skills.length} skills</span></div>
+    <div class="bar"><div style="width:${Math.round(done / l.skills.length * 100)}%"></div></div></div>`;
+  $('bHomeSkill').onclick = () => goTab('tSkills');
+}
+function goTab(t) { const b = document.querySelector(`#nav button[data-t="${t}"]`); if (b) b.click(); }
 function openFam(k) {
   const f = (id, lb, v, t) => `<div class="fld"><label for="${id}">${lb}</label><input id="${id}" ${t || ''} value="${esc(v || '')}"></div>`;
   sheet(`<div class="ltitle">Edit family info</div><div style="max-height:62vh;overflow-y:auto">
