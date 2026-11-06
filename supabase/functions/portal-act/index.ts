@@ -359,6 +359,7 @@ Deno.serve(async (req) => {
       db.from("skills").select("id,level_id,name,sort").eq("gym_id", gym).eq("active", true).order("sort"),
       db.from("student_skills").select("student_id,skill_id,checked_at").eq("gym_id", gym).in("student_id", ids),
       db.from("waivers").select("student_id,parent_name,signature,signed_at,photo_permission").eq("gym_id", gym).in("student_id", ids).order("signed_at", { ascending: false })]);
+    const { data: xs } = await db.from("student_extra_skills").select("student_id,name,tag,status,created_at").eq("gym_id", gym).in("student_id", ids).neq("status", "Not now").order("created_at");
     const main = String(cal?.main_coach || "");
     const allPay = pays || [];
     const priceNum = (p: any) => parseFloat(String(p.price || "").replace(/[^0-9.]/g, "")) || +priceFor(p.duration || "30 min", p.lesson_type === "Shared" ? "Shared" : "Solo").slice(1);
@@ -401,10 +402,25 @@ Deno.serve(async (req) => {
         payments: allPay.filter(x => x.student_id === k.id).slice(0, 50).map(x => ({ date: x.date, amount: +x.amount || 0, method: x.method, type: x.lesson_type })),
         levels: (lv || []).map(l => ({ code: l.code, name: l.name, current: l.code === k.skill_level,
           skills: (sk || []).filter(s => s.level_id === l.id).map(s => ({ name: s.name, done: mine.has(s.id) })) })),
+        extras: (xs || []).filter(x => x.student_id === k.id).map(x => ({ name: x.name, tag: x.tag, status: x.status })),
         waiver: w ? { parent_name: w.parent_name, signature: w.signature, signed_at: w.signed_at, photo: w.photo_permission } : null };
     });
     return json({ since: SINCE, kids: out, cancel_hrs: cancelHrs, policy_text: S.policy_text || "", waiver_text: S.waiver_text || "",
       contact: { text: S.c_text || "", email: S.c_email || "", venmo: S.c_venmo || "", zelle: S.c_zelle || "" } });
+  }
+
+  // ---------- parent asks Coach to work on an extra skill (shows in admin only, no text) ----------
+  if (b.action === "skill_request") {
+    const sid = String(b.student_id || ""), kid = kids.find(k => k.id === sid);
+    if (!kid) return json({ error: "That can't be done here. Text Coach Steve." });
+    const name = String(b.name ?? "").trim().slice(0, 80), note = String(b.note ?? "").trim().slice(0, 200);
+    const tag = ["Cheer", "Dance"].includes(String(b.tag)) ? String(b.tag) : null;
+    if (!name) return json({ error: "Enter a skill name first." });
+    const { count } = await db.from("student_extra_skills").select("id", { count: "exact", head: true }).eq("gym_id", gym).eq("student_id", sid).eq("status", "Requested");
+    if ((count || 0) >= 3) return json({ error: `${kid.first_name} has 3 open requests. Wait for Coach Steve to answer them first.` });
+    const { error } = await db.from("student_extra_skills").insert({ gym_id: gym, student_id: sid, name, note: note || null, tag, status: "Requested", source: "parent" });
+    if (error) return json({ error: "Couldn't send. Try again." });
+    return json({ ok: true });
   }
 
   if (b.action === "family_save") {

@@ -591,6 +591,7 @@ function drawAcct() {
   on('bWavSign', () => openWav(k));
   drawSkills(k); drawHomeSkill(k);
 }
+let XS_TAG = 'Cheer';
 function drawSkills(k) {
   const h = [];
   const lv = k.levels.filter(l => l.skills.length || l.current);
@@ -599,7 +600,29 @@ function drawSkills(k) {
     return `<div class="lvl" data-l="${esc(l.code)}"><div class="nm"><span>${esc(l.name)}${l.current ? ' <span class="tag t-move">Working on</span>' : ''}</span><span class="tip" style="font-size:14px">${done}/${l.skills.length} ${open ? '▾' : '▸'}</span></div>` +
       (open ? (l.skills.length ? `<div class="bar"><div style="width:${Math.round(done / l.skills.length * 100)}%"></div></div>` + l.skills.map(s => `<div class="sk${s.done ? '' : ' no'}">${s.done ? '✓' : '○'} ${esc(s.name)}</div>`).join('') : '<p class="tip" style="margin:6px 0 0">No skills listed yet.</p>') : '') + '</div>';
   }).join('') : '<p class="tip" style="margin:0">Skills are coming soon.</p>') + '</div>');
+  const xs = k.extras || [], XST = { Requested: 'Requested', Working: 'Working on', Done: 'Done' };
+  h.push(`<div class="card"><label>${esc(k.first_name)}'s extra skills</label><p class="tip" style="margin:2px 0 8px">Skills Coach Steve added for ${esc(k.first_name)}, outside the level.</p>` +
+    (xs.length ? xs.map(x => `<div class="prow"><span>${esc(x.name)}${x.tag ? ` <span class="tag t-move">${esc(x.tag)}</span>` : ''}</span><span class="tag ${x.status === 'Done' ? 't-on' : x.status === 'Requested' ? 't-away' : 't-past'}">${XST[x.status] || esc(x.status)}</span></div>`).join('')
+      : '<p class="tip" style="margin:0">None yet.</p>') + '</div>');
+  h.push(`<div class="card"><label>Ask to work on a skill</label>
+    <p class="tip" style="margin:4px 0 0;border-left:2px solid var(--blue);padding-left:8px">Requests should match ${esc(k.first_name)}'s current level and ability. Coach Steve decides what gets added to the list.</p>
+    <div class="fld"><label for="xsName">Skill name</label><input id="xsName" maxlength="80"></div>
+    <div class="fld"><label for="xsNote">Why (optional)</label><input id="xsNote" maxlength="200" placeholder="For cheer tryouts in March"></div>
+    <div style="display:flex;gap:8px;margin-top:12px">${['Cheer', 'Dance'].map(t => `<span class="chip${XS_TAG === t ? ' on' : ''}" data-xt="${t}">${t}</span>`).join('')}</div>
+    <div class="msg" id="mXs"></div><div class="btns"><button class="btn btn-primary" id="bXs">Send request</button></div>
+    <p class="tip" style="margin:6px 0 0">Up to 3 open requests per child.</p></div>`);
   $('skillsBox').innerHTML = (ACCT.kids.length > 1 ? `<p class="eyebrow" style="margin:0 0 8px">${esc(k.first_name)}</p>` : '') + h.join('');
+  $('skillsBox').querySelectorAll('[data-xt]').forEach(c => c.onclick = () => { XS_TAG = XS_TAG === c.dataset.xt ? '' : c.dataset.xt; $('skillsBox').querySelectorAll('[data-xt]').forEach(d => d.classList.toggle('on', d.dataset.xt === XS_TAG)); });
+  $('xsName').oninput = () => say('mXs', '');
+  $('bXs').onclick = async () => {
+    const name = $('xsName').value.trim(), b = $('bXs');
+    if (!name) return say('mXs', 'Enter a skill name first.');
+    busy(b, true);
+    const r = await act({ action: 'skill_request', student_id: k.id, name, note: $('xsNote').value.trim(), tag: XS_TAG });
+    busy(b, false);
+    if (r.error) return say('mXs', r.error);
+    await loadAcct(); say('mXs', 'Sent. Coach Steve will take a look.', true);
+  };
   $('skillsBox').querySelectorAll('[data-l]').forEach(d => d.onclick = () => { const key = k.id + d.dataset.l, l = k.levels.find(x => x.code === d.dataset.l); LVL_OPEN[key] = !(LVL_OPEN[key] ?? l.current); drawSkills(k); });
 }
 // Home: one tap-able line — current level + progress; opens the Skills tab
