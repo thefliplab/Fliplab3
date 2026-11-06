@@ -503,7 +503,7 @@ async function openExtra() {
   const wkHtml = r.weeks.map((w, wi) => `<div class="wk">${wi ? 'Next week' : 'This week'}</div>` + (w.slots.length
     ? `<div class="slots" style="grid-template-columns:1fr">${all.map((s, i) => s.wi === wi ? `<button data-i="${i}">${dlabel(s.date, s.day)} · ${esc(s.time)}</button>` : '').join('')}</div>`
     : '<p class="tip" style="margin:0">No open times.</p>')).join('');
-  sheet(top + sub + `<div class="warnbox">This is a one-time lesson. It is not a weekly spot. ${nm}'s regular lesson stays the same.</div>${wkHtml}
+  sheet(top + sub + `<div class="warnbox"><b>This is an extra lesson, in addition to your current one.</b> One time only. Not a move and not a weekly spot.</div>${wkHtml}
     <label style="display:flex;gap:10px;align-items:flex-start;margin-top:14px;text-transform:none;letter-spacing:0;font-family:inherit;font-size:14px;color:var(--white)"><input type="checkbox" id="xOk" style="width:18px;height:18px;margin-top:2px;flex:none"><span id="xOkTxt">I understand this is one time only.</span></label>
     <button class="btn btn-primary" id="xBook">Book one-time lesson</button><button class="link" onclick="closeSheet()">Never mind</button>
     <p class="tip" style="margin-top:6px">The ${esc(r.price)} goes on your balance after the lesson. Cancelling with less than ${r.cancel_hrs} hours' notice has a late-cancel fee.</p><div class="msg" id="sMsg"></div>`);
@@ -518,7 +518,7 @@ async function openExtra() {
     const x = await act({ action: 'extra_book', student_id: KID, ws: pick.ws, day: pick.day, time: pick.time, ok_once: true });
     busy($('xBook'), false);
     if (x.error) return say('sMsg', x.error);
-    sheet(top + `<div class="ltitle" style="margin-top:10px">Booked</div><p class="tip" style="margin-top:6px">One-time lesson for ${nm}: ${dlabel(pick.date, pick.day)} · ${esc(pick.time)}. This is one time only. ${nm}'s regular lesson stays the same.</p><button class="btn btn-primary" onclick="closeSheet()">Done</button>`);
+    sheet(top + `<div class="ltitle" style="margin-top:10px">Booked</div><p class="tip" style="margin-top:6px">Extra lesson for ${nm}: ${dlabel(pick.date, pick.day)} · ${esc(pick.time)}. This is in addition to your current one, one time only.</p><button class="btn btn-primary" onclick="closeSheet()">Done</button>`);
     await refresh();
   };
 }
