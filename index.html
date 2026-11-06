@@ -1991,9 +1991,10 @@ function renderWeek() {
   const slots = slotsForWeek().filter(s => !coach || s.coach === coach);
   const photo = {}; students.forEach(s => photo[s.id] = (s.extra || {}).PhotoPermission || '');
   const mc = mainCoach();
+  const portalAdd = p => weekEx.some(e => e.type === 'Add' && 'EX_ONLY_' + e.id === p.id && (e.extra || {}).by === 'parent');
   const pills = p => (p.lesson_type === 'Shared' && !p.pair_id ? '<span class="tag t-shared">Shared</span>' : '')
     + (photo[p.student_id] === 'No' ? '<span class="tag t-nophoto">No Photo</span>' : photo[p.student_id] === 'Yes' ? '<span class="tag t-photo">Photo OK</span>' : '')
-    + (p.exType === 'Move' ? '<span class="tag t-ex">Moved</span>' : p.exType === 'Add' ? '<span class="tag t-ex">This week</span>' : '');
+    + (p.exType === 'Move' ? '<span class="tag t-ex">Moved</span>' : p.exType === 'Add' ? '<span class="tag t-ex">This week</span>' + (portalAdd(p) ? '<span class="tag t-ex">Portal</span>' : '') : '');
   // Fill counts (main coach's slots only) + waitlist matches on open rows
   const wlOn = waitlist.filter(w => (w.extra || {}).Unsubscribed !== 'Yes'), fill = {};
   const mine = slot => slot.coach && (!mc || slot.coach === mc);
@@ -2659,7 +2660,7 @@ function renderDash() {
   if (out.length) alerts.push(['#B45309', out.length + ' out this week — spot' + (out.length === 1 ? '' : 's') + ' to fill', out.map(p => p.student_name.split(' ')[0] + ' ' + SHORT[p.day] + ' ' + p.time).join(' · '), "go('openings')"]);
   // Changes parents made in the parent portal this week
   const pp = weekEx.filter(e => (e.extra || {}).by === 'parent' && e.status === 'Active');
-  if (pp.length) alerts.push(['#1e8cff', pp.length + ' change' + (pp.length === 1 ? '' : 's') + ' from the parent portal', pp.map(e => String(e.student_name || '').split(' ')[0] + (e.type === 'Cancel' ? ' cancelled ' + SHORT[e.base_day] + ' ' + e.base_time : ' moved ' + SHORT[e.base_day] + ' → ' + SHORT[e.new_day] + ' ' + e.new_time) + (e.extra.late ? ' (LATE)' : '')).join(' · '), "go('schedule')"]);
+  if (pp.length) alerts.push(['#1e8cff', pp.length + ' change' + (pp.length === 1 ? '' : 's') + ' from the parent portal', pp.map(e => String(e.student_name || '').split(' ')[0] + (e.type === 'Cancel' ? ' cancelled ' + SHORT[e.base_day] + ' ' + e.base_time : e.type === 'Add' ? ' booked an extra lesson ' + SHORT[e.new_day] + ' ' + e.new_time : ' moved ' + SHORT[e.base_day] + ' → ' + SHORT[e.new_day] + ' ' + e.new_time) + (e.extra.late ? ' (LATE)' : '')).join(' · '), "go('schedule')"]);
   if (dashHist) {
     const { absent, unpaid2 } = dashHist;
     if (absent.length) alerts.push(['#A32D2D', absent.length + ' kid' + (absent.length === 1 ? '' : 's') + ' missed the last 2 weeks', absent.join(' · '), "go('students')"]);
