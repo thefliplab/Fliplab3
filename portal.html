@@ -172,6 +172,7 @@ textarea:focus{border-color:var(--blue)}
       <div class="card" id="a2hs"><p class="tip" style="margin:0"><b>Tip:</b> add this to your home screen so it opens like an app.<br>iPhone: tap Share → <b>Add to Home Screen</b>. Android: tap ⋮ → <b>Add to Home screen</b>.</p></div>
     </div>
     <div class="tab" id="tLessons"><div id="lessonList"></div>
+      <button class="btn btn-primary" id="bExtra" style="margin-top:6px">Book an extra lesson</button>
       <p class="tip" id="policyLine" style="margin-top:4px"></p></div>
     <div class="tab" id="tClasses"><div id="classList"></div></div>
     <div class="tab" id="tSkills"><div id="skillsBox"><div class="card"><p class="tip" style="margin:0">Loading…</p></div></div></div>
@@ -338,14 +339,15 @@ function tagFor(it) {
   if (it.past) return '<span class="tag t-past">Done</span>';
   if (it.status === 'Cancelled') return '<span class="tag t-away">Away</span>';
   if (it.kind === 'Move') return '<span class="tag t-move">Moved</span>';
-  if (it.kind === 'Add') return '<span class="tag t-move">Extra</span>';
+  if (it.kind === 'Add') return '<span class="tag t-move">One-time</span>';
   return '<span class="tag t-on">On</span>';
 }
 function lessonCard(it, big) {
   const what = [it.duration || '30 min', it.lesson_type === 'Shared' ? 'Shared' : 'Private', it.coach].filter(Boolean).join(' · ');
   const moved = it.from ? `<div class="lsub">Moved from ${SH[it.from.day]} ${esc(it.from.time)}</div>` : '';
   const lateFee = it.status === 'Cancelled' && it.late ? `<div class="lsub" style="color:var(--bad);font-weight:600">Late cancel · a late-cancel fee applies</div>` : '';
-  const undo = it.undo_id ? `<div class="lsub">${it.status === 'Cancelled' ? 'You cancelled' : 'You moved it'}${it.late && it.status !== 'Cancelled' ? ' (late)' : ''} · <button class="link" style="padding:0" data-undo="${esc(it.undo_id)}">Undo</button></div>` : '';
+  const isX = it.kind === 'Add';
+  const undo = it.undo_id ? `<div class="lsub">${it.status === 'Cancelled' ? 'You cancelled' : isX ? 'You booked this one-time extra lesson' : 'You moved it'}${it.late && it.status !== 'Cancelled' ? ' (late)' : ''} · <button class="link" style="padding:0" data-undo="${esc(it.undo_id)}"${isX ? ' data-x="1"' : ''}>${isX ? 'Cancel booking' : 'Undo'}</button></div>` : '';
   const btns = it.can_change ? `<div class="btns"><button class="btn btn-ghost" data-cancel="${esc(it.id)}" data-ws="${it.ws}">Can't make it</button><button class="btn btn-primary" data-move="${esc(it.id)}" data-ws="${it.ws}">Move it</button></div>`
     : (!it.past && it.status !== 'Cancelled' && !it.undo_id ? '<div class="lsub" style="margin-top:8px">To change this one, text Coach Steve.</div>' : '');
   return `<div class="card">${big ? '<label>Next lesson' + ((ME.kids || []).length > 1 ? ' · ' + esc(kidFirst(it.student_id)) : '') + '</label>' : ''}
@@ -367,7 +369,7 @@ function draw() {
   $('policyLine').textContent = `Cancelling with less than ${DATA.cancel_hrs} hours' notice has a late-cancel fee.`;
   document.querySelectorAll('[data-cancel]').forEach(b => b.onclick = () => openCancel(b.dataset.cancel, b.dataset.ws));
   document.querySelectorAll('[data-move]').forEach(b => b.onclick = () => openMove(b.dataset.move, b.dataset.ws));
-  document.querySelectorAll('[data-undo]').forEach(b => b.onclick = () => doUndo(b.dataset.undo));
+  document.querySelectorAll('[data-undo]').forEach(b => b.onclick = () => doUndo(b.dataset.undo, !!b.dataset.x));
 }
 // ================= Classes =================
 let CL = null;
@@ -486,8 +488,43 @@ async function openMove(id, ws, pre) {
   };
 }
 
-async function doUndo(exId) {
-  if (!confirm('Undo this change and go back to the regular time?')) return;
+// ---- Book an extra lesson (one time only, 30 min, this week + next) ----
+$('bExtra').onclick = () => openExtra();
+async function openExtra() {
+  const nm = esc(kidFirst(KID));
+  const top = `<p class="eyebrow">${nm}</p><div class="ltitle" style="font-size:30px;margin:4px 0 2px">Book an extra lesson</div>`;
+  sheet(top + '<p class="tip">Finding open times…</p>');
+  const r = await act({ action: 'extra_options', student_id: KID });
+  if (r.error) return sheet(top + `<div class="msg err">${esc(r.error)}</div><button class="btn btn-ghost" onclick="closeSheet()">Close</button>`);
+  const all = r.weeks.flatMap((w, wi) => w.slots.map(s => ({ ...s, ws: w.ws, wi })));
+  const sub = `<div class="lsub">30 minutes · ${esc(r.price)} · ${esc(r.coach)}</div>`;
+  if (!all.length) return sheet(top + sub + `<p class="tip" style="margin-top:12px">No open times this week or next. Text <a style="color:var(--blue-light)" href="sms:+15134432674">Coach Steve</a>.</p><button class="btn btn-ghost" onclick="closeSheet()">Close</button>`);
+  let pick = null;
+  const wkHtml = r.weeks.map((w, wi) => `<div class="wk">${wi ? 'Next week' : 'This week'}</div>` + (w.slots.length
+    ? `<div class="slots" style="grid-template-columns:1fr">${all.map((s, i) => s.wi === wi ? `<button data-i="${i}">${dlabel(s.date, s.day)} · ${esc(s.time)}</button>` : '').join('')}</div>`
+    : '<p class="tip" style="margin:0">No open times.</p>')).join('');
+  sheet(top + sub + `<div class="warnbox">This is a one-time lesson. It is not a weekly spot. ${nm}'s regular lesson stays the same.</div>${wkHtml}
+    <label style="display:flex;gap:10px;align-items:flex-start;margin-top:14px;text-transform:none;letter-spacing:0;font-family:inherit;font-size:14px;color:var(--white)"><input type="checkbox" id="xOk" style="width:18px;height:18px;margin-top:2px;flex:none"><span id="xOkTxt">I understand this is one time only.</span></label>
+    <button class="btn btn-primary" id="xBook">Book one-time lesson</button><button class="link" onclick="closeSheet()">Never mind</button>
+    <p class="tip" style="margin-top:6px">The ${esc(r.price)} goes on your balance after the lesson. Cancelling with less than ${r.cancel_hrs} hours' notice has a late-cancel fee.</p><div class="msg" id="sMsg"></div>`);
+  $('sheetBox').querySelectorAll('.slots button').forEach(b => b.onclick = () => {
+    pick = all[+b.dataset.i]; $('sheetBox').querySelectorAll('.slots button').forEach(x => x.classList.toggle('sel', x === b));
+    $('xOkTxt').textContent = `I understand this is one time only, on ${dlabel(pick.date, pick.day)}.`; $('xOk').checked = false;
+  });
+  $('xBook').onclick = async () => {
+    if (!pick) return say('sMsg', 'Pick a time first.');
+    if (!$('xOk').checked) return say('sMsg', 'Check the box to confirm this is one time only.');
+    busy($('xBook'), true);
+    const x = await act({ action: 'extra_book', student_id: KID, ws: pick.ws, day: pick.day, time: pick.time, ok_once: true });
+    busy($('xBook'), false);
+    if (x.error) return say('sMsg', x.error);
+    sheet(top + `<div class="ltitle" style="margin-top:10px">Booked</div><p class="tip" style="margin-top:6px">One-time lesson for ${nm}: ${dlabel(pick.date, pick.day)} · ${esc(pick.time)}. This is one time only. ${nm}'s regular lesson stays the same.</p><button class="btn btn-primary" onclick="closeSheet()">Done</button>`);
+    await refresh();
+  };
+}
+
+async function doUndo(exId, extra) {
+  if (!confirm(extra ? 'Cancel this one-time extra lesson?' : 'Undo this change and go back to the regular time?')) return;
   const x = await act({ action: 'undo', ex_id: exId });
   if (x.error) return alert(x.error);
   await refresh();
