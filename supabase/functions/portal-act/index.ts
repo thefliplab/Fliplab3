@@ -5,6 +5,8 @@
 //   { action: 'options', lesson_id, ws }                 → { slots: [{ day, time }] }  open times that week, same coach
 //   { action: 'cancel',  lesson_id, ws, ok_late? }       → { ok } | { late: true }  (late = under cancel_hrs; parent must confirm)
 //   { action: 'move',    lesson_id, ws, day, time }      → { ok }
+//   { action: 'extra_options', student_id }              → { weeks: [{ ws, slots: [{ day, time, date }] }], price, coach }  30-min one-time openings, main coach, this + next week
+//   { action: 'extra_book', student_id, ws, day, time, ok_once } → { ok }  saved as a one-week Add (drop-in), never weekly
 //   { action: 'undo',    ex_id }                         → { ok }  (only the parent's own change, before the lesson)
 //   { action: 'classes' }                                → { classes, clinics }  the kids' weekly classes (enrolled / waitlisted) + upcoming clinics
 //   { action: 'rsvp', schedule_id, student_id, ws, answer } → { ok }  answer 'yes' | 'no' | null (no text to Steve; shows on Schedule)
@@ -169,6 +171,35 @@ Deno.serve(async (req) => {
     return json({ ok: true });
   }
 
+  // ---------- extra one-time lesson (30 min, main coach only, this week + next) ----------
+  if (["extra_options", "extra_book"].includes(b.action)) {
+    const { data: cs } = await db.from("cal_settings").select("main_coach").eq("gym_id", gym).maybeSingle();
+    const main = String(cs?.main_coach || "Coach Steve");
+    const sid = String(b.student_id || "");
+    if (!kidIds.has(sid)) return json({ error: "Pick a student." });
+    const wk2 = [thisMon, addDays(thisMon, 7)];
+    if (b.action === "extra_options") {
+      const weeks = [];
+      for (const ws of wk2) {
+        const { rows } = await week(ws);
+        weeks.push({ ws, slots: (await openSlots(ws, main, rows)).map(s => ({ ...s, date: dateOf(ws, s.day) })) });
+      }
+      return json({ weeks, price: priceFor("30 min", "Solo"), coach: main, cancel_hrs: cancelHrs });
+    }
+    const ws = String(b.ws || ""), day = String(b.day || ""), time = String(b.time || "");
+    if (!wk2.includes(ws)) return json({ error: "Pick this week or next week." });
+    if (!b.ok_once) return json({ error: "Check the box to confirm this is one time only." });
+    const { rows } = await week(ws);
+    if (!(await openSlots(ws, main, rows)).some(s => s.day === day && s.time === time)) return json({ error: "That time was just taken. Pick another." });
+    const { error } = await db.from("schedule_exceptions").insert({ gym_id: gym, id: crypto.randomUUID(), type: "Add", lesson_id: null,
+      student_id: sid, student_name: kidName(sid), coach: main, base_day: day, base_time: time, new_day: day, new_time: time, new_coach: main,
+      week_start: ws, original_date: dateOf(ws, day), status: "Active", lesson_type: "Solo", created_at: new Date().toISOString(),
+      notes: "One-time extra lesson booked by parent (portal)", extra: { by: "parent", extra_lesson: true, phone: acct.phone } });
+    if (error) return json({ error: "Couldn't save. Try again." }, 500);
+    await notify(`Parent portal: ${kidName(sid)} BOOKED A ONE-TIME extra lesson ${nice(ws, day, time)} (30 min)`);
+    return json({ ok: true });
+  }
+
   // ---------- classes + clinics ----------
   const fmtP = (p: string) => p.length === 10 ? `(${p.slice(0, 3)}) ${p.slice(3, 6)}-${p.slice(6)}` : p;
   const minsUntilDate = (ymd: string, time: string) => minsUntil(mondayOf(ymd), DAYS[(new Date(ymd + "T12:00:00Z").getUTCDay() + 6) % 7], time || "11:59 PM");
@@ -270,6 +301,7 @@ Deno.serve(async (req) => {
     const { data: ex } = await db.from("schedule_exceptions").select("*").eq("gym_id", gym).eq("id", String(b.ex_id || "")).eq("status", "Active").maybeSingle();
     if (!ex || ex.extra?.by !== "parent" || !kidIds.has(ex.student_id)) return json({ error: "That can't be undone here. Text Coach Steve." });
     if (minsUntil(ex.week_start, ex.base_day, ex.base_time) <= 0 || (ex.type === "Move" && minsUntil(ex.week_start, ex.new_day, ex.new_time) <= 0)) return json({ error: "Too late to undo. Text Coach Steve." });
+    if (ex.type === "Add" && minsUntil(ex.week_start, ex.new_day, ex.new_time) < cancelHrs * 60) return json({ error: `Under ${cancelHrs} hours away. Text Coach Steve to cancel.` });
     // Getting the old spot back: make sure nobody took it meanwhile (Openings / drop-in)
     if (ex.type === "Cancel" || ex.type === "Move") {
       // taken = another kid was dropped in / moved into the old spot that week (regular shared partners were there already)
@@ -279,7 +311,7 @@ Deno.serve(async (req) => {
     }
     const { error: ue } = await db.from("schedule_exceptions").update({ status: "Deleted" }).eq("id", ex.id);
     if (ue) return json({ error: "Couldn't undo. Try again or text Coach Steve." }, 500);
-    await notify(`Parent portal: ${kidName(ex.student_id)} UNDID their ${ex.type === "Cancel" ? "cancel" : "move"} — back on ${nice(ex.week_start, ex.base_day, ex.base_time)}`);
+    await notify(`Parent portal: ${kidName(ex.student_id)} UNDID their ${ex.type === "Cancel" ? "cancel" : ex.type === "Add" ? "one-time extra lesson" : "move"} — back on ${nice(ex.week_start, ex.base_day, ex.base_time)}`);
     return json({ ok: true });
   }
 
