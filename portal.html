@@ -161,11 +161,11 @@ button.fl-tap,a.btn.fl-tap{outline:2px solid #1e8cff;outline-offset:2px}
     </div>
   </div>
 
-  <!-- Other gyms: logged in, rest of the portal not turned on yet -->
+  <!-- Other gyms: the coach turned the portal off -->
   <div class="view" id="vSoon">
     <p class="eyebrow">Parent portal</p>
-    <h1>Coming <span>soon</span></h1>
-    <p class="sub">You're logged in. The rest of the parent portal is almost ready. Check back soon.</p>
+    <h1>Portal is <span>off</span></h1>
+    <p class="sub">The parent portal isn't turned on right now. Contact your coach with any questions.</p>
     <button class="link" id="bSoonOut">Log out</button>
   </div>
 
@@ -279,16 +279,38 @@ async function call(body) {
 const FL = GYM === 'fliplab';
 const NOT_FOUND = "We don't have that number. Use the phone number you signed up with, or " + (FL ? 'text Coach Steve.' : 'contact your coach.');
 // Other gyms: their name, logo and main color (Settings in their admin), read through signup_look
-if (!FL) (async () => {
+async function lookFor(slug) {
   $('topLogo').style.display = 'none'; $('topName').style.display = 'inline';
   $('phoneSub').textContent = 'Cancel or move lessons, sign up for classes, pay and message your coach.';
   $('codeH').innerHTML = 'Check your <span>email</span>'; $('bSend').textContent = 'Email me a code'; $('bHave').style.display = 'block';
-  let L = null; try { L = (await sb.rpc('signup_look', { p_slug: GYM })).data; } catch (e) {}
+  let L = null; try { L = (await sb.rpc('signup_look', { p_slug: slug })).data; } catch (e) {}
   if (!L) return;
   document.title = L.name + ' — Parent portal'; $('topName').textContent = L.name;
   if (L.logo_url) { $('topLogo').src = L.logo_url; $('topLogo').alt = L.name; $('topLogo').style.display = ''; $('topName').style.display = 'none'; }
   if (L.color) ['--blue', '--blue-light'].forEach(k => document.documentElement.style.setProperty(k, L.color));
-})();
+}
+if (!FL) lookFor(GYM);
+// Other gyms (after login): their coach's name + contact instead of Coach Steve / 513, and tabs the coach turned off
+let G = null;
+function swapCoach(root) {
+  if (!G || !root) return;
+  const verb = G.text ? 'Text ' : 'Contact ';
+  const tw = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); let t;
+  while ((t = tw.nextNode())) if (t.nodeValue.includes('Coach Steve'))
+    t.nodeValue = t.nodeValue.replace(/Text Coach Steve/g, verb + G.coach).replace(/text Coach Steve/g, verb.toLowerCase() + G.coach).replace(/Coach Steve/g, G.coach);
+  if (root.querySelectorAll) root.querySelectorAll('a[href^="sms:+15134432674"]').forEach(a => { if (G.text) a.href = 'sms:+1' + G.text; else if (G.email) a.href = 'mailto:' + G.email; else a.removeAttribute('href'); });
+}
+new MutationObserver(ms => { if (G) ms.forEach(m => m.addedNodes.forEach(nd => swapCoach(nd.nodeType === 3 ? nd.parentNode : nd))); }).observe(document.body, { childList: true, subtree: true });
+function applyGym(g) {
+  G = g;
+  const T = { lessons: 'tLessons', classes: 'tClasses', skills: 'tSkills', message: 'tMsg', account: 'tAcct' }; let n = 6;
+  Object.entries(T).forEach(([k, id]) => { const b = document.querySelector('#nav [data-t="' + id + '"]'); if (!b) return; const off = (g.hide || []).includes(k); b.style.display = off ? 'none' : ''; if (off) n--; });
+  $('nav').style.gridTemplateColumns = 'repeat(' + n + ',1fr)';
+  if ((g.hide || []).includes('lessons') && $('bExtra')) $('bExtra').style.display = 'none';
+  $('foot').innerHTML = g.text ? 'Questions? Text ' + esc(g.coach) + ' <a href="sms:+1' + g.text + '">' + fmt(g.text) + '</a>'
+    : g.email ? 'Questions? Email ' + esc(g.coach) + ' <a href="mailto:' + esc(g.email) + '">' + esc(g.email) + '</a>' : '';
+  swapCoach(document.body);
+}
 $('bHave').onclick = () => { $('bSend').style.display = 'none'; $('bHave').style.display = 'none'; $('codeBox').style.display = 'block'; say('mCode', 'Enter the 6-number code your coach gave you.', true); $('code').focus(); };
 
 $('bPhone').onclick = async () => {
@@ -370,7 +392,7 @@ async function loadHome() {
   const { data: me, error } = await meRpc();
   if (VIEW && (error || !me || me.error || !(me.kids || []).length)) { $('vbarTxt').innerHTML = '<b>Admin view</b> · ' + (me && !me.error ? 'no active students for this phone' : 'log in to admin first, then try again'); return; }
   if (error || !me || me.error) { await sb.auth.signOut(); return show('vPhone'); }
-  if (me.gym_slug && me.gym_slug !== 'fliplab' && !VIEW) { ME = me; return show('vSoon'); }   // step 1: other gyms' portal tabs not on yet
+  if (me.gym_slug && me.gym_slug !== 'fliplab' && FL) lookFor(me.gym_slug);   // logged in without ?gym= in the link
   if (VIEW) $('vbarTxt').innerHTML = '<b>Admin view</b> · ' + esc(me.parent_name || fmt(me.phone)) + ' · look only';
   ME = me;
   const first = String(me.parent_name || '').trim().split(/\s+/)[0];
@@ -397,6 +419,8 @@ async function act(body) {
 }
 async function refresh() {
   const r = await act({ action: 'load' });
+  if (r.error === 'portal_off') return show('vSoon');
+  if (r.gym) applyGym(r.gym);
   if (r.error) { $('homeNext').innerHTML = $('lessonList').innerHTML = `<div class="card"><p class="msg err" style="margin:0">${esc(r.error)}</p></div>`; return; }
   DATA = r; draw();
 }
@@ -620,7 +644,7 @@ const ST_WAV = 'By signing below, I acknowledge that participation in gymnastics
 const ftext = t => t.trim().split(/\n\s*\n/).map(p => { const ls = p.split('\n').map(esc); return (ls.length > 1 && ls[0].length < 70 ? '<strong>' + ls.shift() + '</strong><br>' : '') + ls.join('<br>'); }).join('<br><br>');
 const polHtml = () => ACCT.policy_text ? ftext(ACCT.policy_text) : ST_POL.replace(/24 hours/g, (ACCT.cancel_hrs || 24) + ' hours');
 const wavHtml = () => ACCT.waiver_text ? ftext(ACCT.waiver_text) : ST_WAV;
-const textNum = () => (ACCT && String(ACCT.contact.text || '').replace(/\D/g, '').slice(-10)) || '5134432674';
+const textNum = () => (ACCT && String(ACCT.contact.text || '').replace(/\D/g, '').slice(-10)) || (G ? '' : '5134432674');
 async function loadAcct() {
   const r = await act({ action: 'account' });
   if (r.error) { $('acctBox').innerHTML = `<div class="card"><p class="msg err" style="margin:0">${esc(r.error)}</p></div>`; return; }
@@ -652,7 +676,7 @@ function drawAcct() {
     : `<div class="warnbox" style="margin-top:0">No waiver on file for ${esc(k.first_name)}.</div><button class="btn btn-primary" id="bWavSign">Sign waiver</button>`) + '</div>');
   // Policies
   h.push(`<div class="card"><label>Policies</label><div class="ftxt" style="margin-top:0">${polHtml()}</div>
-    <p class="tip" style="margin:10px 0 0">Text Coach Steve <a href="sms:+1${textNum()}" style="color:var(--blue-light)">${fmt(textNum())}</a>${C.email ? ' · <a href="mailto:' + esc(C.email) + '" style="color:var(--blue-light)">' + esc(C.email) + '</a>' : ''}</p></div>`);
+    <p class="tip" style="margin:10px 0 0">${textNum() ? `Text Coach Steve <a href="sms:+1${textNum()}" style="color:var(--blue-light)">${fmt(textNum())}</a>` : 'Contact Coach Steve'}${C.email ? ' · <a href="mailto:' + esc(C.email) + '" style="color:var(--blue-light)">' + esc(C.email) + '</a>' : ''}</p></div>`);
   $('acctBox').innerHTML = h.join('');
   const on = (id, f) => { const e = $(id); if (e) e.onclick = f; };
   on('bZelle', () => { const z = C.zelle; try { navigator.clipboard.writeText(z); } catch (e) {} alert('Zelle: ' + z + (navigator.clipboard ? '\n(copied)' : '')); });

@@ -3569,6 +3569,24 @@ async function msAI() {
 async function msSend() {
   const x = msThreads().find(t => t.phone === msOpen), text = $('ms_msg').value.trim();
   if (!x || !text) return;
+  // Other gyms: a reply to a parent-portal message is emailed from the coach's connected email and shows in their portal thread
+  if (HAND()) {
+    const viaPortal = [...x.list].reverse().find(r => r.direction === 'IN')?.extra?.via === 'Portal';
+    const st = students.find(s => String(s.parent_phone || '').replace(/\D/g, '').slice(-10) === x.phone && /@/.test(s.parent_email || ''));
+    if (viaPortal && st && SET.email_from) {
+      if (!confirm('Email this to ' + x.name + ' at ' + st.parent_email + '?\nIt also shows in their parent portal.\n\n' + text)) return;
+      const b = $('ms_send'); b.disabled = true; b.textContent = 'Sending…';
+      const url = location.origin + '/portal.html?gym=' + encodeURIComponent(gymSlug);
+      const res = await sb.functions.invoke('send-email', { body: { messages: [{ to: st.parent_email, subject: 'Message from ' + gymTitle, student_id: st.id, family: x.name,
+        text: text + '\n\nReply in your parent portal: ' + url }] } });
+      b.disabled = false; b.textContent = 'Send text';
+      if (res.error || !res.data?.sent) return alert('Not sent: ' + (res.data?.results?.[0]?.error || res.data?.error || res.error?.message || 'unknown error'));
+      await sb.from('text_log').insert({ gym_id: gymId, direction: 'OUT', phone: x.phone, student_id: st.id, family_name: x.name, body: text, status: 'Sent (email)',
+        received_at: new Date().toISOString(), extra: { line: 'Portal', via: 'Email' } });
+      $('ms_msg').value = ''; $('ms_idea').value = '';
+      return loadMsgs(true);
+    }
+  }
   let voice = $('ms_line').value === 'Voice';
   if (!confirm('Text this to ' + x.name + ' at ' + fmtPhone(x.phone) + ' from your ' + (voice ? 'Google Voice number' : 'cell') + '?\n\n' + text)) return;
   const b = $('ms_send'); b.disabled = true; b.textContent = 'Sending…';
