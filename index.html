@@ -2066,7 +2066,7 @@ function renderSdTop(s) {
     if (live.length) qa.push(`<button class="warn" onclick="sdCancelWeek()">✕ Cancel ${weekOffset === 0 ? 'this week' : 'that week'}</button>`);
     qa.push(`<button class="dang" onclick="sdStatus('Dropped')">Drop student</button>`);
   }
-  if (s.parent_phone && (!gymSlug || gymSlug === 'fliplab')) qa.push(`<button class="dang" onclick="sdResetCode()">Reset portal code</button>`);
+  if (s.parent_phone && (!gymSlug || gymSlug === 'fliplab')) qa.push(`<button onclick="sdViewPortal()">View as parent</button>`, `<button class="dang" onclick="sdResetCode()">Reset portal code</button>`);
   $('sdTop').innerHTML = `<div class="shead"><div class="av">${esc((s.first_name || '?')[0])}${esc((s.last_name || '')[0] || '')}</div>
     <div><b>${esc(s.first_name)} ${esc(s.last_name)}</b> <span class="pill ${isOn(s) ? '' : 'off'}">${esc(s.status || 'Active')}</span>${s.skill_level ? ` <span class="pill">${esc(s.skill_level)}</span>` : ''}${x.PhotoPermission === 'No' ? ' <span class="tag t-nophoto">No Photo</span>' : ''}
     <small>${age !== '' ? 'Age ' + age + ' · ' : ''}${esc(s.parent_name || '')}${s.parent_phone ? ` · <a href="${smsHref(s.parent_phone)}">${esc(s.parent_phone)}</a>` : ''}</small></div></div>
@@ -2086,6 +2086,12 @@ async function sdCancelWeek() {
     if (res.error) return alert(res.error.message);
   }
   await loadWeek(); renderSdTop(s);
+}
+// Opens the parent portal for this family in a new tab, look only (uses this admin login; portal.html?view=PHONE)
+function sdViewPortal() {
+  const s = sd.s, ph = String((s && s.parent_phone) || '').replace(/\D/g, '').slice(-10);
+  if (ph.length !== 10) return alert('No 10-digit parent phone for this student.');
+  window.open('portal.html?view=' + ph, '_blank');
 }
 async function sdResetCode() {
   const s = sd.s;

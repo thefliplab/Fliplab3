@@ -33,6 +33,12 @@ input.code{letter-spacing:10px;text-align:center;font-family:'DM Mono',monospace
 .btn-primary{background:var(--blue);color:#03101f}
 .btn-ghost{background:transparent;color:var(--white);border:1px solid rgba(245,248,255,.22)}
 .btn:disabled{opacity:.6}
+.vbar{display:none;position:sticky;top:0;z-index:50;background:#f5a524;color:#3a2600;font-size:13px;padding:9px 14px;align-items:center;justify-content:space-between;gap:10px}
+.vbar button{background:none;border:1px solid #3a2600;color:#3a2600;border-radius:4px;padding:4px 10px;font-weight:800;font-size:12px;letter-spacing:1px;cursor:pointer}
+body.view .vbar{display:flex}
+body.view #bOut{display:none}
+body.view input,body.view textarea{pointer-events:none;opacity:.5}
+body.view :is(#bExtra,#bMsgSend,#bMsgClear,#bXs,#bFamEdit,#bWavSign,[data-q],[data-cancel],[data-move],[data-undo],[data-enroll],[data-leave],[data-rsvp],[data-clinic],[data-xt]){opacity:.35;cursor:not-allowed}
 .link{background:none;border:none;color:var(--blue-light);font-size:14px;padding:12px 0 0;cursor:pointer;font-family:'DM Sans',sans-serif}
 .msg{font-size:14px;margin-top:10px;min-height:18px}
 .msg.err{color:var(--bad)} .msg.ok{color:var(--ok)}
@@ -94,6 +100,7 @@ textarea:focus{border-color:var(--blue)}
 </style>
 </head>
 <body>
+<div class="vbar" id="vbar"><span id="vbarTxt"><b>Admin view</b> · look only</span><button id="bVExit">Exit</button></div>
 <div class="top">
   <img src="https://fliplabcoachsteve.com/images/logo.png" alt="Flip Lab with Coach Steve">
   <span class="who" id="who"></span>
@@ -235,7 +242,11 @@ const dobAll = () => document.querySelectorAll('input#fDob').forEach(i => dobPic
 new MutationObserver(dobAll).observe(document.body, { childList: true, subtree: true }); dobAll();
 const GYM = new URLSearchParams(location.search).get('gym') || 'fliplab';
 const SB_URL = 'https://angmtyojkwlrefxpcgoa.supabase.co';
-const sb = supabase.createClient(SB_URL, 'sb_publishable_fPciNfnNHpHQikB8mqHNpw_hIVRIGo5', { auth: { storageKey: 'fl3-portal', persistSession: true, autoRefreshToken: true } });
+// Admin view: portal.html?view=PHONE opened from admin (Student page "View as parent"). Uses the admin login, look only.
+const VIEW = (new URLSearchParams(location.search).get('view') || '').replace(/\D/g, '').slice(-10);
+const sb = VIEW ? supabase.createClient(SB_URL, 'sb_publishable_fPciNfnNHpHQikB8mqHNpw_hIVRIGo5')
+  : supabase.createClient(SB_URL, 'sb_publishable_fPciNfnNHpHQikB8mqHNpw_hIVRIGo5', { auth: { storageKey: 'fl3-portal', persistSession: true, autoRefreshToken: true } });
+const meRpc = () => VIEW ? sb.rpc('portal_me_view', { p_phone: VIEW }) : sb.rpc('portal_me');
 const $ = id => document.getElementById(id);
 let PHONE = '', TOKEN = '';
 
@@ -323,8 +334,10 @@ async function startSession(s) {
 // ================= Logged in =================
 let ME = null, DATA = null, KID = '';
 async function loadHome() {
-  const { data: me, error } = await sb.rpc('portal_me');
+  const { data: me, error } = await meRpc();
+  if (VIEW && (error || !me || me.error || !(me.kids || []).length)) { $('vbarTxt').innerHTML = '<b>Admin view</b> · ' + (me && !me.error ? 'no active students for this phone' : 'log in to admin first, then try again'); return; }
   if (error || !me || me.error) { await sb.auth.signOut(); return show('vPhone'); }
+  if (VIEW) $('vbarTxt').innerHTML = '<b>Admin view</b> · ' + esc(me.parent_name || fmt(me.phone)) + ' · look only';
   ME = me;
   const first = String(me.parent_name || '').trim().split(/\s+/)[0];
   $('homeHi').innerHTML = 'Hi <span>' + esc(first || 'there') + '</span>';
@@ -345,7 +358,7 @@ function drawKids() {
   $('kids').querySelectorAll('[data-k]').forEach(c => c.onclick = () => { KID = c.dataset.k; PAY_ALL = WAV_SHOW = false; drawKids(); draw(); drawClasses(); drawAcct(); });
 }
 async function act(body) {
-  try { const r = await sb.functions.invoke('portal-act', { body }); return r.data || { error: (r.error && r.error.message) || 'Something went wrong.' }; }
+  try { if (VIEW) body = { ...body, view_phone: VIEW }; const r = await sb.functions.invoke('portal-act', { body }); return r.data || { error: (r.error && r.error.message) || 'Something went wrong.' }; }
   catch (e) { return { error: 'No connection. Try again.' }; }
 }
 async function refresh() {
@@ -683,7 +696,7 @@ function openFam(k) {
       const np = v('fPh').replace(/\D/g, '').slice(-10); localStorage.setItem('fl3-portal-phone', np);
       await $('bOut').onclick(); $('phone').value = fmt(np); return;
     }
-    await Promise.all([loadAcct(), sb.rpc('portal_me').then(x => { if (x.data && !x.data.error) ME = x.data; })]);
+    await Promise.all([loadAcct(), meRpc().then(x => { if (x.data && !x.data.error) ME = x.data; })]);
   };
 }
 function openWav(k) {
@@ -748,7 +761,18 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ 
 $('bOut').onclick = async () => { await sb.auth.signOut(); ME = DATA = CL = ACCT = null; KID = ''; document.body.classList.remove('in'); $('nav').classList.remove('on'); $('foot').style.display = ''; $('who').textContent = ''; $('phone').value = ''; show('vPhone'); };
 document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => show(b.dataset.go));
 
+if (VIEW) {
+  document.body.classList.add('view');
+  $('bVExit').onclick = () => { if (window.opener) window.close(); else location.href = 'index.html'; };
+  const BLOCK = '#bExtra,#bMsgSend,#bMsgClear,#bXs,#bFamEdit,#bWavSign,#bOut,[data-q],[data-cancel],[data-move],[data-undo],[data-enroll],[data-leave],[data-rsvp],[data-clinic],[data-xt]';
+  document.addEventListener('click', e => {
+    if (!e.target.closest || !e.target.closest(BLOCK)) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    const t = $('vbarTxt'); if (t.dataset.f) return; const was = t.innerHTML; t.dataset.f = '1'; t.innerHTML = '<b>Buttons are off in admin view.</b>'; setTimeout(() => { t.innerHTML = was; delete t.dataset.f; }, 1800);
+  }, true);
+}
 (async () => {
+  if (VIEW) return loadHome();
   const { data } = await sb.auth.getSession();
   if (data.session) return loadHome();
   const last = localStorage.getItem('fl3-portal-phone');
