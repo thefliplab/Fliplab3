@@ -2137,6 +2137,7 @@ function renderSdTop(s) {
     qa.push(`<button class="dang" onclick="sdStatus('Dropped')">Drop student</button>`);
   }
   if (s.parent_phone && (!gymSlug || gymSlug === 'fliplab')) qa.push(`<button onclick="sdViewPortal()">View as parent</button>`, `<button class="dang" onclick="sdResetCode()">Reset portal code</button>`);
+  else if (s.parent_phone && HAND()) qa.push(`<button onclick="sdMakeCode()">Make login code</button>`);
   $('sdTop').innerHTML = `<div class="shead"><div class="av">${esc((s.first_name || '?')[0])}${esc((s.last_name || '')[0] || '')}</div>
     <div><b>${esc(s.first_name)} ${esc(s.last_name)}</b> <span class="pill ${isOn(s) ? '' : 'off'}">${esc(s.status || 'Active')}</span>${s.skill_level ? ` <span class="pill">${esc(s.skill_level)}</span>` : ''}${x.PhotoPermission === 'No' ? ' <span class="tag t-nophoto">No Photo</span>' : ''}
     <small>${age !== '' ? 'Age ' + age + ' · ' : ''}${esc(s.parent_name || '')}${s.parent_phone ? ` · <a href="${smsHref(s.parent_phone)}">${esc(s.parent_phone)}</a>` : ''}</small></div></div>
@@ -2169,6 +2170,16 @@ async function sdResetCode() {
   const r = await sb.rpc('portal_reset_code', { p_phone: s.parent_phone });
   if (r.error) return alert(r.error.message);
   alert(r.data ? 'Portal code reset.' : 'This family has not set up the parent portal yet, so there is nothing to reset.');
+}
+// Other gyms: make a one-time parent portal login code (30 min) the coach can read or text to the parent
+async function sdMakeCode() {
+  const s = sd.s;
+  const r = await sb.rpc('portal_make_code', { p_phone: s.parent_phone });
+  if (r.error || !r.data || r.data.error) return alert((r.data && r.data.error) || (r.error && r.error.message) || 'Could not make a code.');
+  const code = r.data.code, url = location.origin + '/portal.html?gym=' + encodeURIComponent(gymSlug);
+  const text = 'Your ' + gymTitle + ' parent portal login code is ' + code + ' (good for 30 minutes). Log in here: ' + url;
+  if (confirm('Login code for ' + s.parent_phone + ':\n\n' + code + '\n\nGood for 30 minutes. The parent enters their phone, taps "I have a code from my coach", then types it in.\n\nTap OK to text it to the parent from your phone.'))
+    location.href = 'sms:' + r.data.phone + (IOS ? '&body=' : '?body=') + encodeURIComponent(text);
 }
 async function sdStatus(st) {
   const s = sd.s;

@@ -108,7 +108,8 @@ button.fl-tap,a.btn.fl-tap{outline:2px solid #1e8cff;outline-offset:2px}
 <body>
 <div class="vbar" id="vbar"><span id="vbarTxt"><b>Admin view</b> · look only</span><button id="bVExit">Exit</button></div>
 <div class="top">
-  <img src="https://fliplabcoachsteve.com/images/logo.png" alt="Flip Lab with Coach Steve">
+  <img id="topLogo" src="https://fliplabcoachsteve.com/images/logo.png" alt="Flip Lab with Coach Steve">
+  <span id="topName" style="display:none;font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:1px"></span>
   <span class="who" id="who"></span>
 </div>
 
@@ -117,7 +118,7 @@ button.fl-tap,a.btn.fl-tap{outline:2px solid #1e8cff;outline-offset:2px}
   <div class="view" id="vPhone">
     <p class="eyebrow">Parent portal</p>
     <h1>Welcome <span>back</span></h1>
-    <p class="sub">Cancel or move lessons, sign up for classes, pay and message Coach Steve.</p>
+    <p class="sub" id="phoneSub">Cancel or move lessons, sign up for classes, pay and message Coach Steve.</p>
     <div class="card">
       <label for="phone">Your phone number</label>
       <input id="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(513) 555-1234">
@@ -144,10 +145,11 @@ button.fl-tap,a.btn.fl-tap{outline:2px solid #1e8cff;outline-offset:2px}
   <!-- 3. Texted one-time code -->
   <div class="view" id="vCode">
     <p class="eyebrow" id="codeFor">First time here</p>
-    <h1>Check your <span>texts</span></h1>
+    <h1 id="codeH">Check your <span>texts</span></h1>
     <p class="sub" id="codeSub">We'll text a 6-number code to prove this phone is yours.</p>
     <div class="card">
       <button class="btn btn-primary" id="bSend">Text me a code</button>
+      <button class="link" id="bHave" style="display:none">I have a code from my coach</button>
       <div id="codeBox" style="display:none">
         <label for="code" style="margin-top:4px">6-number code</label>
         <input id="code" class="code" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code">
@@ -157,6 +159,14 @@ button.fl-tap,a.btn.fl-tap{outline:2px solid #1e8cff;outline-offset:2px}
       <div class="msg" id="mCode"></div>
       <button class="link" data-go="vPhone">Use a different number</button>
     </div>
+  </div>
+
+  <!-- Other gyms: logged in, rest of the portal not turned on yet -->
+  <div class="view" id="vSoon">
+    <p class="eyebrow">Parent portal</p>
+    <h1>Coming <span>soon</span></h1>
+    <p class="sub">You're logged in. The rest of the parent portal is almost ready. Check back soon.</p>
+    <button class="link" id="bSoonOut">Log out</button>
   </div>
 
   <!-- 4. Pick their own code -->
@@ -266,7 +276,20 @@ async function call(body) {
     return await r.json();
   } catch (e) { return { error: 'No connection. Try again.' }; }
 }
-const NOT_FOUND = "We don't have that number. Use the phone number you signed up with, or text Coach Steve.";
+const FL = GYM === 'fliplab';
+const NOT_FOUND = "We don't have that number. Use the phone number you signed up with, or " + (FL ? 'text Coach Steve.' : 'contact your coach.');
+// Other gyms: their name, logo and main color (Settings in their admin), read through signup_look
+if (!FL) (async () => {
+  $('topLogo').style.display = 'none'; $('topName').style.display = 'inline';
+  $('phoneSub').textContent = 'Cancel or move lessons, sign up for classes, pay and message your coach.';
+  $('codeH').innerHTML = 'Check your <span>email</span>'; $('bSend').textContent = 'Email me a code'; $('bHave').style.display = 'block';
+  let L = null; try { L = (await sb.rpc('signup_look', { p_slug: GYM })).data; } catch (e) {}
+  if (!L) return;
+  document.title = L.name + ' — Parent portal'; $('topName').textContent = L.name;
+  if (L.logo_url) { $('topLogo').src = L.logo_url; $('topLogo').alt = L.name; $('topLogo').style.display = ''; $('topName').style.display = 'none'; }
+  if (L.color) ['--blue', '--blue-light'].forEach(k => document.documentElement.style.setProperty(k, L.color));
+})();
+$('bHave').onclick = () => { $('bSend').style.display = 'none'; $('bHave').style.display = 'none'; $('codeBox').style.display = 'block'; say('mCode', 'Enter the 6-number code your coach gave you.', true); $('code').focus(); };
 
 $('bPhone').onclick = async () => {
   PHONE = $('phone').value.replace(/\D/g, '').slice(-10);
@@ -282,8 +305,9 @@ $('phone').onkeydown = e => { if (e.key === 'Enter') $('bPhone').click(); };
 
 function openCode(forgot) {
   $('codeFor').textContent = forgot ? 'Forgot your code' : 'First time here';
-  $('codeSub').textContent = "We'll text a 6-number code to " + fmt(PHONE) + ' to prove this phone is yours.';
-  $('codeBox').style.display = 'none'; $('bSend').style.display = 'block'; $('code').value = ''; say('mCode', '');
+  $('codeSub').textContent = FL ? "We'll text a 6-number code to " + fmt(PHONE) + ' to prove this phone is yours.'
+    : "We'll email a 6-number code to the email your coach has on file for " + fmt(PHONE) + '.';
+  $('codeBox').style.display = 'none'; $('bSend').style.display = 'block'; $('bHave').style.display = FL ? 'none' : 'block'; $('code').value = ''; say('mCode', '');
   show('vCode');
 }
 $('bForgot').onclick = () => openCode(true);
@@ -292,14 +316,16 @@ async function sendCode() {
   busy($('bSend'), true); say('mCode', 'Sending…', true);
   const r = await call({ action: 'send_code' });
   busy($('bSend'), false);
+  if (r.error === 'no_email') { $('bSend').style.display = 'none'; $('bHave').style.display = 'none'; $('codeBox').style.display = 'block'; return say('mCode', "We can't email a code for this number. Ask your coach for a login code, then enter it here."); }
   if (r.error) return say('mCode', r.error === 'not_found' ? NOT_FOUND : r.error);
-  $('bSend').style.display = 'none'; $('codeBox').style.display = 'block'; say('mCode', 'Code sent. It can take a minute.', true); $('code').focus();
+  $('bSend').style.display = 'none'; $('bHave').style.display = 'none'; $('codeBox').style.display = 'block';
+  say('mCode', r.via === 'email' ? 'Code sent to ' + r.to + '. It can take a minute. Check spam too.' : 'Code sent. It can take a minute.', true); $('code').focus();
 }
 $('bSend').onclick = sendCode; $('bResend').onclick = sendCode;
 
 $('bCode').onclick = async () => {
   const code = $('code').value.replace(/\D/g, '');
-  if (code.length !== 6) return say('mCode', 'Enter the 6-number code from the text.');
+  if (code.length !== 6) return say('mCode', 'Enter the 6-number code' + (FL ? ' from the text.' : '.'));
   busy($('bCode'), true);
   const r = await call({ action: 'verify', code });
   busy($('bCode'), false);
@@ -337,12 +363,14 @@ async function startSession(s) {
   loadHome();
 }
 
+$('bSoonOut').onclick = async () => { await sb.auth.signOut(); localStorage.removeItem('fl3-portal-phone'); show('vPhone'); };
 // ================= Logged in =================
 let ME = null, DATA = null, KID = '';
 async function loadHome() {
   const { data: me, error } = await meRpc();
   if (VIEW && (error || !me || me.error || !(me.kids || []).length)) { $('vbarTxt').innerHTML = '<b>Admin view</b> · ' + (me && !me.error ? 'no active students for this phone' : 'log in to admin first, then try again'); return; }
   if (error || !me || me.error) { await sb.auth.signOut(); return show('vPhone'); }
+  if (me.gym_slug && me.gym_slug !== 'fliplab' && !VIEW) { ME = me; return show('vSoon'); }   // step 1: other gyms' portal tabs not on yet
   if (VIEW) $('vbarTxt').innerHTML = '<b>Admin view</b> · ' + esc(me.parent_name || fmt(me.phone)) + ' · look only';
   ME = me;
   const first = String(me.parent_name || '').trim().split(/\s+/)[0];

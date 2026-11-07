@@ -1,6 +1,7 @@
 // FlipLab 3.0 — Parent portal login (verify_jwt OFF; this function checks everything itself).
 // Parents log in with phone + their own 4–6 digit code. First time / forgot code: a one-time 6-digit code is texted
-// (SMSGate, Steve's cell), then they pick their own code.
+// (Flip Lab: SMSGate, Steve's cell. Other gyms: emailed from the gym's OWN connected email to the parent email on file;
+// coaches can also make a code on the Student page → RPC portal_make_code), then they pick their own code.
 //   { action: 'check',     gym, phone }              → { found, has_pin }
 //   { action: 'send_code', gym, phone }              → { ok }            (max 3 per hour per phone, expires 10 min)
 //   { action: 'verify',    gym, phone, code }        → { token }         (5 tries per code)
@@ -8,6 +9,7 @@
 //   { action: 'login',     gym, phone, pin }         → { session }       (5 wrong → locked 15 min)
 // Tables parent_accounts / portal_codes: RLS on, no policies (service role only).
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 const json = (o: unknown, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { ...cors, "Content-Type": "application/json" } });
@@ -15,6 +17,8 @@ const p10 = (p: unknown) => String(p || "").replace(/\D/g, "").slice(-10);
 const hex = (b: ArrayBuffer) => [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, "0")).join("");
 const sha = async (s: string) => hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)));
 const rand = (n: number) => hex(crypto.getRandomValues(new Uint8Array(n)).buffer);
+const HOSTS: Record<string, string> = { gmail: "smtp.gmail.com", yahoo: "smtp.mail.yahoo.com", aol: "smtp.aol.com" };
+const mask = (e: string) => e.replace(/^(.)[^@]*(@.*)$/, "$1***$2");
 const URL_ = Deno.env.get("SUPABASE_URL")!, SRK = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
 
 async function pbkdf2(pin: string, salt: string) {
@@ -32,11 +36,12 @@ Deno.serve(async (req) => {
   if (phone.length !== 10) return json({ error: "Enter your 10-digit phone number." });
   const { data: gym } = await db.from("gyms").select("id,slug,name").eq("slug", String(b.gym || "fliplab")).maybeSingle();
   if (!gym) return json({ error: "Gym not found." });
-  if (gym.slug !== "fliplab") return json({ error: "The parent portal isn't set up for this gym yet." });   // codes go out from Steve's phone
+  const FL = gym.slug === "fliplab", WHO = FL ? "text Coach Steve" : "contact your coach";
 
   // Is this phone a parent of an active student?
-  const { data: kids } = await db.from("students").select("id,parent_phone,active").eq("gym_id", gym.id).ilike("parent_phone", `%${phone.slice(-4)}%`).limit(200);
-  const found = (kids || []).some(k => p10(k.parent_phone) === phone && k.active !== false);
+  const { data: kids } = await db.from("students").select("id,parent_phone,parent_email,active").eq("gym_id", gym.id).ilike("parent_phone", `%${phone.slice(-4)}%`).limit(200);
+  const mine = (kids || []).filter(k => p10(k.parent_phone) === phone && k.active !== false);
+  const found = mine.length > 0;
   if (!found) return json({ error: "not_found" });
   const { data: acct } = await db.from("parent_accounts").select("*").eq("gym_id", gym.id).eq("phone", phone).maybeSingle();
 
@@ -59,7 +64,25 @@ Deno.serve(async (req) => {
     case "send_code": {
       const hourAgo = new Date(Date.now() - 3600e3).toISOString();
       const { count } = await db.from("portal_codes").select("id", { count: "exact", head: true }).eq("gym_id", gym.id).eq("phone", phone).gte("created_at", hourAgo);
-      if ((count || 0) >= 3) return json({ error: "Too many codes. Try again in an hour, or text Coach Steve." });
+      if ((count || 0) >= 3) return json({ error: `Too many codes. Try again in an hour, or ${WHO}.` });
+      if (!FL) {   // other gyms: email from the gym's own connected email
+        const to = String(mine.find(k => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(k.parent_email || "").trim()))?.parent_email || "").trim();
+        const { data: cr } = await db.rpc("gym_email_get", { p_gym: gym.id });
+        const c = (cr || [])[0];
+        if (!to || !c || !HOSTS[c.provider]) return json({ error: "no_email" });
+        const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, "0");
+        const id = crypto.randomUUID(), GN = gym.name || "Your gym";
+        const text = `Your ${GN} parent portal code is ${code}. It expires in 10 minutes.\n\nIf you didn't ask for this, you can ignore this email.`;
+        try {
+          const client = new SMTPClient({ connection: { hostname: HOSTS[c.provider], port: 465, tls: true, auth: { username: c.address, password: c.pw } } });
+          await client.send({ from: `${GN} <${c.address}>`, to, replyTo: c.address, subject: `Your ${GN} portal code: ${code}`, content: text,
+            html: `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5">Your ${GN} parent portal code is <b style="font-size:20px;letter-spacing:2px">${code}</b><br>It expires in 10 minutes.<br><br><span style="color:#777">If you didn't ask for this, you can ignore this email.</span></div>` });
+          await client.close();
+        } catch (_e) { return json({ error: `Couldn't send the email. Try again or ${WHO}.` }, 500); }
+        await db.from("portal_codes").insert({ id, gym_id: gym.id, phone, code_hash: await sha(code + phone + id), expires_at: new Date(Date.now() + 600e3).toISOString() });
+        await db.from("email_log").insert({ gym_id: gym.id, to_email: to, subject: "Parent portal login code", body: "Login code sent (phone " + phone + ")", status: "Portal code" }).then(() => {}, () => {});
+        return json({ ok: true, via: "email", to: mask(to) });
+      }
       const u = Deno.env.get("SMSGATE_USER"), pw = Deno.env.get("SMSGATE_PASS");
       if (!u || !pw) return json({ error: "Texting isn't set up." }, 500);
       const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, "0");
