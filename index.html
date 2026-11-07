@@ -779,8 +779,14 @@ function hsAdd(kind, list) {
   const now = new Date().toISOString();
   if (kind === 'text') sb.from('text_log').insert(list.map(m => ({ gym_id: gymId, direction: 'OUT', phone: String(m.to || '').replace(/\D/g, '').slice(-10), student_id: m.student_id || null, family_name: m.family || null, body: m.text, status: 'Sent by hand', received_at: now, extra: { hand: true } }))).then(() => {}, () => {});
   else sb.from('email_log').insert(list.map(m => ({ gym_id: gymId, to_email: m.to || '(none)', student_id: m.student_id || null, family_name: m.family || null, subject: m.subject || gymTitle, body: m.text || '', status: 'Sent by hand' }))).then(() => {}, () => {});
-  hsDraw();
+  // Just one message → open Messages/Mail straight away (no list). More than one → list (one app per tap).
+  if (hsPending) return;
+  if (hs.length > list.length) return hsDraw();
+  hsPending = true;
+  setTimeout(() => { hsPending = false; if (hs.length === 1 && hs[0].to) { const x = hs[0]; hs = []; hsDraw(); location.href = hsHref(x); } else hsDraw(); }, 0);
 }
+let hsPending = false;
+const HAND = () => !!gymSlug && gymSlug !== 'fliplab';   // other gyms send texts from their own phone
 const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
 function hsHref(x) {
   return x.kind === 'text' ? 'sms:' + x.to.replace(/\D/g, '') + (IOS ? '&body=' : '?body=') + encodeURIComponent(x.text)
@@ -792,7 +798,7 @@ function hsDraw() {
   if (!hs.length) return el.classList.add('hidden');
   el.classList.remove('hidden');
   const same = hs.every(x => x.text === hs[0].text), left = hs.filter(x => !x.done).length;
-  el.innerHTML = `<div class="mdl"><div class="mh"><b>Send these from your phone (${left} left)</b><button class="x" onclick="hs=[];hsDraw()">✕</button></div>
+  el.innerHTML = `<div class="mdl"><div class="mh"><b>Tap Text for each family (${left} left)</b><button class="x" onclick="hs=[];hsDraw()">✕</button></div>
     <div style="font-size:13px;color:var(--muted);margin-bottom:8px">Tap each one. Your Messages or Mail app opens with the message filled in. Just hit send.</div>
     ${same ? `<button class="btn ghost" style="margin-bottom:8px" onclick="hsCopy(0)">📋 Copy message</button>` : ''}
     ${hs.map((x, i) => `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid #eee;${x.done ? 'opacity:.45' : ''}">
@@ -1971,7 +1977,7 @@ async function boot() {
   if (!session) { show('loginView'); return; }
   const { data: gyms, error } = await sb.from('gyms').select('id,name,slug').limit(1);
   if (error || !gyms || !gyms.length) { show('waitView'); return; }
-  gymId = gyms[0].id; gymTitle = gyms[0].name; gymSlug = gyms[0].slug; $('gymName').textContent = gyms[0].name + ' — Students';
+  gymId = gyms[0].id; gymTitle = gyms[0].name; gymSlug = gyms[0].slug; if (HAND()) $('mi_send').textContent = 'Text these families from my phone'; $('gymName').textContent = gyms[0].name + ' — Students';
   if (!(await loadSettings())) return wzStart();
   const SE = await sb.from('seasons').select('*').order('sort'); seasons = SE.data || [];
   myEmail = (session.user.email || '').toLowerCase(); await loadCoaches(); rtStart(); msBadge();
@@ -3041,12 +3047,13 @@ async function miAsk() {
   if (test && !to) return m.textContent = 'Test mode is on. Type a test phone number first.';
   const fams = {}; ids.forEach(id => { const s = students.find(x => x.id === id), k = String(s.parent_phone).replace(/\D/g, '').slice(-10); (fams[k] = fams[k] || { phone: s.parent_phone, parent: s.parent_name, sid: s.id, kids: [] }).kids.push(s.first_name); });
   const list = Object.values(fams).slice(0, test ? 3 : 60), fill = f => tpl.replace(/\{parent\}/g, (f.parent || '').split(' ')[0] || 'there').replace(/\{kid\}/g, f.kids.join(' and '));
-  if (!confirm(test ? 'TEST: send ' + list.length + ' sample text(s) to ' + to + '?' : 'Text ' + list.length + ' famil' + (list.length === 1 ? 'y' : 'ies') + ' for real?\n' + list.map(f => (f.parent || '?') + ' (' + f.phone + ')').join('\n'))) return;
+  if (!HAND() && !confirm(test ? 'TEST: send ' + list.length + ' sample text(s) to ' + to + '?' : 'Text ' + list.length + ' famil' + (list.length === 1 ? 'y' : 'ies') + ' for real?\n' + list.map(f => (f.parent || '?') + ' (' + f.phone + ')').join('\n'))) return;
   $('mi_send').disabled = true; m.className = 'msg'; m.textContent = 'Sending…';
   const res = await sb.functions.invoke('sms-send', { body: { batch: crypto.randomUUID(), messages: list.map(f => ({ to: test ? to : f.phone, student_id: test ? null : f.sid, family: test ? 'Test' : f.parent, text: (test ? '[TEST for ' + (f.parent || 'family') + '] ' : '') + fill(f) })) } });
   $('mi_send').disabled = false;
   if (res.error || (res.data && res.data.error)) { m.className = 'msg err'; m.textContent = 'Not sent: ' + ((res.data && res.data.error) || res.error.message); return; }
   m.textContent = '✓ Sent ' + res.data.sent + (res.data.failed ? ' · ' + res.data.failed + ' failed' : '') + (test ? ' to your test number' : '. Replies come to your phone.');
+  if (HAND()) m.textContent = list.length === 1 ? '✓ Opened in your Messages app. Just hit send.' : '✓ Tap Text for each family in the list.';
 }
 async function loadNextMonday() {
   const nm = new Date(weekDates()[0].date); nm.setDate(nm.getDate() + 7); const ws = ymd(nm), we = ymd(new Date(nm.getTime() + 6 * 864e5));
