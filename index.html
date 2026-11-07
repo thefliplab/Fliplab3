@@ -859,7 +859,7 @@ async function openAcct() {
 // ================= PAIRINGS: current solo students + waitlist who could share a lesson =================
 // Pool: live solo lessons (main coach, not already sharing a slot) + Waiting/Waitlist entries (no drop-ins).
 let prSolos = [], prWait = [], prNeedsOpen = false, prM = { 1: [], 2: [] }, prOpen = null;
-const prLv = v => { const m = String(v || '').match(/^L(\d)/i); return m ? +m[1] : null; };
+const prLv = v => { if (HAND()) { const i = SK ? SK.levels.findIndex(l => l.code === v) : -1; return i > -1 ? i + 1 : null; } const m = String(v || '').match(/^L(\d)/i); return m ? +m[1] : null; };   // other gyms: position in their level list
 const prYrs = d => d ? (Date.now() - new Date(d + 'T00:00:00')) / 31557600000 : null;
 async function loadPairings() {
   const today = ymd(new Date());
@@ -890,7 +890,7 @@ function prMatch(a, b, close) {
   const ag = Math.abs(prYrs(a.dob) - prYrs(b.dob)); if (ag > 2) return null;
   return { gap, ag };
 }
-function prWho(x) { const age = ageOf(x.dob); return (x.skill ? esc(String(x.skill).split('-')[0]) : 'No level') + (age !== '' ? ' · age ' + age : '') + (((prStu(x.id) || {}).extra || {}).ShareType === 'Pair me up' ? ' · <b style="color:#1D9E75">🤝 asked to be paired</b>' : ''); }
+function prWho(x) { const age = ageOf(x.dob); return (x.skill ? esc(lvTxt(x.skill)) : 'No level') + (age !== '' ? ' · age ' + age : '') + (((prStu(x.id) || {}).extra || {}).ShareType === 'Pair me up' ? ' · <b style="color:#1D9E75">🤝 asked to be paired</b>' : ''); }
 function prRow(a, b, f, note, extra, k) {
   return `<div class="arow"><div class="who"><b>${esc(a.name)} + ${esc(b.name)}</b><small>${esc(a.name.split(' ')[0])}: ${note[0]}</small><small>${esc(b.name.split(' ')[0])}: ${note[1]}</small>${extra || ''}${prOffered(a.id, b.id)}</div><span class="tag ${f.gap ? 't-away' : 't-photo'}">${f.gap ? 'Close level' : 'Same level'}</span><div style="display:flex;gap:4px;flex-wrap:wrap"><button class="paybtn" style="background:#E6F1FB;color:#185FA5" onclick="prOpen=prOpen==='o${k}'?null:'o${k}';renderPairings()">Offer</button><button class="paybtn" onclick="prOpen=prOpen==='${k}'?null:'${k}';renderPairings()">Pair</button><button class="paybtn" style="background:#eef0f2;color:#555" onclick="prNo('${k}')">Said no</button><button class="paybtn" style="background:#eef0f2;color:#555" onclick="prSolo('${k}')">Solo only</button></div></div>${prOpen === k ? prConfirm(k) : prOpen === 'o' + k ? prOfferBox(k) : ''}`;
 }
@@ -1065,8 +1065,8 @@ async function openLevels() {
   if (L.error) { $('lvBody').innerHTML = '<div class="center">' + esc(L.error.message) + '</div>'; return; }
   const sk = (S.data || []).filter(x => x.active !== false);
   $('lvBody').innerHTML = (L.data || []).map(l => { const list = sk.filter(x => x.level_id === l.id);
-    return `<details style="border-bottom:1px solid #f0f0f0;padding:8px 2px"><summary style="cursor:pointer"><b>${esc(l.code.split('-')[0])}</b> · ${esc(l.name)} <small style="color:#888">${list.length ? list.length + ' skills' : ''}</small></summary>
-      ${list.length ? '<ul style="margin:6px 0 2px 18px;padding:0;font-size:13px">' + list.map(x => '<li>' + esc(x.name) + '</li>').join('') + '</ul>' : '<small style="color:#888;display:block;margin-top:4px">Skills not copied to 3.0 yet (run export3Skills).</small>'}</details>`; }).join('');
+    return `<details style="border-bottom:1px solid #f0f0f0;padding:8px 2px"><summary style="cursor:pointer"><b>${esc(skAb(l))}</b>${HAND() ? '' : ' · ' + esc(l.name)} <small style="color:#888">${list.length ? list.length + ' skills' : ''}</small></summary>
+      ${list.length ? '<ul style="margin:6px 0 2px 18px;padding:0;font-size:13px">' + list.map(x => '<li>' + esc(x.name) + '</li>').join('') + '</ul>' : '<small style="color:#888;display:block;margin-top:4px">No skills in this level yet.</small>'}</details>`; }).join('');
 }
 // ================= SKILLS CHECKLIST (admin: Student page Skills tab + quick check-off from Edit lesson) =================
 // Same tables the parent portal reads: skill_levels, skills, student_skills (check-offs), skill_log (level moves)
@@ -1079,7 +1079,13 @@ async function skLoad() {
   return SK;
 }
 const skShort = d => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
-const skLvName = l => l ? l.code.split('-')[0] + ' · ' + l.name : 'No level';
+const skLvName = l => l ? (HAND() ? l.name : l.code.split('-')[0] + ' · ' + l.name) : 'No level';
+const skAb = l => HAND() ? l.name : l.code.split('-')[0];            // short level label (Flip Lab "L3", other gyms the name)
+const lvTxt = c => HAND() ? String(c || '') : String(c || '').split('-')[0];   // same, from a saved level code
+const LV_FL = ['L1-Foundations','L2-Rising','L3-Building','L4-Progressing','L5-Advanced','L6-Elite'];
+const lvNorm = t => String(t || '').trim().toLowerCase();
+const lvMatch = t => { if (!t || !HAND() || !SK) return t; const l = SK.levels.find(x => lvNorm(x.name) === lvNorm(t) || lvNorm(x.code) === lvNorm(t)); return l ? l.code : t; };   // import: "beginner" → their "Beginner" level
+const lvCodes = () => HAND() ? (SK ? SK.levels.map(l => l.code) : []) : LV_FL;   // level dropdowns
 function skCur(s) { return SK.levels.find(l => l.code === s.skill_level) || null; }
 function skNext(l) { const i = SK.levels.indexOf(l); return i > -1 ? SK.levels[i + 1] || null : SK.levels[0] || null; }
 async function skChecks(id) {
@@ -1092,7 +1098,7 @@ async function skLabel(stu) {
   try {
     await skLoad(); const l = skCur(stu); if (!l) return;
     const ch = await skChecks(stu.id), list = SK.skills.filter(x => x.level_id === l.id);
-    if (lmRow && lmRow.student_id === stu.id) $('lm_skill').innerHTML = `<span>${esc(l.code.split('-')[0])} · ${list.filter(x => ch.has(x.id)).length} of ${list.length}</span><span>Skills</span>`;
+    if (lmRow && lmRow.student_id === stu.id) $('lm_skill').innerHTML = `<span>${esc(skAb(l))} · ${list.filter(x => ch.has(x.id)).length} of ${list.length}</span><span>Skills</span>`;
   } catch (e) {}
 }
 function skList(lv, ch) {
@@ -1115,14 +1121,14 @@ async function skFull(s) {
     if (!skOpenLv || skOpenLv.sid !== s.id) skOpenLv = { sid: s.id, id: null };
     const head = l ? (() => { const list = SK.skills.filter(x => x.level_id === l.id), n = list.filter(x => ch.has(x.id)).length, since = log.find(g => g.to_level === l.code);
       return `<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:16px">Skills</b><span class="pill">${esc(skLvName(l))}</span></div>
-        <div style="display:flex;justify-content:space-between;font-size:13px;color:#6b7680;margin:10px 0 4px"><span>${n} of ${list.length} skills</span><span>${since && since.date ? 'On ' + esc(l.code.split('-')[0]) + ' since ' + skShort(since.date + 'T12:00:00') : ''}</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;color:#6b7680;margin:10px 0 4px"><span>${n} of ${list.length} skills</span><span>${since && since.date ? 'On ' + esc(skAb(l)) + ' since ' + skShort(since.date + 'T12:00:00') : ''}</span></div>
         <div class="skbar"><div style="width:${list.length ? Math.round(n / list.length * 100) : 0}%"></div></div>
         <div style="font-size:12px;color:#999;margin:12px 0 2px">Working on · tap to check off</div>${skList(l, ch)}${skUpBtn(s, l, ch)}`; })()
       : `<b style="font-size:16px">Skills</b><div style="font-size:13px;color:#6b7680;margin:8px 0">No level set. Pick one on the Profile tab, or start at ${esc(skLvName(SK.levels[0]))}.</div>${SK.levels[0] ? `<button class="btn ghost" onclick="skSetLevel('${esc(SK.levels[0].code)}')">Start at ${esc(skLvName(SK.levels[0]))}</button>` : ''}`;
     const others = SK.levels.filter(x => x !== l).map(x => { const list = SK.skills.filter(k => k.level_id === x.id), n = list.filter(k => ch.has(k.id)).length, open = skOpenLv.id === x.id;
       return `<div class="sklv" onclick="skOpenLv.id=${open ? 'null' : `'${esc(x.id)}'`};skFull(sd.s)"><span>${esc(skLvName(x))}</span><span style="color:${list.length && n === list.length ? '#1c7a5a' : '#999'}">${list.length && n === list.length ? 'Done ' : ''}${n}/${list.length}</span></div>${open ? '<div style="padding-left:8px">' + skList(x, ch) + '</div>' : ''}`; }).join('');
     $('sdPanel').innerHTML = `<div class="card">${head}<div style="font-size:12px;color:#999;margin:16px 0 2px">Other levels · tap to open</div>${others}
-      ${log.length ? `<div style="font-size:12px;color:#999;margin-top:12px">History: ${log.slice(0, 6).map(g => 'Moved to ' + esc(String(g.to_level).split('-')[0]) + (g.date ? ' ' + skShort(g.date + 'T12:00:00') : '')).join(' · ')}</div>` : ''}</div>
+      ${log.length ? `<div style="font-size:12px;color:#999;margin-top:12px">History: ${log.slice(0, 6).map(g => 'Moved to ' + esc(lvTxt(g.to_level)) + (g.date ? ' ' + skShort(g.date + 'T12:00:00') : '')).join(' · ')}</div>` : ''}</div>
       <div class="card" id="xsBox"><div class="center">Loading…</div></div>`;
     xsDraw(s);
   } catch (e) { $('sdPanel').innerHTML = '<div class="card msg err">' + esc(e.message) + '</div>'; }
@@ -1228,16 +1234,69 @@ async function skMasterDraw() {
   const el = $('st_skills'); if (!el) return;
   try { await skLoad(); } catch (e) { el.innerHTML = '<div class="msg err">' + esc(e.message) + '</div>'; return; }
   if (!$('st_skills')) return;
-  if (!SK.levels.length) { el.innerHTML = '<div style="color:#888;font-size:13px;padding:8px 0">No skill levels set up yet.</div>'; return; }
-  el.innerHTML = SK.levels.map(l => { const list = SK.skills.filter(x => x.level_id === l.id), open = skMOpen === l.id;
-    return `<div class="sklv" onclick="skMOpen=${open ? 'null' : `'${esc(l.id)}'`};skMasterDraw()"><span${open ? ' style="font-weight:600"' : ''}>${esc(skLvName(l))}</span><span style="color:#999">${open ? 'close' : list.length + ' skills'}</span></div>
+  if (!SK.levels.length && !HAND()) { el.innerHTML = '<div style="color:#888;font-size:13px;padding:8px 0">No skill levels set up yet.</div>'; return; }
+  const H = HAND(), lb = 'padding:6px 8px;font-size:12px', lbtn = (t, f, off) => `<button class="paybtn" style="${lb}" ${off ? 'disabled' : ''} onclick="event.stopPropagation();${f}">${t}</button>`;
+  el.innerHTML = (H ? lvMisDraw() : '') + SK.levels.map((l, li) => { const list = SK.skills.filter(x => x.level_id === l.id), open = skMOpen === l.id;
+    return `<div class="sklv" onclick="skMOpen=${open ? 'null' : `'${esc(l.id)}'`};skMasterDraw()"><span${open ? ' style="font-weight:600"' : ''}>${esc(skLvName(l))}</span><span style="color:#999;display:flex;gap:4px;align-items:center">${open ? 'close' : list.length + ' skills'}${H ? lbtn('Rename', `lvRename('${esc(l.id)}')`) + lbtn('Up', `lvMove(${li},-1)`, !li) + lbtn('Down', `lvMove(${li},1)`, li === SK.levels.length - 1) + `<button class="paybtn" style="${lb};background:#FCEBEB;color:#A32D2D" onclick="event.stopPropagation();lvRemove('${esc(l.id)}')">Remove</button>` : ''}</span></div>
       ${open ? `<div style="padding-left:6px">${list.map((x, i) => `<div style="display:flex;gap:6px;align-items:center;padding:4px 0;border-bottom:1px solid #f0f0f0">
         <input value="${esc(x.name)}" style="flex:1;margin:0;font-size:14px;padding:8px" onchange="skMRename('${esc(x.id)}',this.value)">
         <button class="paybtn" style="padding:8px 10px" ${i ? '' : 'disabled'} onclick="skMMove('${esc(l.id)}',${i},-1)">Up</button>
         <button class="paybtn" style="padding:8px 10px" ${i < list.length - 1 ? '' : 'disabled'} onclick="skMMove('${esc(l.id)}',${i},1)">Down</button>
         <button class="paybtn" style="padding:8px 10px;background:#FCEBEB;color:#A32D2D" onclick="skMHide('${esc(x.id)}')">Remove</button></div>`).join('')}
-        <div style="display:flex;gap:6px;margin:8px 0"><input id="skm_new" placeholder="New ${esc(l.code.split('-')[0])} skill" style="flex:1;margin:0"><button class="paybtn" style="padding:8px 14px" onclick="skMAdd('${esc(l.id)}')">Add</button></div></div>` : ''}`; }).join('')
+        <div style="display:flex;gap:6px;margin:8px 0"><input id="skm_new" placeholder="New ${esc(skAb(l))} skill" style="flex:1;margin:0"><button class="paybtn" style="padding:8px 14px" onclick="skMAdd('${esc(l.id)}')">Add</button></div></div>` : ''}`; }).join('')
+    + (H ? `<div style="display:flex;gap:6px;margin:10px 0 0"><input id="lv_new" placeholder="New level name" style="flex:1;margin:0"><button class="paybtn" style="padding:8px 14px" onclick="lvAdd()">Add level</button></div><div style="font-size:12px;color:#999;margin-top:6px">Kids move up through the levels in this order. A level with kids on it can't be removed until they're moved.</div>` : '')
     + '<div style="font-size:12px;color:#999;margin-top:8px">Removing a skill hides it. Kids who already checked it keep it in their history. Adding a skill changes "X of Y" for kids in that level.</div>';
+}
+// ---- Other gyms: their own levels (code = level name, so kids' level shows as the name everywhere) ----
+function lvMis() {   // kids whose saved level isn't one of the gym's levels → { text: [student ids] }
+  const codes = new Set(SK.levels.map(l => l.code)), g = {};
+  students.forEach(s => { const t = String(s.skill_level || '').trim(); if (t && !codes.has(s.skill_level)) (g[s.skill_level] = g[s.skill_level] || []).push(s.id); });
+  return g;
+}
+function lvMisDraw() {
+  const g = lvMis(), keys = Object.keys(g).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })); if (!keys.length || !SK.levels.length) return '';
+  const n = keys.reduce((t, k) => t + g[k].length, 0);
+  return `<div style="background:#FAEEDA;border-radius:8px;padding:10px;margin:8px 0 10px;font-size:13px;color:#633806"><b>${n} kid${n > 1 ? 's have a level' : ' has a level'} that isn't on your list</b>
+    ${keys.map((k, i) => `<div style="display:flex;gap:6px;align-items:center;margin-top:6px"><span style="flex:1">"${esc(k)}" (${g[k].length} kid${g[k].length > 1 ? 's' : ''})</span><select class="lvmis" data-k="${esc(k)}" style="margin:0;width:150px;padding:6px"><option value="">Pick a level</option>${SK.levels.map(l => `<option value="${esc(l.code)}"${lvMatch(k) === l.code ? ' selected' : ''}>${esc(l.name)}</option>`).join('')}</select></div>`).join('')}
+    <button class="paybtn" style="margin-top:8px;padding:8px 14px" onclick="lvMisSave()">Save matches</button></div>`;
+}
+async function lvRecode(from, to) {   // move every kid (and waitlist row) on level text "from" to code "to"
+  for (const t of ['students', 'waitlist']) { const r = await sb.from(t).update({ skill_level: to }).eq('gym_id', gymId).eq('skill_level', from); if (r.error) throw new Error(r.error.message); }
+  students.forEach(s => { if (s.skill_level === from) s.skill_level = to; }); (waitlist || []).forEach(w => { if (w.skill_level === from) w.skill_level = to; });
+}
+async function lvMisSave() {
+  const sel = [...document.querySelectorAll('.lvmis')].filter(x => x.value); if (!sel.length) return alert('Pick a level for at least one first.');
+  try { for (const x of sel) await lvRecode(x.dataset.k, x.value); } catch (e) { alert(e.message); }
+  render(); skMDone();
+}
+async function lvRename(id) {
+  const l = SK.levels.find(x => x.id === id); if (!l) return;
+  const v = (prompt('New name for "' + l.name + '"', l.name) || '').trim(); if (!v || v === l.name) return;
+  if (SK.levels.some(x => x.id !== id && lvNorm(x.name) === lvNorm(v))) return alert('You already have a level called "' + v + '".');
+  const r = await sb.from('skill_levels').update({ name: v, code: v }).eq('id', id); if (r.error) return alert(r.error.message);
+  try { await lvRecode(l.code, v); } catch (e) { alert(e.message); }
+  render(); skMDone();
+}
+async function lvMove(i, d) {
+  const L = SK.levels.slice(), j = i + d; if (j < 0 || j >= L.length) return;
+  [L[i], L[j]] = [L[j], L[i]];
+  const res = await Promise.all(L.map((x, k) => sb.from('skill_levels').update({ sort: k + 1 }).eq('id', x.id)));
+  skMDone(res.find(r => r.error));
+}
+async function lvRemove(id) {
+  const l = SK.levels.find(x => x.id === id); if (!l) return;
+  const kids = students.filter(s => s.skill_level === l.code).length;
+  if (kids) return alert(kids + ' kid' + (kids > 1 ? 's are' : ' is') + ' on ' + l.name + '. Move them to another level first.');
+  const n = SK.skills.filter(x => x.level_id === id).length;
+  if (!confirm('Remove the level "' + l.name + '"' + (n ? ' and its ' + n + ' skills' : '') + '?')) return;
+  if (skMOpen === id) skMOpen = null;
+  skMDone(await sb.from('skill_levels').delete().eq('id', id));
+}
+async function lvAdd() {
+  const v = ($('lv_new').value || '').trim(); if (!v) return alert('Enter a level name first.');
+  if (SK.levels.some(x => lvNorm(x.name) === lvNorm(v))) return alert('You already have a level called "' + v + '".');
+  const max = Math.max(0, ...SK.levels.map(x => x.sort || 0));
+  skMDone(await sb.from('skill_levels').insert({ gym_id: gymId, code: v, name: v, sort: max + 1 }));
 }
 async function skMDone(r) { if (r && r.error) { alert(r.error.message); } SK = null; skMasterDraw(); }
 async function skMRename(id, v) { v = v.trim(); if (!v) return skMasterDraw(); skMDone(await sb.from('skills').update({ name: v }).eq('id', id)); }
@@ -1941,7 +2000,7 @@ async function imRun() {
   const btn = $('im_go'), m = $('im_msg'); btn.disabled = true; btn.textContent = 'Importing…';
   const batch = 'IMP' + Date.now(), today = ymd(new Date()), recs = im.recs.filter(r => r.act !== 'skip');
   const coach = mainCoach() || ((coachRows.find(c => c.active) || {}).name) || null, dur = SET.lengths.includes('30 min') ? '30 min' : SET.lengths[0];
-  const S = recs.map((r, k) => ({ id: batch + '-' + k, gym_id: gymId, first_name: r.first, last_name: r.last || null, dob: r.dob, skill_level: r.level || null, parent_name: r.parent || null,
+  const S = recs.map((r, k) => ({ id: batch + '-' + k, gym_id: gymId, first_name: r.first, last_name: r.last || null, dob: r.dob, skill_level: lvMatch(r.level) || null, parent_name: r.parent || null,
     parent_phone: r.phone || null, parent_email: r.email || null, notes: r.notes || null, status: 'Active', active: true, join_date: today, extra: { ImportBatch: batch, ...(r.school ? { School: r.school } : {}) } }));
   const pairs = {};   // day|time → pair id, so both kids of a shared lesson get the same one
   const L = recs.flatMap((r, k) => r.act !== 'import' ? [] : r.lessons.filter(l => !l.clash).map(l => {
@@ -1999,6 +2058,7 @@ async function boot() {
   if (!(await loadSettings())) return wzStart();
   const SE = await sb.from('seasons').select('*').order('sort'); seasons = SE.data || [];
   myEmail = (session.user.email || '').toLowerCase(); await loadCoaches(); rtStart(); msBadge();
+  if (HAND()) skLoad().catch(() => {});   // other gyms: their own levels for the level dropdowns
   await loadStudents();
   weekOffset = ss.get('week', 0); stuGroup = ss.get('group', 'priv'); attMode = ss.get('attMode', 'privates');
   if (attMode === 'classes') setAttModeButtons();
@@ -2046,7 +2106,7 @@ function render() {
     <div class="stu" onclick="openEdit('${esc(s.id)}')">
       <div><b>${esc(s.first_name)} ${esc(s.last_name)}</b>
         <small>${esc(s.parent_name || '')}${s.parent_phone ? ' · ' + esc(s.parent_phone) : ''}</small></div>
-      <span style="text-align:right"><span class="pill ${isOn(s) ? '' : 'off'}">${esc(s.status || 'Active')}${s.skill_level ? ' · ' + esc(s.skill_level.split('-')[0]) : ''}</span>
+      <span style="text-align:right"><span class="pill ${isOn(s) ? '' : 'off'}">${esc(s.status || 'Active')}${s.skill_level ? ' · ' + esc(lvTxt(s.skill_level)) : ''}</span>
         ${tags(s).length ? `<small style="display:block;margin-top:3px;color:#888;font-size:11px">${tags(s).join(' · ')}</small>` : ''}</span>
     </div>`).join('') : '<div class="center">No students in this group.</div>';
 }
@@ -2056,7 +2116,7 @@ function openEdit(id) {
   editingId = id;
   const s = students.find(x => x.id === id) || { status: 'Active' }, x = s.extra || {};
   // Level list = 2.0 levels; keep any older value (e.g. "Level Beginner 3") so saving never wipes it
-  const LV = ['L1-Foundations','L2-Rising','L3-Building','L4-Progressing','L5-Advanced','L6-Elite'];
+  const LV = lvCodes();
   $('f_skill_level').innerHTML = '<option value=""></option>' + LV.concat(s.skill_level && !LV.includes(s.skill_level) ? [s.skill_level] : []).map(v => `<option>${esc(v)}</option>`).join('');
   FIELDS.forEach(f => $('f_' + f).value = s[f] ?? '');
   XF.forEach(f => $('x_' + f).value = x[f] ?? '');
@@ -2402,7 +2462,7 @@ function openLesson(id) {
   const coaches = coachNames();
   $('lm_title').textContent = p.student_name + ' — ' + p.day + ' ' + p.time;
   $('lm_student').value = p.student_name || '';
-  $('lm_skill').innerHTML = '<span>' + esc(stu.skill_level ? stu.skill_level.split('-')[0] : 'No level') + '</span><span>Skills</span>'; skLabel(stu);
+  $('lm_skill').innerHTML = '<span>' + esc(stu.skill_level ? lvTxt(stu.skill_level) : 'No level') + '</span><span>Skills</span>'; skLabel(stu);
   $('lm_coach').innerHTML = opts(coaches.concat('TBD'), p.coach || 'TBD');
   $('lm_day').innerHTML = opts(DAYS, p.day);
   $('lm_time').innerHTML = opts(TIMES, p.time);
@@ -3038,7 +3098,6 @@ const dfGet = k => { try { return localStorage.getItem('fl3_fold_' + k) === '1';
 function dashFold(k) { try { localStorage.setItem('fl3_fold_' + k, dfGet(k) ? '0' : '1'); } catch (e) {} dashFoldApply(); }
 function dashFoldApply() { Object.entries(DFOLD).forEach(([k, id]) => { const c = dfGet(k); $(id).classList.toggle('hidden', c); $('dfa_' + k).textContent = c ? '▸' : '▾'; $('dfs_' + k).style.display = c ? '' : 'none'; }); }
 // ================= MISSING INFO (birthdate / level) =================
-const MI_LV = ['L1-Foundations','L2-Rising','L3-Building','L4-Progressing','L5-Advanced','L6-Elite'];
 function miKids() {
   return students.filter(s => ['Active', 'Waitlist'].includes(s.status)).map(s => {
     const w = waitlist.find(w => w.student_id === s.id) || {};
@@ -3054,7 +3113,7 @@ function renderMissing() {
   $('mi_list').innerHTML = k.map(({ s, noDob, noLv }) => { const id = esc(s.id), ph = s.parent_phone;
     return `<div class="arow" style="flex-wrap:wrap">${noDob && ph ? `<input type="checkbox" class="mi_ck" value="${id}" checked style="width:auto;margin:0">` : ''}
       <div class="who"><b>${esc(s.first_name)} ${esc(s.last_name)}</b><small>${esc(s.status)} · ${esc(s.parent_name || 'no parent')}${ph ? ' · ' + esc(ph) : ' · no phone'} · missing ${[noDob && 'birthdate', noLv && 'level'].filter(Boolean).join(' and ')}</small></div>
-      <div style="display:flex;gap:6px;width:100%;margin-top:4px">${noDob ? `<input type="date" id="mi_d_${id}" style="margin:0;flex:1">` : ''}${noLv ? `<select id="mi_l_${id}" style="margin:0;flex:1"><option value="">Level…</option>${MI_LV.map(v => `<option>${v}</option>`).join('')}</select>` : ''}<button class="paybtn" onclick="miSave('${id}')">Save</button></div></div>`; }).join('')
+      <div style="display:flex;gap:6px;width:100%;margin-top:4px">${noDob ? `<input type="date" id="mi_d_${id}" style="margin:0;flex:1">` : ''}${noLv ? `<select id="mi_l_${id}" style="margin:0;flex:1"><option value="">Level…</option>${lvCodes().map(v => `<option>${v}</option>`).join('')}</select>` : ''}<button class="paybtn" onclick="miSave('${id}')">Save</button></div></div>`; }).join('')
     || '<div class="center">Everyone has a birthdate and level ✓</div>';
   $('mi_askBox').style.display = k.some(x => x.noDob && x.s.parent_phone) ? '' : 'none';
 }
