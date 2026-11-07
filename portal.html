@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Parent Portal · Flip Lab</title>
+<meta name="theme-color" content="#05070d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Flip Lab">
+<link rel="apple-touch-icon" href="https://fliplabcoachsteve.com/images/apple-touch-icon.png">
+<link rel="icon" href="https://fliplabcoachsteve.com/images/favicon.png">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+/* Colors + fonts match fliplabcoachsteve.com */
+:root{--bg:#05070d;--surface:#0b1020;--card:#101827;--blue:#1e8cff;--blue-light:#63b3ff;--white:#f5f8ff;--muted:#8b97ad;--line:rgba(245,248,255,.12);--ok:#3ddc97;--warn:#ffb547;--bad:#ff6b6b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--white);font-family:'DM Sans',sans-serif;font-size:16px;-webkit-font-smoothing:antialiased;min-height:100vh}
+.top{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+.top img{height:34px}
+.top .who{font-family:'DM Mono',monospace;font-size:12px;color:var(--muted)}
+.wrap{max-width:440px;margin:0 auto;padding:22px 18px 40px}
+h1{font-family:'Bebas Neue',sans-serif;font-weight:400;font-size:40px;letter-spacing:1px;line-height:1;margin:6px 0 6px}
+h1 span{color:var(--blue)}
+.eyebrow{font-family:'DM Mono',monospace;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:var(--blue-light);margin:0}
+.sub{color:var(--muted);font-size:15px;margin:0 0 20px;line-height:1.5}
+.card{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:16px;margin-bottom:12px}
+label{display:block;font-family:'DM Mono',monospace;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin:0 0 6px}
+input{width:100%;background:var(--surface);color:var(--white);border:1px solid var(--line);border-radius:4px;padding:14px;font-size:20px;font-family:'DM Sans',sans-serif;outline:none}
+input:focus{border-color:var(--blue)}
+input.code{letter-spacing:10px;text-align:center;font-family:'DM Mono',monospace}
+.btn{display:block;width:100%;margin-top:14px;padding:15px;border-radius:4px;border:none;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:800;letter-spacing:1.4px;text-transform:uppercase;cursor:pointer}
+.btn-primary{background:var(--blue);color:#03101f}
+.btn-ghost{background:transparent;color:var(--white);border:1px solid rgba(245,248,255,.22)}
+.btn:disabled{opacity:.6}
+.link{background:none;border:none;color:var(--blue-light);font-size:14px;padding:12px 0 0;cursor:pointer;font-family:'DM Sans',sans-serif}
+.msg{font-size:14px;margin-top:10px;min-height:18px}
+.msg.err{color:var(--bad)} .msg.ok{color:var(--ok)}
+.kids{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.chip{padding:7px 14px;border-radius:20px;border:1px solid var(--line);font-size:14px;background:var(--card)}
+.chip.on{background:var(--blue);color:#03101f;border-color:var(--blue);font-weight:700}
+.tip{font-size:13px;color:var(--muted);line-height:1.5}
+.tip b{color:var(--white);font-weight:500}
+.view{display:none}.view.on{display:block}
+.tab{display:none}.tab.on{display:block}
+.chip{cursor:pointer}
+.ltitle{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:.5px;line-height:1.1}
+.lsub{color:var(--muted);font-size:14px;margin-top:2px}
+.lrow{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.btns{display:flex;gap:8px;margin-top:12px}.btns .btn{margin-top:0;padding:12px 8px}
+.tag{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:3px 8px;border-radius:3px;white-space:nowrap}
+.t-on{background:rgba(61,220,151,.14);color:var(--ok)} .t-away{background:rgba(255,181,71,.14);color:var(--warn)} .t-move{background:rgba(30,140,255,.16);color:var(--blue-light)} .t-past{background:rgba(139,151,173,.14);color:var(--muted)}
+.wk{font-family:'DM Mono',monospace;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin:18px 0 8px}
+.small{background:none;border:1px solid rgba(245,248,255,.22);color:var(--white);border-radius:4px;padding:7px 12px;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;font-family:'DM Sans',sans-serif}
+.small.blue{border-color:var(--blue);color:var(--blue-light)}
+.nav{position:fixed;left:0;right:0;bottom:0;display:none;grid-template-columns:repeat(6,1fr);background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);z-index:6}
+.nav.on{display:grid}
+.nav button{background:none;border:none;color:var(--muted);font-family:'DM Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;padding:10px 0 9px;cursor:pointer}
+.nav button svg{display:block;margin:0 auto 4px;width:22px;height:22px}
+.nav button.on{color:var(--blue)}
+body.in .wrap{padding-bottom:90px}
+.sheetBg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10;align-items:flex-end;justify-content:center}
+.sheetBg.on{display:flex}
+.sheetBox{background:var(--card);border:1px solid var(--line);border-radius:10px 10px 0 0;width:100%;max-width:440px;padding:20px 18px calc(22px + env(safe-area-inset-bottom))}
+.slots{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.slots button{background:var(--surface);border:1px solid var(--line);color:var(--white);border-radius:4px;padding:13px 6px;font-size:15px;font-family:'DM Sans',sans-serif;cursor:pointer}
+.slots button.sel{border-color:var(--blue);background:rgba(30,140,255,.16)}
+.warnbox{background:rgba(255,181,71,.1);border:1px solid rgba(255,181,71,.4);color:var(--warn);border-radius:4px;padding:10px 12px;font-size:14px;line-height:1.45;margin-top:12px}
+.rsvp{display:flex;gap:8px;margin-top:8px}.rsvp .btn{margin-top:0;padding:11px 6px}
+.btn-pick{background:transparent;color:var(--blue-light);border:1px solid var(--blue)}.btn-pick.on{background:var(--blue);color:#03101f}
+.wkchips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.wkchip{background:var(--surface);border:1px solid var(--line);color:var(--white);border-radius:4px;padding:7px 10px;font-size:13px;font-family:'DM Sans',sans-serif;cursor:pointer}
+.wkchip.no{border-color:rgba(255,181,71,.5);color:var(--warn)}.wkchip.off{color:var(--muted);cursor:default;text-decoration:line-through}
+.thread{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:12px;display:flex;flex-direction:column;gap:8px;max-height:55vh;overflow-y:auto}
+.bub{max-width:80%;padding:9px 11px;border-radius:4px;font-size:15px;line-height:1.4;white-space:pre-wrap;word-wrap:break-word}
+.bub.me{align-self:flex-start;background:var(--surface);border:1px solid var(--line)}.bub.co{align-self:flex-end;background:var(--blue);color:#03101f}
+.bub small{display:block;font-size:11px;margin-top:3px;color:var(--muted)}.bub.co small{color:rgba(3,16,31,.7)}
+.dday{text-align:center;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-top:4px}
+textarea{width:100%;background:var(--surface);color:var(--white);border:1px solid var(--line);border-radius:4px;padding:12px;font-size:16px;font-family:'DM Sans',sans-serif;outline:none;resize:vertical;margin-top:10px}
+textarea:focus{border-color:var(--blue)}
+.ahd{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}.ahd label{margin:0}
+.big{font-family:'Bebas Neue',sans-serif;font-size:44px;line-height:1;color:var(--blue-light)}
+.prow{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:15px}.prow:last-child{border-bottom:0}
+.lvl{border-top:1px solid var(--line);padding:11px 0;cursor:pointer}.lvl:first-of-type{border-top:0}
+.lvl .nm{display:flex;justify-content:space-between;align-items:center;font-size:15px}
+.bar{background:var(--surface);border-radius:3px;height:8px;margin:8px 0 4px;overflow:hidden}.bar div{height:8px;background:var(--blue)}
+.sk{font-size:15px;padding:4px 0 4px 2px}.sk.no{color:var(--muted)}
+.ftxt{font-size:13px;line-height:1.6;color:var(--muted);background:var(--surface);border-radius:4px;padding:12px;max-height:240px;overflow-y:auto;margin-top:8px}
+.fld{margin-top:12px}.fld input{font-size:17px;padding:12px}
+.dobrow select{width:100%;background:var(--surface);color:var(--white);border:1px solid var(--line);border-radius:4px;padding:12px 8px;font-size:17px;font-family:'DM Sans',sans-serif}
+.sec{border-top:1px solid var(--line);margin-top:12px;padding-top:12px}
+.foot{text-align:center;color:var(--muted);font-size:13px;margin-top:22px}
+.foot a{color:var(--blue-light)}
+</style>
+</head>
+<body>
+<div class="top">
+  <img src="https://fliplabcoachsteve.com/images/logo.png" alt="Flip Lab with Coach Steve">
+  <span class="who" id="who"></span>
+</div>
+
+<div class="wrap">
+  <!-- 1. Phone -->
+  <div class="view" id="vPhone">
+    <p class="eyebrow">Parent portal</p>
+    <h1>Welcome <span>back</span></h1>
+    <p class="sub">Cancel or move lessons, sign up for classes, pay and message Coach Steve.</p>
+    <div class="card">
+      <label for="phone">Your phone number</label>
+      <input id="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(513) 555-1234">
+      <button class="btn btn-primary" id="bPhone">Next</button>
+      <div class="msg" id="mPhone"></div>
+    </div>
+  </div>
+
+  <!-- 2. Their own code -->
+  <div class="view" id="vPin">
+    <p class="eyebrow" id="pinPhone"></p>
+    <h1>Enter your <span>code</span></h1>
+    <p class="sub">The 4–6 number code you picked.</p>
+    <div class="card">
+      <label for="pin">Your code</label>
+      <input id="pin" class="code" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password">
+      <button class="btn btn-primary" id="bPin">Log in</button>
+      <div class="msg" id="mPin"></div>
+      <button class="link" id="bForgot">Forgot my code</button><br>
+      <button class="link" data-go="vPhone">Use a different number</button>
+    </div>
+  </div>
+
+  <!-- 3. Texted one-time code -->
+  <div class="view" id="vCode">
+    <p class="eyebrow" id="codeFor">First time here</p>
+    <h1>Check your <span>texts</span></h1>
+    <p class="sub" id="codeSub">We'll text a 6-number code to prove this phone is yours.</p>
+    <div class="card">
+      <button class="btn btn-primary" id="bSend">Text me a code</button>
+      <div id="codeBox" style="display:none">
+        <label for="code" style="margin-top:4px">6-number code</label>
+        <input id="code" class="code" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code">
+        <button class="btn btn-primary" id="bCode">Continue</button>
+        <button class="link" id="bResend">Send a new code</button>
+      </div>
+      <div class="msg" id="mCode"></div>
+      <button class="link" data-go="vPhone">Use a different number</button>
+    </div>
+  </div>
+
+  <!-- 4. Pick their own code -->
+  <div class="view" id="vNew">
+    <p class="eyebrow">Almost done</p>
+    <h1>Pick your <span>code</span></h1>
+    <p class="sub">4 to 6 numbers. You'll use it to log in from now on.</p>
+    <div class="card">
+      <label for="new1">New code</label>
+      <input id="new1" class="code" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password">
+      <label for="new2" style="margin-top:12px">Type it again</label>
+      <input id="new2" class="code" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password">
+      <button class="btn btn-primary" id="bNew">Save and log in</button>
+      <div class="msg" id="mNew"></div>
+    </div>
+  </div>
+
+  <!-- 5. Logged in -->
+  <div class="view" id="vHome">
+    <p class="eyebrow" id="homeGym">Flip Lab Studios</p>
+    <h1 id="homeHi">Hi <span>there</span></h1>
+    <div class="kids" id="kids"></div>
+
+    <div class="tab on" id="tHome">
+      <div id="homeNext"></div>
+      <div id="homeSkill"></div>
+      <div class="card" id="a2hs"><p class="tip" style="margin:0"><b>Tip:</b> add this to your home screen so it opens like an app.<br>iPhone: tap Share → <b>Add to Home Screen</b>. Android: tap ⋮ → <b>Add to Home screen</b>.</p></div>
+    </div>
+    <div class="tab" id="tLessons"><div id="lessonList"></div>
+      <button class="btn btn-primary" id="bExtra" style="margin-top:6px">Book an extra lesson</button>
+      <p class="tip" id="policyLine" style="margin-top:4px"></p></div>
+    <div class="tab" id="tClasses"><div id="classList"></div></div>
+    <div class="tab" id="tSkills"><div id="skillsBox"><div class="card"><p class="tip" style="margin:0">Loading…</p></div></div></div>
+    <div class="tab" id="tMsg">
+      <div class="lrow"><div class="ltitle">Message Coach Steve</div><button class="link" id="bMsgClear" style="padding:0">Clear</button></div>
+      <p class="eyebrow" style="color:var(--muted);margin:2px 0 10px">Replies 8 AM – 5 PM</p>
+      <div class="thread" id="msgList"><button class="small" id="bMsgMore" style="display:none;align-self:center">Show earlier messages</button><div id="msgBubs" style="display:flex;flex-direction:column;gap:8px"><p class="tip" style="margin:0">Loading…</p></div></div>
+      <div class="wkchips" id="msgQuick">
+        <button class="wkchip" data-q="We're running a few minutes late.">Running late</button>
+        <button class="wkchip" data-q="Question about payment: ">Payment question</button>
+        <button class="wkchip" data-q="Question about skills: ">Skills question</button>
+      </div>
+      <textarea id="msgBox" rows="3" maxlength="1000" placeholder="Type a message…"></textarea>
+      <button class="btn btn-primary" id="bMsgSend">Send</button>
+      <div class="msg" id="mMsg"></div>
+    </div>
+    <div class="tab" id="tAcct"><div id="acctBox"><div class="card"><p class="tip" style="margin:0">Loading…</p></div></div>
+      <button class="btn btn-ghost" id="bOut">Log out</button></div>
+
+    <!-- Pop-up: cancel / move -->
+    <div class="sheetBg" id="sheet"><div class="sheetBox" id="sheetBox"></div></div>
+  </div>
+
+  <div class="foot" id="foot">Questions? Text Coach Steve <a href="sms:+15134432674">(513) 443-2674</a></div>
+</div>
+
+<nav class="nav" id="nav">
+  <button data-t="tHome" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Home</button>
+  <button data-t="tLessons"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Lessons</button>
+  <button data-t="tClasses"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M15 14.5c3 0 6 1.8 6 5.5"/></svg>Classes</button>
+  <button data-t="tSkills"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg>Skills</button>
+  <button data-t="tMsg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16v11H8l-4 4z"/></svg>Message</button>
+  <button data-t="tAcct"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>Account</button>
+</nav>
+
+<script>
+// Birthday boxes = Month / Day / Year dropdowns (the phone date picker opens on today and saved wrong years).
+// The original input stays (hidden, same id), so existing .value code keeps working. Partly picked → value '' and data-part="1".
+function dobPick(inp, oldest) {
+  if (!inp || inp.dataset.dob) return; inp.dataset.dob = '1';
+  const P = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value'), start = inp.value, now = new Date().getFullYear();
+  const MO = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const wrap = document.createElement('div'); wrap.className = 'dobrow'; wrap.style.cssText = 'display:grid;grid-template-columns:1.4fr .8fr 1fr;gap:6px;' + (inp.style.flex ? 'flex:1;' : '');
+  const mk = lb => { const s = document.createElement('select'); s.setAttribute('aria-label', lb); s.style.width = '100%'; if (inp.style.margin) s.style.margin = inp.style.margin; wrap.appendChild(s); return s; };
+  const m = mk('Birthday month'), d = mk('Birthday day'), y = mk('Birthday year');
+  m.innerHTML = '<option value="">Month</option>' + MO.map((x, i) => `<option value="${i + 1}">${x}</option>`).join('');
+  let ys = '<option value="">Year</option>'; for (let i = now - 1; i >= oldest; i--) ys += `<option>${i}</option>`; y.innerHTML = ys;
+  const days = () => { const cur = d.value, n = new Date(+y.value || 2000, +m.value || 1, 0).getDate(); let s = '<option value="">Day</option>'; for (let i = 1; i <= n; i++) s += `<option>${i}</option>`; d.innerHTML = s; if (cur && +cur <= n) d.value = cur; };
+  const p2 = v => String(v).padStart(2, '0');
+  const sync = () => { days(); const all = m.value && d.value && y.value; P.set.call(inp, all ? `${y.value}-${p2(m.value)}-${p2(d.value)}` : ''); inp.dataset.part = !all && (m.value || d.value || y.value) ? '1' : ''; };
+  m.onchange = y.onchange = d.onchange = sync;
+  Object.defineProperty(inp, 'value', { get() { return P.get.call(inp); }, set(v) {
+    const t = /^(\d{4})-(\d{2})-(\d{2})/.exec(v || ''); P.set.call(inp, t ? t[0] : ''); inp.dataset.part = '';
+    if (t && ![...y.options].some(o => o.value === String(+t[1]))) y.add(new Option(String(+t[1]), String(+t[1])), +t[1] > now - 1 ? 1 : undefined);
+    y.value = t ? String(+t[1]) : ''; m.value = t ? String(+t[2]) : ''; days(); d.value = t ? String(+t[3]) : ''; } });
+  inp.type = 'hidden'; inp.after(wrap); inp.value = start;
+}
+const dobAll = () => document.querySelectorAll('input#fDob').forEach(i => dobPick(i, new Date().getFullYear() - 25));
+new MutationObserver(dobAll).observe(document.body, { childList: true, subtree: true }); dobAll();
+const GYM = new URLSearchParams(location.search).get('gym') || 'fliplab';
+const SB_URL = 'https://angmtyojkwlrefxpcgoa.supabase.co';
+const sb = supabase.createClient(SB_URL, 'sb_publishable_fPciNfnNHpHQikB8mqHNpw_hIVRIGo5', { auth: { storageKey: 'fl3-portal', persistSession: true, autoRefreshToken: true } });
+const $ = id => document.getElementById(id);
+let PHONE = '', TOKEN = '';
+
+function show(v) { document.querySelectorAll('.view').forEach(x => x.classList.toggle('on', x.id === v)); window.scrollTo(0, 0); const f = $(v).querySelector('input'); if (f) setTimeout(() => f.focus(), 50); }
+function say(id, t, ok) { const m = $(id); m.textContent = t || ''; m.className = 'msg ' + (ok ? 'ok' : 'err'); }
+function fmt(p) { return '(' + p.slice(0, 3) + ') ' + p.slice(3, 6) + '-' + p.slice(6); }
+function busy(b, on) { b.disabled = on; }
+async function call(body) {
+  try {
+    const r = await fetch(SB_URL + '/functions/v1/portal-auth', { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: 'sb_publishable_fPciNfnNHpHQikB8mqHNpw_hIVRIGo5' }, body: JSON.stringify({ gym: GYM, phone: PHONE, ...body }) });
+    return await r.json();
+  } catch (e) { return { error: 'No connection. Try again.' }; }
+}
+const NOT_FOUND = "We don't have that number. Use the phone number you signed up with, or text Coach Steve.";
+
+$('bPhone').onclick = async () => {
+  PHONE = $('phone').value.replace(/\D/g, '').slice(-10);
+  if (PHONE.length !== 10) return say('mPhone', 'Enter your 10-digit phone number.');
+  busy($('bPhone'), true); say('mPhone', '');
+  const r = await call({ action: 'check' });
+  busy($('bPhone'), false);
+  if (r.error) return say('mPhone', r.error === 'not_found' ? NOT_FOUND : r.error);
+  if (r.has_pin) { $('pinPhone').textContent = fmt(PHONE); $('pin').value = ''; say('mPin', ''); show('vPin'); }
+  else openCode(false);
+};
+$('phone').onkeydown = e => { if (e.key === 'Enter') $('bPhone').click(); };
+
+function openCode(forgot) {
+  $('codeFor').textContent = forgot ? 'Forgot your code' : 'First time here';
+  $('codeSub').textContent = "We'll text a 6-number code to " + fmt(PHONE) + ' to prove this phone is yours.';
+  $('codeBox').style.display = 'none'; $('bSend').style.display = 'block'; $('code').value = ''; say('mCode', '');
+  show('vCode');
+}
+$('bForgot').onclick = () => openCode(true);
+
+async function sendCode() {
+  busy($('bSend'), true); say('mCode', 'Sending…', true);
+  const r = await call({ action: 'send_code' });
+  busy($('bSend'), false);
+  if (r.error) return say('mCode', r.error === 'not_found' ? NOT_FOUND : r.error);
+  $('bSend').style.display = 'none'; $('codeBox').style.display = 'block'; say('mCode', 'Code sent. It can take a minute.', true); $('code').focus();
+}
+$('bSend').onclick = sendCode; $('bResend').onclick = sendCode;
+
+$('bCode').onclick = async () => {
+  const code = $('code').value.replace(/\D/g, '');
+  if (code.length !== 6) return say('mCode', 'Enter the 6-number code from the text.');
+  busy($('bCode'), true);
+  const r = await call({ action: 'verify', code });
+  busy($('bCode'), false);
+  if (r.error) return say('mCode', r.error);
+  TOKEN = r.token; $('new1').value = $('new2').value = ''; say('mNew', ''); show('vNew');
+};
+$('code').oninput = () => { if ($('code').value.replace(/\D/g, '').length === 6) $('bCode').click(); };
+
+$('bNew').onclick = async () => {
+  const a = $('new1').value, b = $('new2').value;
+  if (!/^\d{4,6}$/.test(a)) return say('mNew', 'Your code must be 4 to 6 numbers.');
+  if (a !== b) return say('mNew', "The two codes don't match.");
+  busy($('bNew'), true);
+  const r = await call({ action: 'set_pin', token: TOKEN, pin: a });
+  busy($('bNew'), false);
+  if (r.error) return say('mNew', r.error);
+  await startSession(r.session);
+};
+
+$('bPin').onclick = async () => {
+  const pin = $('pin').value;
+  if (!/^\d{4,6}$/.test(pin)) return say('mPin', 'Enter your 4–6 number code.');
+  busy($('bPin'), true);
+  const r = await call({ action: 'login', pin });
+  busy($('bPin'), false);
+  if (r.error === 'no_pin') return openCode(false);
+  if (r.error) return say('mPin', r.error);
+  await startSession(r.session);
+};
+$('pin').onkeydown = e => { if (e.key === 'Enter') $('bPin').click(); };
+
+async function startSession(s) {
+  await sb.auth.setSession(s);
+  localStorage.setItem('fl3-portal-phone', PHONE);
+  loadHome();
+}
+
+// ================= Logged in =================
+let ME = null, DATA = null, KID = '';
+async function loadHome() {
+  const { data: me, error } = await sb.rpc('portal_me');
+  if (error || !me || me.error) { await sb.auth.signOut(); return show('vPhone'); }
+  ME = me;
+  const first = String(me.parent_name || '').trim().split(/\s+/)[0];
+  $('homeHi').innerHTML = 'Hi <span>' + esc(first || 'there') + '</span>';
+  $('homeGym').textContent = me.gym_name || 'Flip Lab Studios';
+  $('who').textContent = fmt(me.phone);
+  KID = KID || (me.kids[0] || {}).id || '';
+  drawKids();
+  if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) $('a2hs').style.display = 'none';
+  document.body.classList.add('in'); $('nav').classList.add('on'); $('foot').style.display = 'none';
+  show('vHome');
+  $('homeNext').innerHTML = $('lessonList').innerHTML = $('classList').innerHTML = '<div class="card"><p class="tip" style="margin:0">Loading…</p></div>';
+  $('homeSkill').innerHTML = '';
+  await Promise.all([refresh(), refreshClasses(), loadAcct()]);
+}
+function drawKids() {
+  const ks = ME.kids || [];
+  $('kids').innerHTML = ks.length > 1 ? ks.map(k => `<span class="chip${k.id === KID ? ' on' : ''}" data-k="${esc(k.id)}">${esc(k.first_name)}</span>`).join('') : '';
+  $('kids').querySelectorAll('[data-k]').forEach(c => c.onclick = () => { KID = c.dataset.k; PAY_ALL = WAV_SHOW = false; drawKids(); draw(); drawClasses(); drawAcct(); });
+}
+async function act(body) {
+  try { const r = await sb.functions.invoke('portal-act', { body }); return r.data || { error: (r.error && r.error.message) || 'Something went wrong.' }; }
+  catch (e) { return { error: 'No connection. Try again.' }; }
+}
+async function refresh() {
+  const r = await act({ action: 'load' });
+  if (r.error) { $('homeNext').innerHTML = $('lessonList').innerHTML = `<div class="card"><p class="msg err" style="margin:0">${esc(r.error)}</p></div>`; return; }
+  DATA = r; draw();
+}
+
+const SH = { Monday: 'Mon', Tuesday: 'Tue', Wednesday: 'Wed', Thursday: 'Thu', Friday: 'Fri', Saturday: 'Sat', Sunday: 'Sun' };
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const dlabel = (d, day) => SH[day] + ', ' + MON[+d.slice(5, 7) - 1] + ' ' + (+d.slice(8, 10));
+const kidFirst = id => ((ME.kids || []).find(k => k.id === id) || {}).first_name || '';
+function items() { return (DATA ? DATA.weeks : []).flatMap(w => w.items.map(it => ({ ...it, ws: w.ws }))).filter(it => !KID || it.student_id === KID); }
+function tagFor(it) {
+  if (it.past) return '<span class="tag t-past">Done</span>';
+  if (it.status === 'Cancelled') return '<span class="tag t-away">Away</span>';
+  if (it.kind === 'Move') return '<span class="tag t-move">Moved</span>';
+  if (it.kind === 'Add') return '<span class="tag t-move">One-time</span>';
+  return '<span class="tag t-on">On</span>';
+}
+function lessonCard(it, big) {
+  const what = [it.duration || '30 min', it.lesson_type === 'Shared' ? 'Shared' : 'Private', it.coach].filter(Boolean).join(' · ');
+  const moved = it.from ? `<div class="lsub">Moved from ${SH[it.from.day]} ${esc(it.from.time)}</div>` : '';
+  const lateFee = it.status === 'Cancelled' && it.late ? `<div class="lsub" style="color:var(--bad);font-weight:600">Late cancel · a late-cancel fee applies</div>` : '';
+  const isX = it.kind === 'Add';
+  const undo = it.undo_id ? `<div class="lsub">${it.status === 'Cancelled' ? 'You cancelled' : isX ? 'You booked this one-time extra lesson' : 'You moved it'}${it.late && it.status !== 'Cancelled' ? ' (late)' : ''} · <button class="link" style="padding:0" data-undo="${esc(it.undo_id)}"${isX ? ' data-x="1"' : ''}>${isX ? 'Cancel booking' : 'Undo'}</button></div>` : '';
+  const btns = it.can_change ? `<div class="btns"><button class="btn btn-ghost" data-cancel="${esc(it.id)}" data-ws="${it.ws}">Can't make it</button><button class="btn btn-primary" data-move="${esc(it.id)}" data-ws="${it.ws}">Move it</button></div>`
+    : (!it.past && it.status !== 'Cancelled' && !it.undo_id ? '<div class="lsub" style="margin-top:8px">To change this one, text Coach Steve.</div>' : '');
+  return `<div class="card">${big ? '<label>Next lesson' + ((ME.kids || []).length > 1 ? ' · ' + esc(kidFirst(it.student_id)) : '') + '</label>' : ''}
+    <div class="lrow"><div><div class="ltitle">${dlabel(it.date, it.day)} · ${esc(it.time)}</div><div class="lsub">${esc(what)}</div>${moved}</div>${tagFor(it)}</div>${lateFee}${undo}${btns}</div>`;
+}
+function draw() {
+  if (!DATA) return;
+  const all = items(), up = all.filter(it => !it.past);
+  // Home: next lesson that's on (plus anything cancelled before it, so Undo is easy to find)
+  const next = up.find(it => it.status !== 'Cancelled');
+  const awayBefore = up.slice(0, next ? up.indexOf(next) : up.length).filter(it => it.status === 'Cancelled');
+  $('homeNext').innerHTML = (next ? lessonCard(next, true) : '<div class="card"><p class="tip" style="margin:0">No lessons coming up in the next 4 weeks. Text Coach Steve to book.</p></div>')
+    + awayBefore.map(it => lessonCard(it, false)).join('');
+  // Lessons: next 4 weeks
+  $('lessonList').innerHTML = DATA.weeks.map(w => {
+    const its = all.filter(it => it.ws === w.ws);
+    return `<div class="wk">Week of ${MON[+w.ws.slice(5, 7) - 1]} ${+w.ws.slice(8, 10)}</div>` + (its.length ? its.map(it => lessonCard(it, false)).join('') : '<div class="card"><p class="tip" style="margin:0">No lessons this week.</p></div>');
+  }).join('');
+  $('policyLine').textContent = `Cancelling with less than ${DATA.cancel_hrs} hours' notice has a late-cancel fee.`;
+  document.querySelectorAll('[data-cancel]').forEach(b => b.onclick = () => openCancel(b.dataset.cancel, b.dataset.ws));
+  document.querySelectorAll('[data-move]').forEach(b => b.onclick = () => openMove(b.dataset.move, b.dataset.ws));
+  document.querySelectorAll('[data-undo]').forEach(b => b.onclick = () => doUndo(b.dataset.undo, !!b.dataset.x));
+}
+// ================= Classes =================
+let CL = null;
+async function refreshClasses() {
+  const r = await act({ action: 'classes' });
+  if (r.error) { $('classList').innerHTML = `<div class="card"><p class="msg err" style="margin:0">${esc(r.error)}</p></div>`; return; }
+  CL = r; drawClasses();
+}
+const ymdLabel = d => { const x = new Date(d + 'T12:00:00Z'); return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][x.getUTCDay()] + ', ' + MON[x.getUTCMonth()] + ' ' + x.getUTCDate(); };
+const shortD = d => MON[+d.slice(5, 7) - 1] + ' ' + (+d.slice(8, 10));
+function classCard(c) {
+  const nm = esc(kidFirst(c.student_id));
+  const sub = `<div class="lsub">${esc(c.day)}s ${esc(c.time)} · $${c.price} per class</div>`;
+  if (c.status === 'waitlist') {
+    return `<div class="card"><div class="lrow"><div class="ltitle">${esc(c.name)}</div><span class="tag t-away">Waitlist #${c.pos}</span></div>${sub}
+      ${c.can_enroll ? `<div class="sec"><p class="tip" style="margin:0"><b>A spot opened up!</b> Grab it now and ${nm} is in the class every ${esc(c.day)}.</p>
+        <button class="btn btn-primary" data-enroll="${esc(c.id)}" data-s="${esc(c.student_id)}">Enroll ${nm}</button></div>`
+      : `<p class="tip" style="margin:10px 0 0">${nm} is #${c.pos} on the waitlist. The class is full right now.</p>`}
+      <button class="link" data-leave="${esc(c.id)}" data-s="${esc(c.student_id)}">Leave the waitlist</button></div>`;
+  }
+  const [first, ...later] = c.weeks;
+  let wk = '';
+  if (first) {
+    const lbl = `<label style="margin:0">${first.ws === c.weeks[0].ws && first.date <= addD(todayYmd(), 6) ? 'This ' + esc(c.day) : 'Next class'} · ${shortD(first.date)}</label>`;
+    wk = first.off ? `<div class="sec">${lbl}<p class="tip" style="margin:6px 0 0">No class that week.</p></div>`
+      : `<div class="sec">${lbl}<div style="font-size:15px;margin-top:6px">Is ${nm} coming?</div>
+        <div class="rsvp"><button class="btn btn-pick${first.answer === 'yes' ? ' on' : ''}" data-rsvp="yes" data-c="${esc(c.id)}" data-s="${esc(c.student_id)}" data-ws="${first.ws}">Yes</button>
+        <button class="btn btn-pick${first.answer === 'no' ? ' on' : ''}" data-rsvp="no" data-c="${esc(c.id)}" data-s="${esc(c.student_id)}" data-ws="${first.ws}">No, skip it</button></div></div>`;
+  }
+  if (later.length) wk += `<div class="sec" style="border:none;padding-top:4px"><label style="margin:0">Later ${esc(c.day)}s · tap one ${nm} will miss</label><div class="wkchips">${later.map(w => w.off
+      ? `<span class="wkchip off">${shortD(w.date)} no class</span>`
+      : `<button class="wkchip${w.answer === 'no' ? ' no' : ''}" data-rsvp="${w.answer === 'no' ? '' : 'no'}" data-c="${esc(c.id)}" data-s="${esc(c.student_id)}" data-ws="${w.ws}">${shortD(w.date)} ${w.answer === 'no' ? '✕ missing' : '✓'}</button>`).join('')}</div></div>`;
+  return `<div class="card"><div class="lrow"><div class="ltitle">${esc(c.name)}</div><span class="tag t-on">Enrolled</span></div>${sub}${wk}
+    <p class="tip" style="margin:12px 0 0">Need to stop the class? Text <a style="color:var(--blue-light)" href="sms:+15134432674">Coach Steve</a>.</p></div>`;
+}
+function clinicCard(c) {
+  const me = c.signed.find(k => k.student_id === KID);
+  const nm = esc(kidFirst(KID));
+  const sub = [ymdLabel(c.date), c.time, '$' + c.price, c.ages].filter(Boolean).map(esc).join(' · ');
+  const act_ = me ? `<p class="tip" style="margin:10px 0 0">${nm} is signed up${me.paid ? ' and paid' : ''}. To cancel, text Coach Steve.</p>`
+    : c.spots === 0 ? `<p class="tip" style="margin:10px 0 0">This clinic is full. Text Coach Steve to get on the list.</p>`
+    : `<button class="btn btn-primary" data-clinic="${esc(c.id)}">Sign up ${nm}</button>`;
+  return `<div class="card"><div class="lrow"><div class="ltitle">${esc(c.name)}</div>${me ? `<span class="tag t-on">${me.paid ? 'Paid' : 'Signed up'}</span>` : ''}</div>
+    <div class="lsub">${sub}${c.spots != null && !me ? ' · ' + (c.spots ? c.spots + ' spot' + (c.spots === 1 ? '' : 's') + ' left' : 'full') : ''}</div>${act_}</div>`;
+}
+function drawClasses() {
+  if (!CL) return;
+  const mine = CL.classes.filter(c => !KID || c.student_id === KID);
+  let h = mine.length ? mine.map(classCard).join('')
+    : `<div class="card"><p class="tip" style="margin:0">${esc(kidFirst(KID) || 'Your kid')} isn't in a weekly class right now. Text <a style="color:var(--blue-light)" href="sms:+15134432674">Coach Steve</a> to join one.</p></div>`;
+  if (CL.clinics.length) h += '<div class="wk">Upcoming clinics</div>' + CL.clinics.map(clinicCard).join('');
+  $('classList').innerHTML = h;
+  const run = async (btn, body, ask) => {
+    if (ask && !confirm(ask)) return;
+    btn.disabled = true;
+    const x = await act(body);
+    btn.disabled = false;
+    if (x.error) return alert(x.error);
+    await refreshClasses();
+  };
+  $('classList').querySelectorAll('[data-rsvp]').forEach(b => b.onclick = () => run(b, { action: 'rsvp', schedule_id: b.dataset.c, student_id: b.dataset.s, ws: b.dataset.ws, answer: b.dataset.rsvp || null }));
+  $('classList').querySelectorAll('[data-enroll]').forEach(b => b.onclick = () => run(b, { action: 'class_enroll', schedule_id: b.dataset.enroll, student_id: b.dataset.s }, 'Enroll ' + kidFirst(b.dataset.s) + ' in this class every week?'));
+  $('classList').querySelectorAll('[data-leave]').forEach(b => b.onclick = () => run(b, { action: 'waitlist_leave', schedule_id: b.dataset.leave, student_id: b.dataset.s }, 'Take ' + kidFirst(b.dataset.s) + ' off the waitlist?'));
+  $('classList').querySelectorAll('[data-clinic]').forEach(b => b.onclick = () => { const c = CL.clinics.find(x => x.id === b.dataset.clinic);
+    run(b, { action: 'clinic_signup', schedule_id: c.id, student_id: KID }, `Sign ${kidFirst(KID)} up for ${c.name} on ${ymdLabel(c.date)}? ($${c.price})`); });
+}
+const todayYmd = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+const addD = (d, n) => { const x = new Date(d + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+
+const findIt = (id, ws) => items().find(it => it.id === id && it.ws === ws);
+
+// ---- pop-up ----
+function sheet(html) { $('sheetBox').innerHTML = html; $('sheet').classList.add('on'); }
+function closeSheet() { $('sheet').classList.remove('on'); }
+$('sheet').onclick = e => { if (e.target.id === 'sheet') closeSheet(); };
+const head = (t, it) => `<p class="eyebrow">${esc(kidFirst(it.student_id))}</p><div class="ltitle" style="font-size:30px;margin:4px 0 2px">${t}</div><div class="lsub">${dlabel(it.date, it.day)} · ${esc(it.time)}</div>`;
+
+async function openCancel(id, ws) {
+  const it = findIt(id, ws); if (!it) return;
+  sheet(head("Can't make it?", it) + '<div class="msg" id="sMsg"></div><p class="tip">Checking…</p>');
+  const r = await act({ action: 'options', lesson_id: id, ws });   // tells us if it's late
+  if (r.error) return sheet(head("Can't make it?", it) + `<div class="msg err">${esc(r.error)}</div><button class="btn btn-ghost" onclick="closeSheet()">Close</button>`);
+  sheet(head("Can't make it?", it)
+    + (r.late ? `<div class="warnbox"><b>Late cancel.</b> This is less than ${r.cancel_hrs} hours before the lesson, so a late-cancel fee will be charged.</div>` : `<p class="tip" style="margin-top:12px">Coach Steve will get a text. You can undo this until the lesson starts.</p>`)
+    + (r.slots && r.slots.length ? `<button class="btn btn-ghost" id="sMoveInstead">Move it instead</button>` : '')
+    + `<button class="btn btn-primary" id="sCancel">${r.late ? 'Cancel anyway' : 'Cancel this lesson'}</button><button class="link" onclick="closeSheet()">Keep the lesson</button><div class="msg" id="sMsg"></div>`);
+  if ($('sMoveInstead')) $('sMoveInstead').onclick = () => openMove(id, ws, r);
+  $('sCancel').onclick = async () => {
+    busy($('sCancel'), true);
+    const x = await act({ action: 'cancel', lesson_id: id, ws, ok_late: !!r.late });
+    busy($('sCancel'), false);
+    if (x.error) return say('sMsg', x.error);
+    closeSheet(); await refresh();
+  };
+}
+
+async function openMove(id, ws, pre) {
+  const it = findIt(id, ws); if (!it) return;
+  sheet(head('Move this lesson', it) + '<p class="tip">Finding open times…</p>');
+  const r = pre || await act({ action: 'options', lesson_id: id, ws });
+  if (r.error) return sheet(head('Move this lesson', it) + `<div class="msg err">${esc(r.error)}</div><button class="btn btn-ghost" onclick="closeSheet()">Close</button>`);
+  if (!r.slots.length) return sheet(head('Move this lesson', it) + `<p class="tip" style="margin-top:12px">No open times with ${esc(it.coach || 'Coach Steve')} that week. You can cancel instead, or text Coach Steve.</p><button class="btn btn-ghost" onclick="closeSheet()">Close</button>`);
+  let pick = null;
+  sheet(head('Move this lesson', it) + `<p class="tip" style="margin-top:10px">Open times that week with ${esc(it.coach || 'Coach Steve')}. Just this week; your regular time stays the same.</p>
+    <div class="slots">${r.slots.map((s, i) => `<button data-i="${i}">${SH[s.day]} ${esc(s.time)}</button>`).join('')}</div>
+    ${r.late ? `<div class="warnbox">This is less than ${r.cancel_hrs} hours before the lesson. Moving is fine, but Coach Steve will see it was late notice.</div>` : ''}
+    <button class="btn btn-primary" id="sMove">Move it</button><button class="link" onclick="closeSheet()">Never mind</button><div class="msg" id="sMsg"></div>`);
+  $('sheetBox').querySelectorAll('.slots button').forEach(b => b.onclick = () => { pick = r.slots[+b.dataset.i]; $('sheetBox').querySelectorAll('.slots button').forEach(x => x.classList.toggle('sel', x === b)); });
+  $('sMove').onclick = async () => {
+    if (!pick) return say('sMsg', 'Pick a time first.');
+    busy($('sMove'), true);
+    const x = await act({ action: 'move', lesson_id: id, ws, day: pick.day, time: pick.time });
+    busy($('sMove'), false);
+    if (x.error) return say('sMsg', x.error);
+    closeSheet(); await refresh();
+  };
+}
+
+// ---- Book an extra lesson (one time only, 30 min, this week + next) ----
+$('bExtra').onclick = () => openExtra();
+async function openExtra() {
+  const nm = esc(kidFirst(KID));
+  const top = `<p class="eyebrow">${nm}</p><div class="ltitle" style="font-size:30px;margin:4px 0 2px">Book an extra lesson</div>`;
+  sheet(top + '<p class="tip">Finding open times…</p>');
+  const r = await act({ action: 'extra_options', student_id: KID });
+  if (r.error) return sheet(top + `<div class="msg err">${esc(r.error)}</div><button class="btn btn-ghost" onclick="closeSheet()">Close</button>`);
+  const all = r.weeks.flatMap((w, wi) => w.slots.map(s => ({ ...s, ws: w.ws, wi })));
+  const sub = `<div class="lsub">30 minutes · ${esc(r.price)} · ${esc(r.coach)}</div>`;
+  if (!all.length) return sheet(top + sub + r.weeks.map((w, wi) => `<div class="wk">${wi ? 'Next week' : 'This week'}</div><p class="tip" style="margin:0">${w.used ? 'Already booked an extra lesson this week.' : 'No open times.'}</p>`).join('') + `<p class="tip" style="margin-top:12px">Text <a style="color:var(--blue-light)" href="sms:+15134432674">Coach Steve</a> if you need another time.</p><button class="btn btn-ghost" onclick="closeSheet()">Close</button>`);
+  let pick = null;
+  const wkHtml = r.weeks.map((w, wi) => `<div class="wk">${wi ? 'Next week' : 'This week'}</div>` + (w.slots.length
+    ? `<div class="slots" style="grid-template-columns:1fr">${all.map((s, i) => s.wi === wi ? `<button data-i="${i}">${dlabel(s.date, s.day)} · ${esc(s.time)}</button>` : '').join('')}</div>`
+    : `<p class="tip" style="margin:0">${w.used ? 'Already booked an extra lesson this week. Text Coach Steve if you need another.' : 'No open times.'}</p>`)).join('');
+  sheet(top + sub + `<div class="warnbox"><b>This is an extra lesson, in addition to your current one.</b> One time only. Not a move and not a weekly spot.</div>${wkHtml}
+    <label style="display:flex;gap:10px;align-items:flex-start;margin-top:14px;text-transform:none;letter-spacing:0;font-family:inherit;font-size:14px;color:var(--white)"><input type="checkbox" id="xOk" style="width:18px;height:18px;margin-top:2px;flex:none"><span id="xOkTxt">I understand this is one time only.</span></label>
+    <button class="btn btn-primary" id="xBook">Book one-time lesson</button><button class="link" onclick="closeSheet()">Never mind</button>
+    <p class="tip" style="margin-top:6px">The ${esc(r.price)} goes on your balance after the lesson. Cancelling with less than ${r.cancel_hrs} hours' notice has a late-cancel fee.</p><div class="msg" id="sMsg"></div>`);
+  $('sheetBox').querySelectorAll('.slots button').forEach(b => b.onclick = () => {
+    pick = all[+b.dataset.i]; $('sheetBox').querySelectorAll('.slots button').forEach(x => x.classList.toggle('sel', x === b));
+    $('xOkTxt').textContent = `I understand this is one time only, on ${dlabel(pick.date, pick.day)}.`; $('xOk').checked = false;
+  });
+  $('xBook').onclick = async () => {
+    if (!pick) return say('sMsg', 'Pick a time first.');
+    if (!$('xOk').checked) return say('sMsg', 'Check the box to confirm this is one time only.');
+    busy($('xBook'), true);
+    const x = await act({ action: 'extra_book', student_id: KID, ws: pick.ws, day: pick.day, time: pick.time, ok_once: true });
+    busy($('xBook'), false);
+    if (x.error) return say('sMsg', x.error);
+    sheet(top + `<div class="ltitle" style="margin-top:10px">Booked</div><p class="tip" style="margin-top:6px">Extra lesson for ${nm}: ${dlabel(pick.date, pick.day)} · ${esc(pick.time)}. This is in addition to your current one, one time only.</p><button class="btn btn-primary" onclick="closeSheet()">Done</button>`);
+    await refresh();
+  };
+}
+
+async function doUndo(exId, extra) {
+  if (!confirm(extra ? 'Cancel this one-time extra lesson?' : 'Undo this change and go back to the regular time?')) return;
+  const x = await act({ action: 'undo', ex_id: exId });
+  if (x.error) return alert(x.error);
+  await refresh();
+}
+
+document.querySelectorAll('#nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#nav button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.id === b.dataset.t));
+  window.scrollTo(0, 0);
+  if (b.dataset.t === 'tMsg') loadMsgs();
+  if (b.dataset.t === 'tAcct') { if (ACCT) drawAcct(); loadAcct(); }
+  if (b.dataset.t === 'tSkills' && ACCT) drawAcct();
+});
+
+// ================= Account =================
+let ACCT = null, PAY_ALL = false, LVL_OPEN = {}, WAV_SHOW = false;
+const fmtD = d => d ? MON[+d.slice(5, 7) - 1] + ' ' + (+d.slice(8, 10)) + ', ' + d.slice(0, 4) : '';
+const usd = n => '$' + (Math.round(n * 100) / 100).toFixed(n % 1 ? 2 : 0);
+// Starter text = same as the sign-up page (register.html) unless Steve wrote his own in ⚙ Settings
+const ST_POL = '<strong>Flip Lab Private Lesson Cancellation Policy</strong><br><br>We value the time and commitment of our athletes and families, as well as the time of our coaches. To ensure fairness and consistency, the following cancellation policy is in effect for all private lessons:<br><br><strong>Advance Notice</strong><br>All cancellations must be made at least 24 hours in advance of the scheduled lesson. We understand that emergencies sometimes happen. In such cases, circumstances will be reviewed on a case-by-case basis at the discretion of your coach.<br><br><strong>Late Cancellations &amp; No-Shows</strong><br>Any cancellation made with less than 24 hours notice, or failure to attend a scheduled lesson, will result in the full lesson fee being charged, unless otherwise approved under the emergency exception.<br><br><strong>Coach Cancellations</strong><br>If your coach must cancel a lesson, no fee will be charged. Since lessons are pay-as-you-go, no makeup is required, and we will simply see you at your next scheduled lesson.<br><br><strong>Payment Terms</strong><br>Lessons are considered pay-as-you-go unless otherwise arranged in writing. Payment is required at the time of service.<br><br><strong>Repeated Violations</strong><br>Consistent late cancellations or no-shows may result in the suspension or loss of private lesson privileges.';
+const ST_WAV = 'By signing below, I acknowledge that participation in gymnastics, tumbling, and related activities at Flip Lab involves inherent risks of injury. I voluntarily assume all risks associated with participation. I agree to release, waive, and hold harmless Flip Lab, its coaches, staff, and facility from any and all claims, damages, or liability arising from participation, including injuries caused by negligence.<br><br>I confirm that the athlete named in this registration is physically fit to participate. I will inform Flip Lab of any medical conditions or limitations that may affect participation.<br><br>This waiver is binding on myself, my heirs, and my legal representatives. I have read this agreement and understand its terms.';
+const ftext = t => t.trim().split(/\n\s*\n/).map(p => { const ls = p.split('\n').map(esc); return (ls.length > 1 && ls[0].length < 70 ? '<strong>' + ls.shift() + '</strong><br>' : '') + ls.join('<br>'); }).join('<br><br>');
+const polHtml = () => ACCT.policy_text ? ftext(ACCT.policy_text) : ST_POL.replace(/24 hours/g, (ACCT.cancel_hrs || 24) + ' hours');
+const wavHtml = () => ACCT.waiver_text ? ftext(ACCT.waiver_text) : ST_WAV;
+const textNum = () => (ACCT && String(ACCT.contact.text || '').replace(/\D/g, '').slice(-10)) || '5134432674';
+async function loadAcct() {
+  const r = await act({ action: 'account' });
+  if (r.error) { $('acctBox').innerHTML = `<div class="card"><p class="msg err" style="margin:0">${esc(r.error)}</p></div>`; return; }
+  ACCT = r; drawAcct();
+}
+function drawAcct() {
+  if (!ACCT) return;
+  const k = ACCT.kids.find(x => x.id === KID) || ACCT.kids[0]; if (!k) return;
+  const C = ACCT.contact, h = [];
+  // Balance owed
+  h.push(`<div class="card"><label>Balance owed${ACCT.kids.length > 1 ? ' · ' + esc(k.first_name) : ''}</label><div class="big">${usd(k.owed)}</div>` +
+    (k.owed_items.length ? k.owed_items.map(x => `<div class="prow"><span>${esc(x.label)}</span><span>${usd(x.amt)}</span></div>`).join('') : '<p class="tip" style="margin:6px 0 0">All paid up. Thank you!</p>') +
+    (k.owed > 0 ? `<div class="btns">${C.venmo ? `<a class="btn btn-primary" href="${esc(C.venmo)}" target="_blank" rel="noopener" style="text-align:center;text-decoration:none">Venmo</a>` : ''}${C.zelle ? `<button class="btn btn-ghost" id="bZelle">Zelle</button>` : ''}</div>` : '') +
+    `<p class="tip" style="margin:10px 0 0">Counts lessons and classes since ${fmtD(ACCT.since)}. Something look wrong? Text Coach Steve.</p></div>`);
+  // Payments
+  const ps = PAY_ALL ? k.payments : k.payments.slice(0, 10);
+  h.push(`<div class="card"><label>Payments</label>` + (ps.length ? ps.map(x => `<div class="prow"><span>${esc(fmtD(x.date))}</span><span class="tip" style="font-size:14px">${esc(x.method || '')}</span><span>${usd(x.amount)}</span></div>`).join('') : '<p class="tip" style="margin:0">No payments yet.</p>') +
+    (!PAY_ALL && k.payments.length > 10 ? '<button class="link" id="bPayMore">Show more</button>' : '') + '</div>');
+  // Family info
+  const ph = p => p && p.length === 10 ? fmt(p) : '';
+  h.push(`<div class="card"><div class="ahd"><label>Family info</label><button class="link" id="bFamEdit" style="padding:0">Edit</button></div>
+    <div>${esc(k.first_name)} ${esc(k.last_name || '')}${k.dob ? ' · born ' + esc(fmtD(k.dob)) : ''}</div>
+    <div style="margin-top:6px">${esc(k.parent_name || '')}${ph(k.parent_phone) ? ' · ' + ph(k.parent_phone) : ''}</div>
+    <div class="tip" style="font-size:14px">${esc(k.parent_email || 'No email')}</div>
+    <div class="tip" style="font-size:14px">Emergency: ${k.emergency_name ? esc(k.emergency_name) + (ph(k.emergency_phone) ? ' ' + ph(k.emergency_phone) : '') : 'none'}</div></div>`);
+  // Waiver
+  const w = k.waiver;
+  h.push(`<div class="card"><label>Waiver</label>` + (w ? `<div>✓ Signed by ${esc(w.signature || w.parent_name)}${w.signed_at ? ' · ' + esc(fmtD(w.signed_at.slice(0, 10))) : ''}</div><button class="link" id="bWavView">${WAV_SHOW ? 'Hide waiver' : 'View waiver'}</button>${WAV_SHOW ? `<div class="ftxt">${wavHtml()}</div>` : ''}`
+    : `<div class="warnbox" style="margin-top:0">No waiver on file for ${esc(k.first_name)}.</div><button class="btn btn-primary" id="bWavSign">Sign waiver</button>`) + '</div>');
+  // Policies
+  h.push(`<div class="card"><label>Policies</label><div class="ftxt" style="margin-top:0">${polHtml()}</div>
+    <p class="tip" style="margin:10px 0 0">Text Coach Steve <a href="sms:+1${textNum()}" style="color:var(--blue-light)">${fmt(textNum())}</a>${C.email ? ' · <a href="mailto:' + esc(C.email) + '" style="color:var(--blue-light)">' + esc(C.email) + '</a>' : ''}</p></div>`);
+  $('acctBox').innerHTML = h.join('');
+  const on = (id, f) => { const e = $(id); if (e) e.onclick = f; };
+  on('bZelle', () => { const z = C.zelle; try { navigator.clipboard.writeText(z); } catch (e) {} alert('Zelle: ' + z + (navigator.clipboard ? '\n(copied)' : '')); });
+  on('bPayMore', () => { PAY_ALL = true; drawAcct(); });
+  on('bWavView', () => { WAV_SHOW = !WAV_SHOW; drawAcct(); });
+  on('bFamEdit', () => openFam(k));
+  on('bWavSign', () => openWav(k));
+  drawSkills(k); drawHomeSkill(k);
+}
+let XS_TAG = 'Cheer';
+function drawSkills(k) {
+  const h = [];
+  const lv = k.levels.filter(l => l.skills.length || l.current);
+  h.push(`<div class="card"><label>Skills</label>` + (lv.length ? lv.map(l => {
+    const done = l.skills.filter(s => s.done).length, open = LVL_OPEN[k.id + l.code] ?? l.current;
+    return `<div class="lvl" data-l="${esc(l.code)}"><div class="nm"><span>${esc(l.name)}${l.current ? ' <span class="tag t-move">Working on</span>' : ''}</span><span class="tip" style="font-size:14px">${done}/${l.skills.length} ${open ? '▾' : '▸'}</span></div>` +
+      (open ? (l.skills.length ? `<div class="bar"><div style="width:${Math.round(done / l.skills.length * 100)}%"></div></div>` + l.skills.map(s => `<div class="sk${s.done ? '' : ' no'}">${s.done ? '✓' : '○'} ${esc(s.name)}</div>`).join('') : '<p class="tip" style="margin:6px 0 0">No skills listed yet.</p>') : '') + '</div>';
+  }).join('') : '<p class="tip" style="margin:0">Skills are coming soon.</p>') + '</div>');
+  const xs = k.extras || [], XST = { Requested: 'Requested', Working: 'Working on', Done: 'Done' };
+  h.push(`<div class="card"><label>${esc(k.first_name)}'s extra skills</label><p class="tip" style="margin:2px 0 8px">Skills Coach Steve added for ${esc(k.first_name)}, outside the level.</p>` +
+    (xs.length ? xs.map(x => `<div class="prow"><span>${esc(x.name)}${x.tag ? ` <span class="tag t-move">${esc(x.tag)}</span>` : ''}</span><span class="tag ${x.status === 'Done' ? 't-on' : x.status === 'Requested' ? 't-away' : 't-past'}">${XST[x.status] || esc(x.status)}</span></div>`).join('')
+      : '<p class="tip" style="margin:0">None yet.</p>') + '</div>');
+  h.push(`<div class="card"><label>Ask to work on a skill</label>
+    <p class="tip" style="margin:4px 0 0;border-left:2px solid var(--blue);padding-left:8px">Requests should match ${esc(k.first_name)}'s current level and ability. Coach Steve decides what gets added to the list.</p>
+    <div class="fld"><label for="xsName">Skill name</label><input id="xsName" maxlength="80"></div>
+    <div class="fld"><label for="xsNote">Why (optional)</label><input id="xsNote" maxlength="200" placeholder="For cheer tryouts in March"></div>
+    <div style="display:flex;gap:8px;margin-top:12px">${['Cheer', 'Dance'].map(t => `<span class="chip${XS_TAG === t ? ' on' : ''}" data-xt="${t}">${t}</span>`).join('')}</div>
+    <div class="msg" id="mXs"></div><div class="btns"><button class="btn btn-primary" id="bXs">Send request</button></div>
+    <p class="tip" style="margin:6px 0 0">Up to 3 open requests per child.</p></div>`);
+  $('skillsBox').innerHTML = (ACCT.kids.length > 1 ? `<p class="eyebrow" style="margin:0 0 8px">${esc(k.first_name)}</p>` : '') + h.join('');
+  $('skillsBox').querySelectorAll('[data-xt]').forEach(c => c.onclick = () => { XS_TAG = XS_TAG === c.dataset.xt ? '' : c.dataset.xt; $('skillsBox').querySelectorAll('[data-xt]').forEach(d => d.classList.toggle('on', d.dataset.xt === XS_TAG)); });
+  $('xsName').oninput = () => say('mXs', '');
+  $('bXs').onclick = async () => {
+    const name = $('xsName').value.trim(), b = $('bXs');
+    if (!name) return say('mXs', 'Enter a skill name first.');
+    busy(b, true);
+    const r = await act({ action: 'skill_request', student_id: k.id, name, note: $('xsNote').value.trim(), tag: XS_TAG });
+    busy(b, false);
+    if (r.error) return say('mXs', r.error);
+    await loadAcct(); say('mXs', 'Sent. Coach Steve will take a look.', true);
+  };
+  $('skillsBox').querySelectorAll('[data-l]').forEach(d => d.onclick = () => { const key = k.id + d.dataset.l, l = k.levels.find(x => x.code === d.dataset.l); LVL_OPEN[key] = !(LVL_OPEN[key] ?? l.current); drawSkills(k); });
+}
+// Home: one tap-able line — current level + progress; opens the Skills tab
+function drawHomeSkill(k) {
+  const l = k.levels.find(x => x.current);
+  if (!l || !l.skills.length) { $('homeSkill').innerHTML = ''; return; }
+  const done = l.skills.filter(s => s.done).length;
+  $('homeSkill').innerHTML = `<div class="card" id="bHomeSkill" style="cursor:pointer"><div class="ahd" style="margin-bottom:4px"><label>${esc(k.first_name)}'s level</label><span class="tip" style="font-size:14px;color:var(--blue-light)">Skills ›</span></div>
+    <div class="ltitle">${esc(l.name)} <span class="tip" style="font-family:'DM Sans',sans-serif;font-size:14px">· ${done} of ${l.skills.length} skills</span></div>
+    <div class="bar"><div style="width:${Math.round(done / l.skills.length * 100)}%"></div></div></div>`;
+  $('bHomeSkill').onclick = () => goTab('tSkills');
+}
+function goTab(t) { const b = document.querySelector(`#nav button[data-t="${t}"]`); if (b) b.click(); }
+function openFam(k) {
+  const f = (id, lb, v, t) => `<div class="fld"><label for="${id}">${lb}</label><input id="${id}" ${t || ''} value="${esc(v || '')}"></div>`;
+  sheet(`<div class="ltitle">Edit family info</div><div style="max-height:62vh;overflow-y:auto">
+    ${f('fFirst', 'First name', k.first_name)}${f('fLast', 'Last name', k.last_name)}${f('fDob', 'Birthday', k.dob, 'type="date"')}
+    ${f('fPar', 'Parent name', k.parent_name)}${f('fPh', 'Parent phone', k.parent_phone && fmt(k.parent_phone), 'type="tel" inputmode="tel"')}
+    <p class="tip" style="margin:6px 0 0">Your phone is your login. If you change it, you'll log in again with the new number and the same code.</p>
+    ${f('fEm', 'Email', k.parent_email, 'type="email"')}${f('fEn', 'Emergency contact', k.emergency_name)}${f('fEp', 'Emergency phone', k.emergency_phone && fmt(k.emergency_phone), 'type="tel" inputmode="tel"')}
+    ${ACCT.kids.length > 1 ? '<p class="tip" style="margin:8px 0 0">Parent and emergency info is saved for all your kids.</p>' : ''}</div>
+    <div class="msg" id="mFam"></div><div class="btns"><button class="btn btn-ghost" id="bFamX">Cancel</button><button class="btn btn-primary" id="bFamOk">Save</button></div>`);
+  $('bFamX').onclick = closeSheet;
+  $('bFamOk').onclick = async () => {
+    if ($('fDob').dataset.part) return say('mFam', 'Please finish the birthday (month, day and year).');
+    const v = id => $(id).value.trim(), b = $('bFamOk'); busy(b, true);
+    const r = await act({ action: 'family_save', student_id: k.id, first_name: v('fFirst'), last_name: v('fLast'), dob: v('fDob'), parent_name: v('fPar'),
+      parent_phone: v('fPh'), parent_email: v('fEm'), emergency_name: v('fEn'), emergency_phone: v('fEp') });
+    busy(b, false);
+    if (r.error) return say('mFam', r.error);
+    closeSheet();
+    if (r.relogin) {
+      alert('Saved. Log in with your new phone number and the same code.');
+      const np = v('fPh').replace(/\D/g, '').slice(-10); localStorage.setItem('fl3-portal-phone', np);
+      await $('bOut').onclick(); $('phone').value = fmt(np); return;
+    }
+    await Promise.all([loadAcct(), sb.rpc('portal_me').then(x => { if (x.data && !x.data.error) ME = x.data; })]);
+  };
+}
+function openWav(k) {
+  let photo = '';
+  sheet(`<div class="ltitle">Waiver for ${esc(k.first_name)}</div><div class="ftxt">${wavHtml()}</div>
+    <label style="margin-top:14px">Photo permission</label><div class="rsvp"><button class="btn btn-pick" data-p="Yes">Yes, OK to share</button><button class="btn btn-pick" data-p="No">No photos</button></div>
+    <div class="fld"><label for="wSig">Type your full name to sign</label><input id="wSig" autocomplete="name" value=""></div>
+    <div class="msg" id="mWav"></div><div class="btns"><button class="btn btn-ghost" id="bWavX">Cancel</button><button class="btn btn-primary" id="bWavOk">Sign</button></div>`);
+  document.querySelectorAll('[data-p]').forEach(x => x.onclick = () => { photo = x.dataset.p; document.querySelectorAll('[data-p]').forEach(y => y.classList.toggle('on', y === x)); say('mWav', ''); });
+  $('bWavX').onclick = closeSheet;
+  $('bWavOk').onclick = async () => {
+    if (!photo) return say('mWav', 'Pick a photo permission.');
+    if ($('wSig').value.trim().length < 3) return say('mWav', 'Type your full name to sign.');
+    const b = $('bWavOk'); busy(b, true);
+    const r = await act({ action: 'waiver_sign', student_id: k.id, signature: $('wSig').value.trim(), photo });
+    busy(b, false);
+    if (r.error) return say('mWav', r.error);
+    closeSheet(); await loadAcct();
+  };
+}
+
+// ================= Message =================
+let MSGS = [], MSG_MORE = false;   // MSGS = newest first (as the server sends); shown oldest at top, newest at bottom
+async function loadMsgs(older) {
+  const box = $('msgList'), bubs = $('msgBubs');
+  const r = await act(older && MSGS.length ? { action: 'messages', before: MSGS[MSGS.length - 1].at } : { action: 'messages' });
+  if (r.error) { bubs.innerHTML = `<p class="msg err" style="margin:0">${esc(r.error)}</p>`; return; }
+  const keep = box.scrollHeight - box.scrollTop;   // stay in place when older ones are added on top
+  MSGS = older ? MSGS.concat(r.list) : r.list; MSG_MORE = r.more;
+  $('bMsgMore').style.display = MSG_MORE ? '' : 'none';
+  $('bMsgClear').style.display = MSGS.length ? '' : 'none';
+  if (!MSGS.length) { bubs.innerHTML = '<p class="tip" style="margin:0">No messages yet.</p>'; return; }
+  let last = '';
+  bubs.innerHTML = [...MSGS].reverse().map(m => {
+    const d = new Date(m.at), day = d.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
+    const tm = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    const head = day !== last ? `<div class="dday">${d.toDateString() === new Date().toDateString() ? 'Today' : esc(day)}</div>` : ''; last = day;
+    return head + `<div class="bub ${m.me ? 'me' : 'co'}">${esc(m.body)}<small>${m.me ? (m.portal ? 'Portal' : 'Text') : 'Coach Steve'} · ${tm}</small></div>`;
+  }).join('');
+  box.scrollTop = older ? box.scrollHeight - keep : box.scrollHeight;
+}
+$('bMsgMore').onclick = async () => { busy($('bMsgMore'), true); await loadMsgs(true); busy($('bMsgMore'), false); };
+$('bMsgClear').onclick = async () => {
+  if (!confirm('Clear your messages? Coach Steve still keeps a copy.')) return;
+  const x = await act({ action: 'clear_msgs' });
+  if (x.error) return say('mMsg', x.error);
+  say('mMsg', ''); loadMsgs();
+};
+document.querySelectorAll('#msgQuick [data-q]').forEach(c => c.onclick = () => { const t = $('msgBox'); t.value = c.dataset.q + t.value; t.focus(); t.setSelectionRange(t.value.length, t.value.length); });
+$('bMsgSend').onclick = async () => {
+  const t = $('msgBox'), body = t.value.trim(), b = $('bMsgSend');
+  if (!body) return say('mMsg', 'Type a message first.');
+  busy(b, true); say('mMsg', '');
+  const x = await act({ action: 'message', body });
+  busy(b, false);
+  if (x.error) return say('mMsg', x.error);
+  t.value = ''; say('mMsg', 'Sent to Coach Steve.', true);
+  loadMsgs();
+};
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+$('bOut').onclick = async () => { await sb.auth.signOut(); ME = DATA = CL = ACCT = null; KID = ''; document.body.classList.remove('in'); $('nav').classList.remove('on'); $('foot').style.display = ''; $('who').textContent = ''; $('phone').value = ''; show('vPhone'); };
+document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => show(b.dataset.go));
+
+(async () => {
+  const { data } = await sb.auth.getSession();
+  if (data.session) return loadHome();
+  const last = localStorage.getItem('fl3-portal-phone');
+  if (last) $('phone').value = fmt(last);
+  show('vPhone');
+})();
+</script>
+</body>
+</html>

@@ -90,7 +90,7 @@ input:focus{outline:none;border-color:var(--btn);box-shadow:0 0 0 3px rgba(67,73
 <body>
 <div id="site-hero">
   <div style="display:flex;align-items:center;gap:12px">
-    <img src="https://fliplabcoachsteve.com/images/logo.png" alt="Flip Lab with Coach Steve" onerror="this.style.display='none';document.getElementById('logoText').style.display='block'">
+    <img id="heroLogo" src="https://fliplabcoachsteve.com/images/logo.png" alt="Flip Lab with Coach Steve" onerror="this.style.display='none';document.getElementById('logoText').style.display='block'">
     <div id="logoText">FLIP LAB</div>
   </div>
   <div id="hero-sub">Tumbling and Training</div>
@@ -98,6 +98,7 @@ input:focus{outline:none;border-color:var(--btn);box-shadow:0 0 0 3px rgba(67,73
 <div class="prog"><div id="dots"></div></div>
 
 <div class="container">
+  <div id="welcome" style="display:none;background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;margin-bottom:14px;font-size:14px;line-height:1.6;color:#444;white-space:pre-line"></div>
   <div class="banner" id="banner"></div>
 
   <!-- STEP 1b — Lesson (first screen) -->
@@ -277,7 +278,7 @@ input:focus{outline:none;border-color:var(--btn);box-shadow:0 0 0 3px rgba(67,73
     <div class="sub">Please review and sign before completing registration.</div>
     <div class="card">
       <div class="lbl" style="margin-bottom:10px">Cancellation Policy</div>
-      <div class="waiver">
+      <div class="waiver" id="polBox">
         <strong>Flip Lab Private Lesson Cancellation Policy</strong><br><br>
         We value the time and commitment of our athletes and families, as well as the time of our coaches. To ensure fairness and consistency, the following cancellation policy is in effect for all private lessons:<br><br>
         <strong>Advance Notice</strong><br>All cancellations must be made at least 24 hours in advance of the scheduled lesson. We understand that emergencies sometimes happen. In such cases, circumstances will be reviewed on a case-by-case basis at the discretion of your coach.<br><br>
@@ -290,7 +291,7 @@ input:focus{outline:none;border-color:var(--btn);box-shadow:0 0 0 3px rgba(67,73
       <div class="checkline"><input type="checkbox" id="cancelAccept"><span>I understand and agree to the cancellation policy above.</span></div>
       <div class="hr"></div>
       <div class="lbl" style="margin-bottom:10px">Liability Waiver</div>
-      <div class="waiver">
+      <div class="waiver" id="wavBox">
         <p>By signing below, I acknowledge that participation in gymnastics, tumbling, and related activities at Flip Lab involves inherent risks of injury. I voluntarily assume all risks associated with participation. I agree to release, waive, and hold harmless Flip Lab, its coaches, staff, and facility from any and all claims, damages, or liability arising from participation, including injuries caused by negligence.</p><br>
         <p>I confirm that the athlete named in this registration is physically fit to participate. I will inform Flip Lab of any medical conditions or limitations that may affect participation.</p><br>
         <p>This waiver is binding on myself, my heirs, and my legal representatives. I have read this agreement and understand its terms.</p>
@@ -327,9 +328,32 @@ input:focus{outline:none;border-color:var(--btn);box-shadow:0 0 0 3px rgba(67,73
 </div>
 
 <script>
+
+// Birthday boxes = Month / Day / Year dropdowns (the phone date picker opens on today and saved wrong years).
+// The original input stays (hidden, same id), so existing .value code keeps working. Partly picked → value '' and data-part="1".
+function dobPick(inp, oldest) {
+  if (!inp || inp.dataset.dob) return; inp.dataset.dob = '1';
+  const P = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value'), start = inp.value, now = new Date().getFullYear();
+  const MO = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const wrap = document.createElement('div'); wrap.className = 'dobrow'; wrap.style.cssText = 'display:grid;grid-template-columns:1.4fr .8fr 1fr;gap:6px;' + (inp.style.flex ? 'flex:1;' : '');
+  const mk = lb => { const s = document.createElement('select'); s.setAttribute('aria-label', lb); s.style.width = '100%'; if (inp.style.margin) s.style.margin = inp.style.margin; wrap.appendChild(s); return s; };
+  const m = mk('Birthday month'), d = mk('Birthday day'), y = mk('Birthday year');
+  m.innerHTML = '<option value="">Month</option>' + MO.map((x, i) => `<option value="${i + 1}">${x}</option>`).join('');
+  let ys = '<option value="">Year</option>'; for (let i = now - 1; i >= oldest; i--) ys += `<option>${i}</option>`; y.innerHTML = ys;
+  const days = () => { const cur = d.value, n = new Date(+y.value || 2000, +m.value || 1, 0).getDate(); let s = '<option value="">Day</option>'; for (let i = 1; i <= n; i++) s += `<option>${i}</option>`; d.innerHTML = s; if (cur && +cur <= n) d.value = cur; };
+  const p2 = v => String(v).padStart(2, '0');
+  const sync = () => { days(); const all = m.value && d.value && y.value; P.set.call(inp, all ? `${y.value}-${p2(m.value)}-${p2(d.value)}` : ''); inp.dataset.part = !all && (m.value || d.value || y.value) ? '1' : ''; };
+  m.onchange = y.onchange = d.onchange = sync;
+  Object.defineProperty(inp, 'value', { get() { return P.get.call(inp); }, set(v) {
+    const t = /^(\d{4})-(\d{2})-(\d{2})/.exec(v || ''); P.set.call(inp, t ? t[0] : ''); inp.dataset.part = '';
+    if (t && ![...y.options].some(o => o.value === String(+t[1]))) y.add(new Option(String(+t[1]), String(+t[1])), +t[1] > now - 1 ? 1 : undefined);
+    y.value = t ? String(+t[1]) : ''; m.value = t ? String(+t[2]) : ''; days(); d.value = t ? String(+t[3]) : ''; } });
+  inp.type = 'hidden'; inp.after(wrap); inp.value = start;
+}
+document.querySelectorAll('#dob,#sibDob').forEach(i => dobPick(i, new Date().getFullYear() - 25));
 const sb = supabase.createClient('https://angmtyojkwlrefxpcgoa.supabase.co', 'sb_publishable_fPciNfnNHpHQikB8mqHNpw_hIVRIGo5');
 const GYM = new URLSearchParams(location.search).get('gym') || 'fliplab';
-const VENMO = 'https://venmo.com/code?user_id=2634245503713280412', ZELLE = '951-317-5158';
+let VENMO = 'https://venmo.com/code?user_id=2634245503713280412', ZELLE = '951-317-5158', COACH = 'Coach Steve', MINE = true;   // MINE = a confirmation email goes out (Flip Lab, or a gym with its email connected)
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
@@ -422,7 +446,7 @@ async function loadSlots(forWaitlist) {
   const joining = sharingFriend() && friends().length;
   list = allSlots.filter(s => !s.taken || (joining && s.friend));
   if (!list.length) {
-    $('slotGrid').innerHTML = `<div class="err">Coach Steve's private lesson schedule is currently full. We'd love to work with your athlete — tap <b>Join the waitlist</b> below and we'll reach out as soon as a spot opens.</div>`;
+    $('slotGrid').innerHTML = `<div class="err">${COACH}'s private lesson schedule is currently full. We'd love to work with your athlete — tap <b>Join the waitlist</b> below and we'll reach out as soon as a spot opens.</div>`;
     return;
   }
   $('slotGrid').innerHTML = (joining && !list.some(s => s.friend) ? '<div style="font-size:12px;color:#888;margin-bottom:10px">We couldn\'t find your friend\'s time — check the spelling, or pick an open time below.</div>' : '')
@@ -513,7 +537,7 @@ const waitPay = () => path === 'waitlist' && fmt !== 'class';
 function pickPay(p) {
   pay = p; ['Cash','Venmo','Zelle'].forEach(x => $('pay-' + x).classList.toggle('selected', x === p));
   $('payInfo').style.display = 'block';
-  if (waitPay()) { $('payInfo').innerHTML = '<strong>Nothing to pay now.</strong><br>Once Coach Steve finds you a spot, you\'ll pay at each lesson.'; return; }
+  if (waitPay()) { $('payInfo').innerHTML = '<strong>Nothing to pay now.</strong><br>Once ' + COACH + ' finds you a spot, you\'ll pay at each lesson.'; return; }
   $('payInfo').innerHTML = p === 'Cash' ? '<strong>Cash</strong><br>Please bring exact change to your lesson. Payment is due at the time of service.'
     : p === 'Venmo' ? `<strong>Venmo</strong><br>Follow the link below to make a payment, or save the link to pay later. You can pay now or when the lesson is complete. Please include your athlete's name and lesson date in the payment note.<br><br><a class="go" href="${VENMO}" target="_blank">Pay with Venmo →</a>`
     : `<strong>Zelle</strong><br>Send payment to <strong>${ZELLE}</strong><br>Please include your athlete's name and lesson date in the payment note. Payment is due at the time of service.`;
@@ -565,10 +589,44 @@ async function submitForm() {
   $('summaryBox').innerHTML = lines.join('<br>');
   if (res.result === 'waitlist') { $('doneTitle').textContent = "You're on the List!"; $('doneSub').textContent = "We'll reach out as soon as a spot opens that matches your availability."; }
   else if (hasSib) { $('doneTitle').textContent = 'Both Athletes Registered!'; $('doneSub').textContent = 'Both athletes have been registered and linked as a shared lesson.'; }
-  $('doneNext').textContent = res.result === 'waitlist' ? 'Coach Steve will text you when a spot opens up. A confirmation email is on its way.'
-    : 'Coach Steve will reach out to confirm your first session. Send payment via Venmo or Zelle (' + ZELLE + ') when you\'re ready, or bring cash. A confirmation email is on its way.';
+  const conf = MINE ? ' A confirmation email is on its way.' : '', ways = [VENMO && 'Venmo', ZELLE && 'Zelle (' + ZELLE + ')'].filter(Boolean).join(' or ');
+  $('doneNext').textContent = res.result === 'waitlist' ? COACH + ' will text you when a spot opens up.' + conf
+    : COACH + ' will reach out to confirm your first session. ' + (ways ? 'Send payment via ' + ways + ' when you\'re ready, or bring cash.' : 'Payment is due at each lesson.') + conf;
   show('Done');
 }
+
+// ===== Per-gym look + policy/waiver (⚙ Settings in admin → gym_settings 'settings', read via signup_look) =====
+// Flip Lab keeps its page exactly as written above unless Steve changes these in Settings.
+(async function applyLook() {
+  let L = null; try { L = (await sb.rpc('signup_look', { p_slug: GYM })).data; } catch (e) {}
+  if (!L) return;
+  const E = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const me = GYM !== 'fliplab', hrs = +L.cancel_hrs || 24, hero = document.getElementById('site-hero');
+  if (me) {
+    MINE = !!L.mail; VENMO = L.c_venmo || ''; ZELLE = L.c_zelle || '';
+    if (L.coach) COACH = /^coach\b/i.test(L.coach) ? L.coach : 'Coach ' + L.coach;
+    document.title = L.name + ' — Register Your Athlete';
+    document.querySelectorAll('.ltype-desc').forEach(el => el.textContent = el.textContent.replace('Coach Steve', COACH));
+    document.getElementById('zelleSub').textContent = ZELLE ? '— ' + ZELLE : '';
+    if (!VENMO) document.getElementById('pay-Venmo').style.display = 'none';
+    if (!ZELLE) document.getElementById('pay-Zelle').style.display = 'none';
+    const pd = document.querySelector('#photo-Yes .d'); if (pd) pd.textContent = pd.textContent.replace("Flip Lab's", L.name + "'s");
+    document.getElementById('doneSub').textContent = 'Welcome to ' + L.name + '! ' + COACH + ' will be in touch soon.';
+    const img = document.getElementById('heroLogo'), txt = document.getElementById('logoText');
+    txt.textContent = L.name; document.getElementById('hero-sub').style.display = 'none';
+    if (L.logo_url) { img.src = L.logo_url; img.alt = L.name; txt.style.display = 'block'; } else { img.style.display = 'none'; txt.style.display = 'block'; }
+    if (L.color) { const r = document.documentElement.style; ['--hero', '--btn', '--accent'].forEach(k => r.setProperty(k, L.color)); }
+  }
+  if (L.su_header === 'white') { hero.style.background = '#fff'; hero.style.borderBottom = '1px solid #eee'; document.getElementById('logoText').style.color = '#1f2933'; }
+  else if (L.su_header === 'main' && L.color) hero.style.background = L.color;
+  if (L.su_welcome) { const w = document.getElementById('welcome'); w.textContent = L.su_welcome; w.style.display = 'block'; }
+  // Plain text from Settings → paragraphs; a short first line of a paragraph becomes its heading
+  const fmt = t => t.trim().split(/\n\s*\n/).map(p => { const ls = p.split('\n').map(E); return (ls.length > 1 && ls[0].length < 70 ? '<strong>' + ls.shift() + '</strong><br>' : '') + ls.join('<br>'); }).join('<br><br>');
+  const pol = document.getElementById('polBox'), wav = document.getElementById('wavBox');
+  const swap = h => (me ? h.replace(/Flip Lab/g, E(L.name)) : h).replace(/24 hours/g, hrs + ' hours');
+  pol.innerHTML = L.policy_text ? fmt(L.policy_text) : swap(pol.innerHTML);
+  wav.innerHTML = L.waiver_text ? fmt(L.waiver_text) : swap(wav.innerHTML);
+})();
 </script>
 </body>
 </html>

@@ -8,6 +8,7 @@ const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers
 const json = (o: unknown) => new Response(JSON.stringify(o), { headers: { ...cors, "Content-Type": "application/json" } });
 const FROM = "thefliplab@yahoo.com", ZELLE = "951-317-5158", VENMO = "https://venmo.com/code?user_id=2634245503713280412";
 const txt = (h: string) => h.replace(/<br>|<\/p>/g, "\n").replace(/<[^>]+>/g, "").replace(/\n\s+/g, "\n").trim();
+const HOSTS: Record<string, string> = { gmail: "smtp.gmail.com", yahoo: "smtp.mail.yahoo.com", aol: "smtp.aol.com" };
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]!));
 
 Deno.serve(async (req) => {
@@ -18,6 +19,21 @@ Deno.serve(async (req) => {
   const { data: kids } = await db.from("students").select("id,gym_id,first_name,last_name,skill_level,parent_name,parent_phone,parent_email,extra")
     .in("id", (ids as string[]).slice(0, 2)).gte("created_at", since).eq("extra->>Source", "3.0 sign-up").is("extra->>Notified", null);
   if (!kids?.length) return json({ ok: true, skipped: true });
+  // Flip Lab → Steve's Yahoo (+ coach text). Other gyms → only from their OWN connected email (email-connect), never Steve's.
+  const { data: g } = await db.from("gyms").select("name,slug").eq("id", kids[0].gym_id).maybeSingle();
+  const mine = g?.slug === "fliplab";
+  let from = FROM, pw = Deno.env.get("YAHOO_APP_PASSWORD"), host = "smtp.mail.yahoo.com", GN = "Flip Lab", CN = "Coach Steve", Z = ZELLE, V = VENMO;
+  if (!mine) {
+    const { data: cr } = await db.rpc("gym_email_get", { p_gym: kids[0].gym_id });
+    const c = (cr || [])[0];
+    if (!c || !HOSTS[c.provider]) return json({ ok: true, skipped: "gym email not connected" });
+    const [{ data: st }, { data: co }] = await Promise.all([
+      db.from("gym_settings").select("value").eq("gym_id", kids[0].gym_id).eq("key", "settings").maybeSingle(),
+      db.from("coaches").select("name").eq("gym_id", kids[0].gym_id).eq("active", true).order("created_at").limit(1).maybeSingle()]);
+    from = c.address; pw = c.pw; host = HOSTS[c.provider]; GN = g?.name || "Your gym";
+    CN = co?.name ? (/^coach\b/i.test(co.name) ? co.name : "Coach " + co.name) : GN;
+    Z = st?.value?.c_zelle || ""; V = st?.value?.c_venmo || "";
+  }
   for (const k of kids) await db.from("students").update({ extra: { ...k.extra, Notified: new Date().toISOString(), ...(shareType ? { ShareType: String(shareType).slice(0, 30) } : {}) } }).eq("id", k.id);
 
   const k = kids[0], names = kids.map((x) => x.first_name + " " + x.last_name).join(" & ");
@@ -25,26 +41,26 @@ Deno.serve(async (req) => {
   const pay = k.extra?.PaymentMethod || "";
   const lines = [`<b>Athlete:</b> ${esc(names)}`, `<b>Parent:</b> ${esc(k.parent_name)} · ${esc(k.parent_phone)} · ${esc(k.parent_email)}`,
     `<b>Signed up for:</b> ${esc(what)}`, pay ? `<b>Payment:</b> ${esc(pay)}` : "", shareType && shareType !== "Solo" ? `<b>Sharing:</b> ${esc(shareType)}${k.extra?.FriendName ? " (" + esc(k.extra.FriendName) + ")" : ""}` : ""].filter(Boolean).join("<br>");
-  const payHtml = pay === "Zelle" ? `Zelle: <b>${ZELLE}</b>` : pay === "Venmo" ? `<a href="${VENMO}">Pay with Venmo</a>` : "Cash at the lesson";
+  const payHtml = pay === "Zelle" && Z ? `Zelle: <b>${esc(Z)}</b>` : pay === "Venmo" && V ? `<a href="${esc(V)}">Pay with Venmo</a>` : "Cash at the lesson";
   const isWait = /waitlist/i.test(what);
   const parentHtml = `<div style="font-family:Arial,sans-serif;font-size:15px;color:#222;line-height:1.6">
     <p>Hi ${esc(parentFirst)}!</p>
-    <p>${isWait ? `Thanks for signing up ${esc(first)}. You're on the Flip Lab waitlist, and I'll reach out as soon as a spot opens that fits your times.`
+    <p>${isWait ? `Thanks for signing up ${esc(first)}. You're on the ${esc(GN)} waitlist, and I'll reach out as soon as a spot opens that fits your times.`
       : `Thanks for signing up ${esc(first)}! You're all set: <b>${esc(what)}</b>.`}</p>
     ${isWait ? "" : `<p>Payment is due at each lesson: ${payHtml}. Please include the athlete's name and lesson date in the payment note.</p>`}
-    <p>Questions? Just reply to this email or text me.</p><p>Coach Steve<br>Flip Lab</p></div>`.replace(/\n\s*/g, "");   // one line: blank/indented lines showed up as "=20" in mail apps
+    <p>Questions? Just reply to this email or text me.</p><p>${esc(CN)}<br>${esc(GN)}</p></div>`.replace(/\n\s*/g, "");   // one line: blank/indented lines showed up as "=20" in mail apps
 
-  const pw = Deno.env.get("YAHOO_APP_PASSWORD");
   const out: Record<string, unknown> = {};
   if (pw) {
     try {
-      const client = new SMTPClient({ connection: { hostname: "smtp.mail.yahoo.com", port: 465, tls: true, auth: { username: FROM, password: pw } } });
-      if (k.parent_email) await client.send({ from: `Flip Lab <${FROM}>`, to: k.parent_email, replyTo: FROM, subject: isWait ? "You're on the Flip Lab waitlist" : "Welcome to Flip Lab!", html: parentHtml, content: txt(parentHtml) });
-      await client.send({ from: `Flip Lab <${FROM}>`, to: FROM, subject: `New sign-up: ${names}`, html: `<div style="font-family:Arial,sans-serif;font-size:14px">${lines}</div>`, content: txt(lines) });
+      const client = new SMTPClient({ connection: { hostname: host, port: 465, tls: true, auth: { username: from, password: pw } } });
+      if (k.parent_email) await client.send({ from: `${GN} <${from}>`, to: k.parent_email, replyTo: from, subject: isWait ? `You're on the ${GN} waitlist` : `Welcome to ${GN}!`, html: parentHtml, content: txt(parentHtml) });
+      await client.send({ from: `${GN} <${from}>`, to: from, subject: `New sign-up: ${names}`, html: `<div style="font-family:Arial,sans-serif;font-size:14px">${lines}</div>`, content: txt(lines) });
       await client.close();
       out.email = true;
     } catch (e) { out.email = String((e as Error).message || e).slice(0, 200); }
   }
+  if (!mine) return json({ ok: true, ...out });   // coach text below uses Steve's phone → Flip Lab only
   // text the main coach (coach whose email = gym login)
   const { data: co } = await db.from("coaches").select("phone").eq("gym_id", k.gym_id).eq("email", FROM).maybeSingle();
   const d = String(co?.phone || "").replace(/\D/g, ""), to = d.length === 10 ? "+1" + d : null;

@@ -53,6 +53,13 @@
   .srow.tap { cursor:pointer; } .srow.tap:hover { background:#f6fbf9; }
   .ovl { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:flex-start; justify-content:center; z-index:20; overflow:auto; padding:30px 12px; }
   .mdl { background:#fff; border-radius:12px; width:100%; max-width:460px; padding:16px; }
+  .skrow { display:flex; align-items:center; gap:10px; padding:10px 4px; border-bottom:1px solid #f0f0f0; cursor:pointer; font-size:14px; }
+  .skbx { width:22px; height:22px; border-radius:6px; border:1.5px solid #b8c0c8; display:flex; align-items:center; justify-content:center; flex-shrink:0; color:#fff; font-size:14px; }
+  .skrow.on .skbx { background:#1D9E75; border-color:#1D9E75; } .skrow .dt { margin-left:auto; font-size:12px; color:#999; }
+  .skbar { height:8px; background:#eef0f2; border-radius:4px; overflow:hidden; } .skbar div { height:100%; background:#1D9E75; }
+  .sklv { display:flex; justify-content:space-between; padding:10px 4px; border-bottom:1px solid #f0f0f0; font-size:14px; cursor:pointer; }
+  .skbtn { display:flex; justify-content:space-between; padding:10px; border:1px solid #5DCAA5; border-radius:8px; background:#E1F5EE; color:#085041; font-size:15px; margin:4px 0 10px; cursor:pointer; }
+  .skchip { font-size:13px; padding:5px 12px; border-radius:20px; border:1px solid var(--line); background:#fff; cursor:pointer; } .skchip.on { background:#E1F5EE; color:#085041; border-color:#5DCAA5; }
   .mdl .mh { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; } .mdl .mh b { font-size:16px; }
   .mdl .x { background:#fff; border:1px solid var(--line); border-radius:6px; padding:4px 10px; }
   .mdl input[readonly] { background:#f9f8f5; }
@@ -98,7 +105,7 @@
 </style>
 </head>
 <body>
-<nav><b>Flip<span>Lab</span> 3.0</b>
+<nav><b id="brand">Flip<span>Lab</span> 3.0</b>
   <div id="tabs" class="hidden"><button id="tabBtn_dashboard" onclick="go('dashboard')">Dashboard</button><button id="tabBtn_schedule" onclick="go('schedule')">Schedule</button><button id="tabBtn_attendance" onclick="go('attendance')">Attendance</button><button id="tabBtn_classes" onclick="go('classes')">Classes</button><button id="tabBtn_openings" onclick="go('openings')">Openings</button><button id="tabBtn_pairings" onclick="go('pairings')">Pairings</button><button id="tabBtn_comm" onclick="go('comm')">Communicate</button><button id="tabBtn_msgs" onclick="go('msgs')">Messages<span id="msgBadge" class="hidden" style="background:#d64545;color:#fff;border-radius:9px;padding:0 6px;margin-left:4px;font-size:11px"></span></button><button id="tabBtn_payments" onclick="go('payments')">Payments</button><button id="tabBtn_students" onclick="go('students')">Students</button><button id="tabBtn_slots" onclick="go('slots')">Slots</button></div>
   <button id="outBtn" class="hidden" onclick="openAcct()">⚙ Account</button></nav>
 <main>
@@ -122,11 +129,18 @@
     <div class="card center">Your account is created. Waiting for it to be linked to a gym.</div>
   </section>
 
+  <!-- First-login setup wizard (new coaches) -->
+  <section id="setupView" class="hidden"><div class="card" id="wzCard"></div></section>
+
+  <!-- Import students from another program -->
+  <section id="importView" class="hidden"><div class="card" id="imCard"></div></section>
+
   <!-- Students -->
   <section id="studentsView" class="hidden">
     <div class="toolbar">
       <input id="q" placeholder="Search students or parents" oninput="render()">
       <button class="btn" onclick="openEdit(null)">+ Add</button>
+      <button class="btn ghost" style="width:auto;white-space:nowrap" onclick="imStart()">⬆ Import</button>
     </div>
     <div class="stabs" id="grpTabs" style="margin-top:10px"></div>
     <div class="chk"><input type="checkbox" id="showInactive" onchange="render()"><label for="showInactive">Show inactive &amp; dropped</label></div>
@@ -161,7 +175,7 @@
       <button onclick="shiftWeek(1)">Next →</button>
       <div class="wklabel" id="wkLabel"></div>
       <button onclick="openAdd()" style="background:var(--mint);color:#fff;border:0;font-weight:600">+ Add lesson</button>
-      <button onclick="openPrint()">🖨 Print</button>
+      <button id="printBtn" onclick="openPrint()">🖨 Print</button>
     </div>
     <div class="wk">
       <select id="coachFilter" onchange="renderWeek()"><option value="">All coaches</option></select>
@@ -332,7 +346,7 @@
     <div id="sdTop"></div>
     <div class="stabs" id="sdTabs">
       <button data-t="profile" onclick="sdTab('profile')">Profile</button><button data-t="schedule" onclick="sdTab('schedule')">Schedule</button>
-      <button data-t="payments" onclick="sdTab('payments')">Payments</button><button data-t="attendance" onclick="sdTab('attendance')">Attendance</button>
+      <button data-t="payments" onclick="sdTab('payments')">Payments</button><button data-t="attendance" onclick="sdTab('attendance')">Attendance</button><button data-t="skills" onclick="sdTab('skills')">Skills</button>
     </div>
     <div id="sdPanel" class="hidden"></div>
     <div class="card" id="sdProfile">
@@ -426,13 +440,21 @@
     <button class="btn" id="ck_save" onclick="ckSave()" disabled>Add to class</button>
   </div>
 </div>
+<div class="ovl hidden" id="skModal" style="z-index:30" onclick="if(event.target===this)skClose()">
+  <div class="mdl">
+    <div class="mh"><b>Skills</b><button class="x" onclick="skClose()">Done</button></div>
+    <div id="skKids" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
+    <div id="skQBody"></div>
+    <div style="font-size:12px;color:#999;margin-top:10px">Full history and other levels are on the Student page.</div>
+  </div>
+</div>
 <div class="ovl hidden" id="lessonModal" onclick="if(event.target===this)closeLesson()">
   <div class="mdl">
     <div class="mh"><b id="lm_title">Edit lesson</b><button class="x" onclick="closeLesson()">✕</button></div>
     <label>Student</label><input id="lm_student" readonly>
     <div class="row2">
       <div><label>Coach</label><select id="lm_coach"></select></div>
-      <div><label>Skill level</label><input id="lm_skill" readonly></div>
+      <div><label>Skill level</label><div id="lm_skill" class="skbtn" onclick="skQuick()">…</div></div>
     </div>
     <div class="row2">
       <div><label>Move to day</label><select id="lm_day"></select></div>
@@ -474,17 +496,18 @@
   <div class="mdl">
     <div class="mh"><b>Account</b><button class="x" onclick="$('acctModal').classList.add('hidden')">✕</button></div>
     <div id="acctEmail" style="font-size:13px;color:var(--muted);margin-bottom:10px"></div>
+    <button class="btn ghost" style="margin-bottom:12px" onclick="$('acctModal').classList.add('hidden');stOpen()">⚙ Settings — look, prices, payment buttons</button>
     <label>New password</label><input id="pw1" type="password" autocomplete="new-password">
     <label>Type it again</label><input id="pw2" type="password" autocomplete="new-password">
     <button class="btn" onclick="changePw()">Change password</button>
     <div id="pwMsg" class="msg"></div>
-    <div style="border-top:1px solid #eee;margin-top:14px;padding-top:10px"><b>Google Calendar sync</b>
+    <div style="border-top:1px solid #eee;margin-top:14px;padding-top:10px"><div id="calBox"><b>Google Calendar sync</b>
       <label>Sync</label><select id="cs_mode"><option value="off">Off</option><option value="test">Test calendar</option><option value="live">Live — real Flip Lab calendar</option></select>
       <label>Test calendar ID</label><input id="cs_test" placeholder="…@group.calendar.google.com">
       <label>Live calendar ID (Flip Lab)</label><input id="cs_live" placeholder="…@group.calendar.google.com">
       <div class="row2"><div><label>Other coaches' color</label><select id="cs_color"></select></div>
         <div><label>&nbsp;</label><label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="cs_class" style="width:auto"> Classes on calendar</label></div></div>
-      <button class="btn" onclick="saveCal()">Save calendar settings</button>
+      <button class="btn" onclick="saveCal()">Save calendar settings</button></div>
       <button class="btn ghost" style="margin-top:8px" onclick="testText()">📱 Send test text to my phone</button>
       <button class="btn ghost" style="margin-top:8px" onclick="testEmail()">✉️ Send test email</button>
       <div id="cs_msg" class="msg"></div>
@@ -495,6 +518,13 @@
       <label>Specialty</label><input id="co_spec" placeholder="e.g. Cheer, jumps">
       <button class="btn" onclick="addCoach()">+ Add coach</button>
       <div id="coMsg" class="msg"></div>
+      <div id="invBox" class="hidden" style="border-top:1px dashed #ddd;margin-top:12px;padding-top:10px"><b>Invite a coach to their own gym</b>
+        <div style="font-size:12px;color:var(--muted)">They get an empty FlipLab of their own. They never see your gym.</div>
+        <div class="row2"><div><label>Coach name</label><input id="iv_name" placeholder="Coach Jamie"></div><div><label>Phone or email</label><input id="iv_contact" placeholder="(513) 555-2210"></div></div>
+        <button class="btn" onclick="makeInvite()">Create invite link</button>
+        <div id="ivMsg" class="msg"></div>
+        <div id="ivList" style="margin-top:8px"></div>
+      </div>
     </div>
     <button class="btn ghost" style="margin-top:14px" onclick="$('acctModal').classList.add('hidden');signOut()">Sign out</button>
   </div>
@@ -560,7 +590,7 @@
     <div id="qp_who" style="font-weight:600"></div>
     <label>Amount</label><input id="qp_amount" type="number" step="1" min="0">
     <div class="chk"><input type="checkbox" id="qp_special"><label for="qp_special">Special price — counts as paid in full</label></div>
-    <div class="row2" style="grid-template-columns:1fr 1fr 1fr">
+    <div class="row2" id="payBtns" style="grid-template-columns:1fr 1fr 1fr">
       <button class="btn" onclick="savePay('Cash')">Cash</button><button class="btn" onclick="savePay('Venmo')">Venmo</button><button class="btn" onclick="savePay('Zelle')">Zelle</button>
     </div>
     <div id="qp_msg" class="msg"></div>
@@ -697,7 +727,74 @@
 </style>
 <script src="week.js"></script>
 <script>
+// Birthday boxes = Month / Day / Year dropdowns (the phone date picker opens on today and saved wrong years).
+// The original input stays (hidden, same id), so existing .value code keeps working. Partly picked → value '' and data-part="1".
+function dobPick(inp, oldest) {
+  if (!inp || inp.dataset.dob) return; inp.dataset.dob = '1';
+  const P = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value'), start = inp.value, now = new Date().getFullYear();
+  const MO = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const wrap = document.createElement('div'); wrap.className = 'dobrow'; wrap.style.cssText = 'display:grid;grid-template-columns:1.4fr .8fr 1fr;gap:6px;' + (inp.style.flex ? 'flex:1;' : '');
+  const mk = lb => { const s = document.createElement('select'); s.setAttribute('aria-label', lb); s.style.width = '100%'; if (inp.style.margin) s.style.margin = inp.style.margin; wrap.appendChild(s); return s; };
+  const m = mk('Birthday month'), d = mk('Birthday day'), y = mk('Birthday year');
+  m.innerHTML = '<option value="">Month</option>' + MO.map((x, i) => `<option value="${i + 1}">${x}</option>`).join('');
+  let ys = '<option value="">Year</option>'; for (let i = now - 1; i >= oldest; i--) ys += `<option>${i}</option>`; y.innerHTML = ys;
+  const days = () => { const cur = d.value, n = new Date(+y.value || 2000, +m.value || 1, 0).getDate(); let s = '<option value="">Day</option>'; for (let i = 1; i <= n; i++) s += `<option>${i}</option>`; d.innerHTML = s; if (cur && +cur <= n) d.value = cur; };
+  const p2 = v => String(v).padStart(2, '0');
+  const sync = () => { days(); const all = m.value && d.value && y.value; P.set.call(inp, all ? `${y.value}-${p2(m.value)}-${p2(d.value)}` : ''); inp.dataset.part = !all && (m.value || d.value || y.value) ? '1' : ''; };
+  m.onchange = y.onchange = d.onchange = sync;
+  Object.defineProperty(inp, 'value', { get() { return P.get.call(inp); }, set(v) {
+    const t = /^(\d{4})-(\d{2})-(\d{2})/.exec(v || ''); P.set.call(inp, t ? t[0] : ''); inp.dataset.part = '';
+    if (t && ![...y.options].some(o => o.value === String(+t[1]))) y.add(new Option(String(+t[1]), String(+t[1])), +t[1] > now - 1 ? 1 : undefined);
+    y.value = t ? String(+t[1]) : ''; m.value = t ? String(+t[2]) : ''; days(); d.value = t ? String(+t[3]) : ''; } });
+  inp.type = 'hidden'; inp.after(wrap); inp.value = start;
+}
+const dobAll = () => document.querySelectorAll('input#f_dob, input#imf_dob, input[id^="mi_d_"]').forEach(i => dobPick(i, 1940));
+new MutationObserver(dobAll).observe(document.body, { childList: true, subtree: true }); dobAll();
 const sb = supabase.createClient('https://angmtyojkwlrefxpcgoa.supabase.co', 'sb_publishable_fPciNfnNHpHQikB8mqHNpw_hIVRIGo5');
+// ===== Other gyms: "send it yourself" (Steve's phone / Yahoo / Voice are Flip Lab only — the server refuses other gyms) =====
+// Every sms-send / send-email / voice-send call from a non-Flip Lab gym opens a list instead: 📱 Text / ✉️ Email buttons
+// that open the coach's own Messages / Mail app with the message filled in. Logged as "Sent by hand" (best effort).
+// sb.functions makes a new client on every read, so keep one and pin it to sb
+const sbFn = sb.functions, sbInvoke = sbFn.invoke.bind(sbFn);
+Object.defineProperty(sb, 'functions', { get: () => sbFn });
+sbFn.invoke = async (name, opts) => {
+  if (!gymSlug || gymSlug === 'fliplab' || !['sms-send', 'send-email', 'voice-send'].includes(name) || (name === 'send-email' && SET.email_from)) return sbInvoke(name, opts);   // connected email → real send
+  const b = (opts && opts.body) || {};
+  if (b.check) return { data: name === 'voice-send' ? { ok: false } : { checked: 0, changed: 0 }, error: null };
+  const list = name === 'voice-send' ? [{ to: b.to, text: b.text, student_id: b.student_id, family: b.family }] : (b.messages || []);
+  hsAdd(name === 'send-email' ? 'email' : 'text', list);
+  const results = list.map(m => ({ to: m.to, ok: true }));
+  return { data: name === 'voice-send' ? { ok: true } : { sent: list.length, failed: 0, results }, error: null };
+};
+let hs = [];
+function hsAdd(kind, list) {
+  list.forEach(m => hs.push({ kind, to: String(m.to || '').trim(), subject: m.subject || gymTitle, text: m.text || '', sid: m.student_id || null, fam: m.family || '', done: false }));
+  // best-effort log so Messages / history still show it
+  const now = new Date().toISOString();
+  if (kind === 'text') sb.from('text_log').insert(list.map(m => ({ gym_id: gymId, direction: 'OUT', phone: String(m.to || '').replace(/\D/g, '').slice(-10), student_id: m.student_id || null, family_name: m.family || null, body: m.text, status: 'Sent by hand', received_at: now, extra: { hand: true } }))).then(() => {}, () => {});
+  else sb.from('email_log').insert(list.map(m => ({ gym_id: gymId, to_email: m.to || '(none)', student_id: m.student_id || null, family_name: m.family || null, subject: m.subject || gymTitle, body: m.text || '', status: 'Sent by hand' }))).then(() => {}, () => {});
+  hsDraw();
+}
+function hsHref(x) {
+  return x.kind === 'text' ? 'sms:' + x.to.replace(/\D/g, '') + '?&body=' + encodeURIComponent(x.text)
+    : 'mailto:' + encodeURIComponent(x.to) + '?subject=' + encodeURIComponent(x.subject) + '&body=' + encodeURIComponent(x.text);
+}
+function hsDraw() {
+  let el = $('hsBox');
+  if (!el) { el = document.createElement('div'); el.id = 'hsBox'; el.className = 'ovl'; document.body.appendChild(el); }
+  if (!hs.length) return el.classList.add('hidden');
+  el.classList.remove('hidden');
+  const same = hs.every(x => x.text === hs[0].text), left = hs.filter(x => !x.done).length;
+  el.innerHTML = `<div class="mdl"><div class="mh"><b>Send these from your phone (${left} left)</b><button class="x" onclick="hs=[];hsDraw()">✕</button></div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:8px">Tap each one. Your Messages or Mail app opens with the message filled in. Just hit send.</div>
+    ${same ? `<button class="btn ghost" style="margin-bottom:8px" onclick="hsCopy(0)">📋 Copy message</button>` : ''}
+    ${hs.map((x, i) => `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid #eee;${x.done ? 'opacity:.45' : ''}">
+      <div style="flex:1;min-width:0"><b style="font-size:14px">${esc(x.fam || x.to)}</b><div style="font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.to)}${same ? '' : ' · ' + esc(x.text.slice(0, 60))}</div></div>
+      ${same ? '' : `<button class="paybtn" onclick="hsCopy(${i})">📋</button>`}
+      ${x.to ? `<a class="paybtn" style="text-decoration:none;background:var(--mint);color:#fff" href="${esc(hsHref(x))}" onclick="hs[${i}].done=true;setTimeout(hsDraw,300)">${x.done ? '✓ ' : ''}${x.kind === 'text' ? '📱 Text' : '✉️ Email'}</a>` : '<small style="color:#A32D2D">no ' + (x.kind === 'text' ? 'phone' : 'email') + '</small>'}</div>`).join('')}
+    <button class="btn" style="margin-top:12px" onclick="hs=[];hsDraw()">Done</button></div>`;
+}
+function hsCopy(i) { const t = hs[i].text; (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => alert('Copied'), () => prompt('Copy this message:', t)); }
 // Phone layout: (513) 555-1234. 10 digits (or 11 starting with 1) get formatted; anything else is left as typed.
 function fmtPhone(v) { v = String(v || '').trim(); let d = v.replace(/\D/g, ''); if (d.length === 11 && d[0] === '1') d = d.slice(1); return d.length === 10 ? '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6) : v; }
 function typingPhone(v) { let d = v.replace(/\D/g, ''); if (d.length > 10) return v; return !d ? '' : d.length < 4 ? '(' + d : d.length < 7 ? '(' + d.slice(0, 3) + ') ' + d.slice(3) : '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6); }
@@ -712,7 +809,7 @@ const $ = id => document.getElementById(id);
 const ss = { get(k, d) { try { const v = sessionStorage.getItem('fl3_' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
              set(k, v) { try { sessionStorage.setItem('fl3_' + k, JSON.stringify(v)); } catch (e) {} } };
 function show(view) {
-  ['loginView','waitView','studentsView','editView','scheduleView','attendanceView','classesView','paymentsView','openingsView','dashboardView','slotsView','pairingsView','commView','msgsView'].forEach(v => $(v).classList.toggle('hidden', v !== view));
+  ['loginView','waitView','setupView','importView','studentsView','editView','scheduleView','attendanceView','classesView','paymentsView','openingsView','dashboardView','slotsView','pairingsView','commView','msgsView'].forEach(v => $(v).classList.toggle('hidden', v !== view));
   $('outBtn').classList.toggle('hidden', view === 'loginView');
   $('tabs').classList.toggle('hidden', !gymId);
   ['dashboard','schedule','attendance','classes','openings','pairings','comm','msgs','payments','students','slots'].forEach(t => $('tabBtn_' + t).classList.toggle('on', view === t + 'View'));
@@ -742,7 +839,8 @@ async function openAcct() {
   const { data: { user } } = await sb.auth.getUser();
   $('acctEmail').textContent = user ? 'Signed in as ' + user.email : '';
   $('pw1').value = $('pw2').value = ''; $('pwMsg').textContent = '';
-  renderCoaches(); loadCal(); $('acctModal').classList.remove('hidden');
+  renderCoaches(); loadCal(); $('acctModal').classList.remove('hidden')
+  loadInvites();
 }
 
 // ================= PAIRINGS: current solo students + waitlist who could share a lesson =================
@@ -956,6 +1054,195 @@ async function openLevels() {
   $('lvBody').innerHTML = (L.data || []).map(l => { const list = sk.filter(x => x.level_id === l.id);
     return `<details style="border-bottom:1px solid #f0f0f0;padding:8px 2px"><summary style="cursor:pointer"><b>${esc(l.code.split('-')[0])}</b> · ${esc(l.name)} <small style="color:#888">${list.length ? list.length + ' skills' : ''}</small></summary>
       ${list.length ? '<ul style="margin:6px 0 2px 18px;padding:0;font-size:13px">' + list.map(x => '<li>' + esc(x.name) + '</li>').join('') + '</ul>' : '<small style="color:#888;display:block;margin-top:4px">Skills not copied to 3.0 yet (run export3Skills).</small>'}</details>`; }).join('');
+}
+// ================= SKILLS CHECKLIST (admin: Student page Skills tab + quick check-off from Edit lesson) =================
+// Same tables the parent portal reads: skill_levels, skills, student_skills (check-offs), skill_log (level moves)
+let SK = null, skStu = null, skOpenLv = null, skKidsList = [];
+async function skLoad() {
+  if (SK) return SK;
+  const [L, S] = await Promise.all([sb.from('skill_levels').select('*').order('sort'), sb.from('skills').select('id,level_id,name,sort,active').order('sort')]);
+  if (L.error || S.error) throw new Error((L.error || S.error).message);
+  SK = { levels: L.data || [], skills: (S.data || []).filter(x => x.active !== false) };
+  return SK;
+}
+const skShort = d => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+const skLvName = l => l ? l.code.split('-')[0] + ' · ' + l.name : 'No level';
+function skCur(s) { return SK.levels.find(l => l.code === s.skill_level) || null; }
+function skNext(l) { const i = SK.levels.indexOf(l); return i > -1 ? SK.levels[i + 1] || null : SK.levels[0] || null; }
+async function skChecks(id) {
+  const r = await sb.from('student_skills').select('skill_id,checked_at').eq('student_id', id);
+  if (r.error) throw new Error(r.error.message);
+  return new Map(r.data.map(x => [x.skill_id, x.checked_at]));
+}
+async function skLabel(stu) {
+  if (!stu.id) return;
+  try {
+    await skLoad(); const l = skCur(stu); if (!l) return;
+    const ch = await skChecks(stu.id), list = SK.skills.filter(x => x.level_id === l.id);
+    if (lmRow && lmRow.student_id === stu.id) $('lm_skill').innerHTML = `<span>${esc(l.code.split('-')[0])} · ${list.filter(x => ch.has(x.id)).length} of ${list.length}</span><span>Skills</span>`;
+  } catch (e) {}
+}
+function skList(lv, ch) {
+  return SK.skills.filter(x => x.level_id === lv.id).map(x => `<div class="skrow ${ch.has(x.id) ? 'on' : ''}" onclick="skToggle('${esc(x.id)}')"><div class="skbx">${ch.has(x.id) ? '✓' : ''}</div><span>${esc(x.name)}</span><span class="dt">${ch.has(x.id) ? skShort(ch.get(x.id)) : ''}</span></div>`).join('')
+    || '<div style="color:#888;font-size:13px;padding:8px 4px">No skills in this level yet.</div>';
+}
+function skUpBtn(s, l, ch) {
+  const list = SK.skills.filter(x => x.level_id === l.id), nx = skNext(l);
+  return list.length && nx && list.every(x => ch.has(x.id)) ? `<button class="btn" style="margin-top:12px" onclick="skMoveUp()">Move up to ${esc(skLvName(nx))}</button>` : '';
+}
+// Student page → Skills tab
+async function skFull(s) {
+  skStu = { s, full: true };
+  try {
+    await skLoad();
+    const [ch, G] = await Promise.all([skChecks(s.id), sb.from('skill_log').select('*').eq('student_id', s.id).order('date', { ascending: false })]);
+    if (!sd || sd.s.id !== s.id) return;
+    skStu.ch = ch;
+    const l = skCur(s), log = (G.data || []).filter(g => g.to_level);
+    if (!skOpenLv || skOpenLv.sid !== s.id) skOpenLv = { sid: s.id, id: null };
+    const head = l ? (() => { const list = SK.skills.filter(x => x.level_id === l.id), n = list.filter(x => ch.has(x.id)).length, since = log.find(g => g.to_level === l.code);
+      return `<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:16px">Skills</b><span class="pill">${esc(skLvName(l))}</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;color:#6b7680;margin:10px 0 4px"><span>${n} of ${list.length} skills</span><span>${since && since.date ? 'On ' + esc(l.code.split('-')[0]) + ' since ' + skShort(since.date + 'T12:00:00') : ''}</span></div>
+        <div class="skbar"><div style="width:${list.length ? Math.round(n / list.length * 100) : 0}%"></div></div>
+        <div style="font-size:12px;color:#999;margin:12px 0 2px">Working on · tap to check off</div>${skList(l, ch)}${skUpBtn(s, l, ch)}`; })()
+      : `<b style="font-size:16px">Skills</b><div style="font-size:13px;color:#6b7680;margin:8px 0">No level set. Pick one on the Profile tab, or start at ${esc(skLvName(SK.levels[0]))}.</div>${SK.levels[0] ? `<button class="btn ghost" onclick="skSetLevel('${esc(SK.levels[0].code)}')">Start at ${esc(skLvName(SK.levels[0]))}</button>` : ''}`;
+    const others = SK.levels.filter(x => x !== l).map(x => { const list = SK.skills.filter(k => k.level_id === x.id), n = list.filter(k => ch.has(k.id)).length, open = skOpenLv.id === x.id;
+      return `<div class="sklv" onclick="skOpenLv.id=${open ? 'null' : `'${esc(x.id)}'`};skFull(sd.s)"><span>${esc(skLvName(x))}</span><span style="color:${list.length && n === list.length ? '#1c7a5a' : '#999'}">${list.length && n === list.length ? 'Done ' : ''}${n}/${list.length}</span></div>${open ? '<div style="padding-left:8px">' + skList(x, ch) + '</div>' : ''}`; }).join('');
+    $('sdPanel').innerHTML = `<div class="card">${head}<div style="font-size:12px;color:#999;margin:16px 0 2px">Other levels · tap to open</div>${others}
+      ${log.length ? `<div style="font-size:12px;color:#999;margin-top:12px">History: ${log.slice(0, 6).map(g => 'Moved to ' + esc(String(g.to_level).split('-')[0]) + (g.date ? ' ' + skShort(g.date + 'T12:00:00') : '')).join(' · ')}</div>` : ''}</div>
+      <div class="card" id="xsBox"><div class="center">Loading…</div></div>`;
+    xsDraw(s);
+  } catch (e) { $('sdPanel').innerHTML = '<div class="card msg err">' + esc(e.message) + '</div>'; }
+}
+// Edit lesson → Skills button (shared lessons: chip per kid)
+async function skQuick() {
+  if (!lmRow) return;
+  skKidsList = [lmRow].concat(partnersOf(lmRow)).filter(r => r.student_id).map(r => r.student_id);
+  $('skModal').classList.remove('hidden');
+  skQuickDraw(lmRow.student_id);
+}
+async function skQuickDraw(id) {
+  const s = students.find(x => x.id === id); if (!s) { $('skQBody').innerHTML = '<div class="center">Student not found.</div>'; return; }
+  skStu = { s, full: false };
+  $('skKids').innerHTML = skKidsList.length > 1 ? skKidsList.map(k => { const x = students.find(y => y.id === k) || {}; return `<span class="skchip ${k === id ? 'on' : ''}" onclick="skQuickDraw('${esc(k)}')">${esc(x.first_name || k)}</span>`; }).join('') + '<span style="font-size:12px;color:#999;align-self:center">Shared lesson</span>' : '';
+  $('skQBody').innerHTML = '<div class="center">Loading…</div>';
+  try {
+    await skLoad(); const ch = await skChecks(id); if (skStu.s.id !== id) return;
+    skStu.ch = ch;
+    const l = skCur(s);
+    if (!l) { $('skQBody').innerHTML = `<div style="font-size:13px;color:#6b7680;margin-bottom:8px">${esc(s.first_name)} has no level yet.</div>${SK.levels[0] ? `<button class="btn ghost" onclick="skSetLevel('${esc(SK.levels[0].code)}')">Start at ${esc(skLvName(SK.levels[0]))}</button>` : ''}`; return; }
+    const list = SK.skills.filter(x => x.level_id === l.id), n = list.filter(x => ch.has(x.id)).length;
+    $('skQBody').innerHTML = `<div style="font-size:13px;color:#6b7680;margin-bottom:4px"><b style="color:var(--text)">${esc(s.first_name)}</b> · ${esc(skLvName(l))} · ${n} of ${list.length} skills</div>
+      <div class="skbar"><div style="width:${list.length ? Math.round(n / list.length * 100) : 0}%"></div></div>${skList(l, ch)}${skUpBtn(s, l, ch)}`;
+  } catch (e) { $('skQBody').innerHTML = '<div class="msg err">' + esc(e.message) + '</div>'; }
+}
+function skClose() { $('skModal').classList.add('hidden'); if (lmRow) skLabel(students.find(s => s.id === lmRow.student_id) || {}); }
+function skRedraw() { if (skStu.full) skFull(skStu.s); else skQuickDraw(skStu.s.id); }
+async function skToggle(skillId) {
+  const s = skStu.s, on = skStu.ch.has(skillId);
+  const r = on ? await sb.from('student_skills').delete().eq('student_id', s.id).eq('skill_id', skillId)
+    : await sb.from('student_skills').upsert({ gym_id: gymId, student_id: s.id, skill_id: skillId, checked_at: new Date().toISOString() }, { onConflict: 'student_id,skill_id' });
+  if (r.error) return alert(r.error.message);
+  if (on) skStu.ch.delete(skillId); else skStu.ch.set(skillId, new Date().toISOString());
+  skRedraw();
+}
+async function skSetLevel(code, from) {
+  const s = skStu.s;
+  const r = await sb.from('students').update({ skill_level: code }).eq('id', s.id);
+  if (r.error) return alert(r.error.message);
+  await sb.from('skill_log').insert({ id: 'SKLOG_' + Date.now(), gym_id: gymId, date: ymd(new Date()), student_id: s.id, student_name: ((s.first_name || '') + ' ' + (s.last_name || '')).trim(), event: from ? 'Moved up' : 'Level set', from_level: from || null, to_level: code });
+  s.skill_level = code; const st = students.find(x => x.id === s.id); if (st) st.skill_level = code;
+  if (sd && sd.s.id === s.id) { sd.s.skill_level = code; if ($('f_skill_level')) { if (![...$('f_skill_level').options].some(o => o.value === code)) $('f_skill_level').add(new Option(code, code)); $('f_skill_level').value = code; } renderSdTop(sd.s); }
+  skRedraw();
+}
+async function skMoveUp() {
+  const s = skStu.s, l = skCur(s), nx = l && skNext(l); if (!nx) return;
+  if (!confirm('Move ' + s.first_name + ' up to ' + skLvName(nx) + '?\n\nTheir parent sees it in the portal.')) return;
+  await skSetLevel(nx.code, l.code);
+}
+// ---- Extra skills for one kid (student_extra_skills) + parent requests ----
+let xsTag = 'Cheer', skReqs = null, skReqsAt = 0;
+const XS_TAG = { Cheer: 'background:#E1F5EE;color:#085041', Dance: 'background:#EEEDFE;color:#3C3489' };
+async function xsDraw(s) {
+  const r = await sb.from('student_extra_skills').select('*').eq('student_id', s.id).neq('status', 'Not now').order('created_at');
+  const box = $('xsBox'); if (!box || !sd || sd.s.id !== s.id) return;
+  if (r.error) { box.innerHTML = '<div class="msg err">' + esc(r.error.message) + '</div>'; return; }
+  const req = r.data.filter(x => x.status === 'Requested'), list = r.data.filter(x => x.status !== 'Requested');
+  const tag = t => t ? `<span class="tag" style="margin-left:auto;${XS_TAG[t] || ''}">${esc(t)}</span>` : '<span style="margin-left:auto"></span>';
+  box.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:16px">Extra skills for ${esc(s.first_name)}</b><span style="font-size:12px;color:#999">Not part of the level</span></div>
+    ${req.map(x => `<div style="background:#FAEEDA;border-radius:8px;padding:10px;margin:10px 0 0;font-size:13px;color:#633806">Parent asked: <b>${esc(x.name)}</b> ${x.tag ? `<span class="tag" style="${XS_TAG[x.tag] || ''}">${esc(x.tag)}</span>` : ''}${x.note ? `<div style="margin-top:4px">"${esc(x.note)}"</div>` : ''}
+      <div style="display:flex;gap:6px;margin-top:8px"><button class="btn" style="flex:1;padding:8px" onclick="xsAnswer('${esc(x.id)}','Working')">Add to list</button><button class="btn ghost" style="flex:1;padding:8px" onclick="xsAnswer('${esc(x.id)}','Not now')">Not now</button></div></div>`).join('')}
+    <div style="margin-top:8px">${list.map(x => `<div class="skrow ${x.status === 'Done' ? 'on' : ''}"><div class="skbx" onclick="xsDone('${esc(x.id)}',${x.status === 'Done' ? 'false' : 'true'})">${x.status === 'Done' ? '✓' : ''}</div><span onclick="xsDone('${esc(x.id)}',${x.status === 'Done' ? 'false' : 'true'})" style="flex:1">${esc(x.name)}${x.source === 'parent' ? ' <small style="color:#999">· parent asked</small>' : ''}</span>${tag(x.tag)}<a href="#" style="font-size:12px;color:#999;margin-left:8px" onclick="xsRemove('${esc(x.id)}');return false">Remove</a></div>`).join('')
+      || (req.length ? '' : '<div style="color:#888;font-size:13px;padding:6px 4px">No extra skills yet. Add one for something they need for cheer or dance.</div>')}</div>
+    <div style="display:flex;gap:6px;margin-top:10px;align-items:center"><input id="xs_name" placeholder="Add a skill for ${esc(s.first_name)}" style="flex:1;margin:0" oninput="$('xs_msg').textContent=''">${['Cheer', 'Dance'].map(t => `<span class="skchip ${xsTag === t ? 'on' : ''}" onclick="xsTag=xsTag==='${t}'?'':'${t}';xsDraw(sd.s)">${t}</span>`).join('')}</div>
+    <div id="xs_msg" class="msg err"></div><button class="btn ghost" style="margin-top:6px" onclick="xsAdd()">Add skill</button>`;
+}
+async function xsAdd() {
+  const s = sd.s, name = $('xs_name').value.trim();
+  if (!name) { $('xs_msg').textContent = 'Enter a skill name first.'; return; }
+  const r = await sb.from('student_extra_skills').insert({ gym_id: gymId, student_id: s.id, name, tag: xsTag || null, status: 'Working', source: 'coach' });
+  if (r.error) return alert(r.error.message);
+  xsDraw(s);
+}
+async function xsAnswer(id, st) {
+  const r = await sb.from('student_extra_skills').update({ status: st, answered_at: new Date().toISOString() }).eq('id', id);
+  if (r.error) return alert(r.error.message);
+  skReqsAt = 0; xsDraw(sd.s);
+}
+async function xsDone(id, done) {
+  const r = await sb.from('student_extra_skills').update({ status: done ? 'Done' : 'Working', done_at: done ? new Date().toISOString() : null }).eq('id', id);
+  if (r.error) return alert(r.error.message);
+  xsDraw(sd.s);
+}
+async function xsRemove(id) {
+  if (!confirm('Remove this extra skill? It also goes away in the parent portal.')) return;
+  const r = await sb.from('student_extra_skills').delete().eq('id', id);
+  if (r.error) return alert(r.error.message);
+  xsDraw(sd.s);
+}
+async function loadSkReqs() {
+  skReqsAt = Date.now();
+  const before = skReqs ? skReqs.length : -1;
+  if (!skReqs) skReqs = [];
+  const r = await sb.from('student_extra_skills').select('student_id').eq('status', 'Requested');
+  if (r.error) return;
+  skReqs = r.data.map(x => { const st = students.find(y => y.id === x.student_id) || {}; return { student_id: x.student_id, who: ((st.first_name || '') + ' ' + (st.last_name || '')).trim() || x.student_id }; });
+  if (skReqs.length !== before && typeof renderDash === 'function') renderDash();
+}
+// ---- Settings → Skills: master list per level ----
+let skMOpen = null;
+async function skMasterDraw() {
+  const el = $('st_skills'); if (!el) return;
+  try { await skLoad(); } catch (e) { el.innerHTML = '<div class="msg err">' + esc(e.message) + '</div>'; return; }
+  if (!$('st_skills')) return;
+  if (!SK.levels.length) { el.innerHTML = '<div style="color:#888;font-size:13px;padding:8px 0">No skill levels set up yet.</div>'; return; }
+  el.innerHTML = SK.levels.map(l => { const list = SK.skills.filter(x => x.level_id === l.id), open = skMOpen === l.id;
+    return `<div class="sklv" onclick="skMOpen=${open ? 'null' : `'${esc(l.id)}'`};skMasterDraw()"><span${open ? ' style="font-weight:600"' : ''}>${esc(skLvName(l))}</span><span style="color:#999">${open ? 'close' : list.length + ' skills'}</span></div>
+      ${open ? `<div style="padding-left:6px">${list.map((x, i) => `<div style="display:flex;gap:6px;align-items:center;padding:4px 0;border-bottom:1px solid #f0f0f0">
+        <input value="${esc(x.name)}" style="flex:1;margin:0;font-size:14px;padding:8px" onchange="skMRename('${esc(x.id)}',this.value)">
+        <button class="paybtn" style="padding:8px 10px" ${i ? '' : 'disabled'} onclick="skMMove('${esc(l.id)}',${i},-1)">Up</button>
+        <button class="paybtn" style="padding:8px 10px" ${i < list.length - 1 ? '' : 'disabled'} onclick="skMMove('${esc(l.id)}',${i},1)">Down</button>
+        <button class="paybtn" style="padding:8px 10px;background:#FCEBEB;color:#A32D2D" onclick="skMHide('${esc(x.id)}')">Remove</button></div>`).join('')}
+        <div style="display:flex;gap:6px;margin:8px 0"><input id="skm_new" placeholder="New ${esc(l.code.split('-')[0])} skill" style="flex:1;margin:0"><button class="paybtn" style="padding:8px 14px" onclick="skMAdd('${esc(l.id)}')">Add</button></div></div>` : ''}`; }).join('')
+    + '<div style="font-size:12px;color:#999;margin-top:8px">Removing a skill hides it. Kids who already checked it keep it in their history. Adding a skill changes "X of Y" for kids in that level.</div>';
+}
+async function skMDone(r) { if (r && r.error) { alert(r.error.message); } SK = null; skMasterDraw(); }
+async function skMRename(id, v) { v = v.trim(); if (!v) return skMasterDraw(); skMDone(await sb.from('skills').update({ name: v }).eq('id', id)); }
+async function skMHide(id) {
+  const x = SK.skills.find(k => k.id === id);
+  if (!confirm('Remove "' + (x ? x.name : '') + '" from the list for everyone?\n\nKids who already checked it keep it in their history.')) return;
+  skMDone(await sb.from('skills').update({ active: false }).eq('id', id));
+}
+async function skMMove(lvId, i, d) {
+  const list = SK.skills.filter(x => x.level_id === lvId), j = i + d; if (j < 0 || j >= list.length) return;
+  [list[i], list[j]] = [list[j], list[i]];
+  const res = await Promise.all(list.map((x, k) => sb.from('skills').update({ sort: (k + 1) * 10 }).eq('id', x.id)));
+  skMDone(res.find(r => r.error));
+}
+async function skMAdd(lvId) {
+  const v = ($('skm_new').value || '').trim(); if (!v) return alert('Enter a skill name first.');
+  const max = Math.max(0, ...SK.skills.filter(x => x.level_id === lvId).map(x => x.sort || 0));
+  skMDone(await sb.from('skills').insert({ id: 'SK_' + Date.now(), gym_id: gymId, level_id: lvId, name: v, sort: max + 10, active: true, created_at: new Date().toISOString() }));
 }
 // ================= COMMUNICATE: text blasts to a group (dedup by parent phone, skip unsubscribed) =================
 const CM_AUD = [['active','Everyone active'],['day','A day'],['class','A class'],['wl','Waitlist'],['di','Drop-In'],['pick','Pick kids']];
@@ -1175,6 +1462,435 @@ async function toggleCoach(id) {
   if (r.error) return alert(r.error.message);
   c.active = !c.active; renderCoaches();
 }
+// ---- Coach invites (only the Flip Lab owner sees this). claim_invite in the database builds the new gym. ----
+const joinUrl = t => location.origin + location.pathname.replace(/[^/]*$/, '') + 'join.html?i=' + t;
+async function loadInvites() {
+  const o = await sb.rpc('is_platform_owner');
+  $('invBox').classList.toggle('hidden', !o.data); if (!o.data) return;
+  $('iv_name').value = $('iv_contact').value = ''; $('ivMsg').textContent = '';
+  const r = await sb.rpc('list_invites');
+  const rows = r.data || [], now = new Date().toISOString();
+  $('ivList').innerHTML = rows.map(i => {
+    const st = i.used_at ? '<span class="pill">Joined · ' + esc(i.gym_name || '') + '</span>'
+      : i.revoked ? '<span class="pill" style="background:#eee;color:#888">Turned off</span>'
+      : i.expires_at < now ? '<span class="pill" style="background:#eee;color:#888">Expired</span>'
+      : `<span class="pill" style="background:#FFF4D6;color:#7A5B00">Not joined</span> <button class="paybtn" onclick="shareInvite('${esc(i.token)}','${esc(i.contact || '')}')">Copy / text</button> <button class="paybtn" style="background:#FCEBEB;color:#A32D2D" onclick="revokeInvite('${esc(i.token)}')">Turn off</button>`;
+    return `<div class="arow" style="padding:6px 0"><div class="who"><b>${esc(i.coach_name)}</b><small>${esc(i.contact || '')}</small></div><div>${st}</div></div>`;
+  }).join('');
+}
+async function makeInvite() {
+  const m = $('ivMsg'); m.className = 'msg err';
+  const name = $('iv_name').value.trim(), contact = $('iv_contact').value.trim();
+  if (!name) return m.textContent = 'Enter the coach\'s name.';
+  const r = await sb.rpc('create_invite', { p_name: name, p_contact: contact });
+  if (r.error) return m.textContent = r.error.message;
+  await loadInvites(); shareInvite(r.data, contact);
+}
+async function shareInvite(t, contact) {
+  const url = joinUrl(t), m = $('ivMsg');
+  try { await navigator.clipboard.writeText(url); m.className = 'msg'; m.textContent = '✓ Link copied — works once, for 7 days'; }
+  catch (e) { prompt('Copy this invite link:', url); }
+  const d = String(contact || '').replace(/\D/g, '');
+  if (d.length >= 10 && confirm('Text the link to ' + contact + ' from your phone?'))
+    location.href = 'sms:' + d + '?&body=' + encodeURIComponent('Here is your FlipLab invite: ' + url);
+}
+async function revokeInvite(t) {
+  if (!confirm('Turn off this invite link?')) return;
+  const r = await sb.rpc('revoke_invite', { p_token: t }); if (r.error) return alert(r.error.message);
+  loadInvites();
+}
+// ================= GYM SETTINGS + FIRST-LOGIN SETUP WIZARD =================
+// gym_settings key 'settings' per gym. Flip Lab's row is {setup_done:true} → it keeps every default below.
+const SET_DEF = { color: '#3ecf9e', logo_url: '', lengths: ['30 min', '45 min', '60 min'], class_price: 20, pay_methods: ['Cash', 'Venmo', 'Zelle'], hide_tabs: [], cancel_hrs: 24, c_email: '', c_text: '', c_venmo: '', c_zelle: '', policy_text: '', waiver_text: '', su_header: 'navy', su_welcome: '', email_from: '', email_provider: '',
+  prices: { Solo: { '30 min': '$40', '45 min': '$60', '60 min': '$80' }, Shared: { '30 min': '$30', '45 min': '$45', '60 min': '$60' } } };
+let SET = JSON.parse(JSON.stringify(SET_DEF)), gymSlug = '', wz = null, wzStep = 0;
+const payList = () => { const m = SET.pay_methods; return m.length > 1 ? m.slice(0, -1).join(', ') + ' or ' + m[m.length - 1] : m[0] || 'Cash'; };
+async function loadSettings() {
+  const r = await sb.from('gym_settings').select('value').eq('key', 'settings').maybeSingle();
+  const v = (r.data && r.data.value) || {};
+  SET = { ...JSON.parse(JSON.stringify(SET_DEF)), ...v, prices: { Solo: { ...SET_DEF.prices.Solo, ...((v.prices || {}).Solo || {}) }, Shared: { ...SET_DEF.prices.Shared, ...((v.prices || {}).Shared || {}) } } };
+  if (!SET.pay_methods || !SET.pay_methods.length) SET.pay_methods = SET_DEF.pay_methods.slice();
+  if (!SET.lengths || !SET.lengths.length) SET.lengths = SET_DEF.lengths.slice();
+  applySettings();
+  return !!v.setup_done || r.error != null;   // never trap Steve in the wizard if the read fails
+}
+function applySettings() {
+  const notMine = !!gymSlug && gymSlug !== 'fliplab';   // Print boxes, Google Calendar sync and Friday RSVP email run on Steve's own setup
+  ['printBtn', 'calBox', 'rf_bar'].forEach(id => $(id) && $(id).classList.toggle('hidden', notMine));
+  ST_TABS.forEach(([t]) => $('tabBtn_' + t).classList.toggle('hidden', (SET.hide_tabs || []).includes(t)));
+  Object.assign(PRICING.Solo, SET.prices.Solo); Object.assign(PRICING.Shared, SET.prices.Shared);
+  const root = document.documentElement.style;
+  if (SET.color !== SET_DEF.color) { root.setProperty('--mint', SET.color); root.setProperty('--mint-soft', 'color-mix(in srgb, ' + SET.color + ' 14%, white)'); } else { root.removeProperty('--mint'); root.removeProperty('--mint-soft'); }
+  if (gymSlug && gymSlug !== 'fliplab') $('brand').innerHTML = (SET.logo_url ? `<img src="${esc(SET.logo_url)}" alt="" style="height:26px;vertical-align:middle;margin-right:8px;border-radius:4px">` : '') + esc(gymTitle);
+  ['al_duration', 'lm_duration'].forEach(id => [...$(id).options].forEach(o => o.hidden = !SET.lengths.includes(o.value)));
+  const m = SET.pay_methods;
+  $('payBtns').style.gridTemplateColumns = 'repeat(' + Math.min(m.length, 3) + ',1fr)';
+  $('payBtns').innerHTML = m.map(x => `<button class="btn" onclick="savePay('${esc(x).replace(/'/g, '&#39;')}')">${esc(x)}</button>`).join('');
+  $('ep_method').innerHTML = [...new Set(m.concat('Check', 'Other'))].map(x => `<option>${esc(x)}</option>`).join('');
+  $('x_PreferredPayment').innerHTML = '<option value=""></option>' + m.map(x => `<option>${esc(x)}</option>`).join('');
+  $('cx_price').value = SET.class_price;
+}
+async function saveSettings(extra) {
+  const r = await sb.from('gym_settings').upsert({ gym_id: gymId, key: 'settings', value: { ...SET, ...extra }, updated_at: new Date().toISOString() });
+  if (r.error) { alert(r.error.message); return false; }
+  Object.assign(SET, extra || {}); applySettings(); return true;
+}
+const WZ_COLORS = ['#3ecf9e', '#1D9E75', '#4349C6', '#378ADD', '#D4537E', '#D85A30', '#1f2933'];
+function wzStart() { wzSet = false; wz = { ...JSON.parse(JSON.stringify(SET)), days: [], from: 960, to: 1140, every: 30, off: [] }; wzStep = 0; show('setupView'); $('tabs').classList.add('hidden'); wzDraw(); }
+function wzDraw() {
+  if (wzSet) return stDraw();
+  const n = wzStep, dots = [0, 1, 2, 3].map(i => `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;margin:0 3px;background:${i === n ? 'var(--mint)' : '#d5dadf'}"></span>`).join('');
+  const head = (t, sub) => `<div style="text-align:center;margin-bottom:6px">${dots}</div><div class="hdr" style="margin-top:6px">${t}<span style="font-weight:400;font-size:13px">Step ${n + 1} of 4</span></div><div style="color:var(--muted);font-size:13px;margin-bottom:4px">${sub}</div>`;
+  let body = '';
+  if (n < 3) body = head(['Your look', 'Lessons and prices', 'Payment buttons'][n], ['Shows in your top bar and buttons. You can change it later in Settings.', 'Prices for new lessons. ★ special prices you set on a lesson are never changed.', 'These show when you record a payment.'][n]) + wzPart(n);
+  if (n === 3) { const sl = wzSlots(); body = head('Your weekly times', 'Your open times show on your sign-up page. Tap a time to leave it out.') + `
+    <label>Days you coach</label><div>${DAYS.map(d => `<button class="paybtn" style="margin:0 6px 6px 0;padding:8px 10px;${wz.days.includes(d) ? 'background:var(--mint-soft);color:#1c7a5a' : 'background:#eee;color:#888'}" onclick="wzDay('${d}')">${d.slice(0, 3)}</button>`).join('')}</div>
+    <div class="row2"><div><label>From</label><select onchange="wz.from=+this.value;wzDraw()">${wzTimeOpts(wz.from)}</select></div><div><label>To</label><select onchange="wz.to=+this.value;wzDraw()">${wzTimeOpts(wz.to)}</select></div></div>
+    <label>Every</label><select onchange="wz.every=+this.value;wzDraw()">${[30, 45, 60].map(m => `<option value="${m}"${wz.every === m ? ' selected' : ''}>${m} min</option>`).join('')}</select>
+    <div style="margin-top:10px">${wz.days.length ? wz.days.map(d => `<div style="margin-top:6px"><b style="font-size:13px">${d}</b><div>${sl.times.map(t => { const k = d + '|' + t, off = wz.off.includes(k); return `<button class="paybtn" style="margin:4px 4px 0 0;${off ? 'background:#eee;color:#aaa;text-decoration:line-through' : 'background:var(--mint-soft);color:#1c7a5a'}" onclick="wzOff('${k}')">${t}</button>`; }).join('') || '<small style="color:#aaa">Pick a To time after From</small>'}</div></div>`).join('') : '<small style="color:#aaa">Tap the days you coach</small>'}</div>
+    <button class="btn" style="margin-top:16px" onclick="wzFinish(true)">Finish${sl.count ? ' — save ' + sl.count + ' times' : ''}</button>
+    <button class="btn ghost" style="margin-top:8px" onclick="wzFinish(false)">Skip — add times later</button><div id="wz_msg" class="msg"></div>`; }
+  const nav = n < 3 ? `<div class="row2" style="margin-top:16px"><div>${n ? '<button class="btn ghost" onclick="wzStep--;wzDraw()">Back</button>' : ''}</div><div><button class="btn" onclick="wzNext()">Next</button></div></div>
+    <div style="text-align:center;margin-top:10px"><a href="#" onclick="wzStep++;wzDraw();return false" style="color:var(--muted);font-size:13px">Skip this step</a></div>` : (n ? '<div style="margin-top:10px"><button class="btn ghost" onclick="wzStep--;wzDraw()">Back</button></div>' : '');
+  $('wzCard').innerHTML = `<div style="font-weight:600;font-size:18px;margin-bottom:8px">Welcome, let's set up ${esc(gymTitle)}</div>` + body + nav;
+}
+function wzPart(n) {
+  if (n === 0) return `
+    <label>Logo</label><div style="display:flex;align-items:center;gap:10px">${wz.logo_url ? `<img src="${esc(wz.logo_url)}" style="height:48px;border-radius:6px">` : '<div style="width:48px;height:48px;border:1px dashed #bbb;border-radius:6px"></div>'}
+      <input type="file" id="wz_logo" accept="image/*" onchange="wzLogo(this)" style="width:auto;font-size:13px"></div><div id="wz_lmsg" class="msg"></div>
+    <label>Main color</label><div style="display:flex;gap:10px;flex-wrap:wrap">${WZ_COLORS.map(c => `<button onclick="wz.color='${c}';wzDraw()" aria-label="color" style="width:34px;height:34px;border-radius:50%;border:0;background:${c};outline:${wz.color === c ? '3px solid #1f2933' : '0'};outline-offset:2px"></button>`).join('')}</div>
+    <div style="margin-top:14px;background:${wz.color};color:#fff;border-radius:8px;padding:10px;text-align:center;font-weight:600">Buttons look like this</div>`;
+  if (n === 1) return `
+    <label>Lesson lengths you offer</label><div>${SET_DEF.lengths.map(l => `<button class="paybtn" style="margin:0 6px 6px 0;padding:8px 12px;${wz.lengths.includes(l) ? 'background:var(--mint-soft);color:#1c7a5a' : 'background:#eee;color:#888'}" onclick="wzLen('${l}')">${l}</button>`).join('')}</div>
+    ${wz.lengths.map(l => `<div class="row2"><div><label>${l} solo $</label><input type="number" inputmode="decimal" value="${String(wz.prices.Solo[l]).replace('$', '')}" onchange="wz.prices.Solo['${l}']='$'+(+this.value||0)"></div><div><label>${l} shared $ (each)</label><input type="number" inputmode="decimal" value="${String(wz.prices.Shared[l]).replace('$', '')}" onchange="wz.prices.Shared['${l}']='$'+(+this.value||0)"></div></div>`).join('')}
+    <label>Group class price $ (per class)</label><input type="number" inputmode="decimal" value="${wz.class_price}" onchange="wz.class_price=+this.value||0">`;
+  if (n === 2) return `
+    <div style="margin:10px 0">${wz.pay_methods.map((m, i) => `<span class="pill" style="display:inline-block;margin:0 6px 6px 0;padding:6px 10px;font-size:14px">${esc(m)} <a href="#" onclick="wz.pay_methods.splice(${i},1);wzDraw();return false" style="color:#A32D2D;text-decoration:none;margin-left:4px">✕</a></span>`).join('') || '<small style="color:#aaa">None yet</small>'}</div>
+    <div class="row2"><div><input id="wz_pm" placeholder="Check, CashApp…"></div><div><button class="btn ghost" onclick="wzAddPm()">+ Add</button></div></div>`;
+  return '';
+}
+// ⚙ Settings page: same pieces as the wizard, all on one card, one Save. Tabs stay visible.
+let wzSet = false;
+// Tabs a coach can hide (Dashboard, Schedule, Students always show). Hiding only hides the button — no data is touched.
+const ST_TABS = [['openings', 'Openings'], ['slots', 'Slots'], ['classes', 'Classes'], ['pairings', 'Pairings'], ['msgs', 'Messages'], ['comm', 'Communicate'], ['attendance', 'Attendance'], ['payments', 'Payments']];
+// Starter text for a gym's sign-up page (register.html has the same wording). Saved as '' while unchanged so the gym name / hours stay current.
+const ST_POLICY = `{gym} Private Lesson Cancellation Policy
+
+We value the time and commitment of our athletes and families, as well as the time of our coaches. To ensure fairness and consistency, the following cancellation policy is in effect for all private lessons:
+
+Advance Notice
+All cancellations must be made at least {hrs} hours in advance of the scheduled lesson. We understand that emergencies sometimes happen. In such cases, circumstances will be reviewed on a case-by-case basis at the discretion of your coach.
+
+Late Cancellations & No-Shows
+Any cancellation made with less than {hrs} hours notice, or failure to attend a scheduled lesson, will result in the full lesson fee being charged, unless otherwise approved under the emergency exception.
+
+Coach Cancellations
+If your coach must cancel a lesson, no fee will be charged. Since lessons are pay-as-you-go, no makeup is required, and we will simply see you at your next scheduled lesson.
+
+Payment Terms
+Lessons are considered pay-as-you-go unless otherwise arranged in writing. Payment is required at the time of service.
+
+Repeated Violations
+Consistent late cancellations or no-shows may result in the suspension or loss of private lesson privileges.
+
+By scheduling a private lesson, the client acknowledges and agrees to follow this cancellation policy.`;
+const ST_WAIVER = `By signing below, I acknowledge that participation in gymnastics, tumbling, and related activities at {gym} involves inherent risks of injury. I voluntarily assume all risks associated with participation. I agree to release, waive, and hold harmless {gym}, its coaches, staff, and facility from any and all claims, damages, or liability arising from participation, including injuries caused by negligence.
+
+I confirm that the athlete named in this registration is physically fit to participate. I will inform {gym} of any medical conditions or limitations that may affect participation.
+
+This waiver is binding on myself, my heirs, and my legal representatives. I have read this agreement and understand its terms.`;
+const stFill = (t, o) => t.replace(/\{gym\}/g, gymSlug === 'fliplab' ? 'Flip Lab' : gymTitle).replace(/\{hrs\}/g, (o || wz).cancel_hrs || 24);
+let stPolDef = '', stWavDef = '';   // starter text as last shown (with the hours at that moment)
+function stKeep() { if (!$('st_pol')) return; const p = $('st_pol').value.trim(), w = $('st_wav').value.trim();
+  wz.policy_text = p === stPolDef.trim() ? '' : p; wz.waiver_text = w === stWavDef.trim() ? '' : w; wz.su_welcome = $('st_wel').value.trim(); }
+let emProv = '';
+const EM_HELP = {
+  gmail: '<b>Make a Gmail app password</b> (2 minutes):<br>1. Go to <a href="https://myaccount.google.com/apppasswords" target="_blank">myaccount.google.com/apppasswords</a> and sign in.<br>2. If it says app passwords aren\'t available, turn on <b>2-Step Verification</b> first (Security page), then come back.<br>3. Name it <b>FlipLab</b> and tap <b>Create</b>.<br>4. Copy the 16-letter password and paste it below.',
+  yahoo: '<b>Make a Yahoo app password</b> (2 minutes):<br>1. Go to <a href="https://login.yahoo.com/account/security" target="_blank">login.yahoo.com/account/security</a>.<br>2. Tap <b>Generate app password</b> (or "Manage app passwords").<br>3. Name it <b>FlipLab</b> and tap <b>Generate</b>.<br>4. Copy the password and paste it below.',
+  aol: '<b>Make an AOL app password</b> (2 minutes):<br>1. Go to <a href="https://login.aol.com/account/security" target="_blank">login.aol.com/account/security</a>.<br>2. Tap <b>Generate app password</b>.<br>3. Name it <b>FlipLab</b> and tap <b>Generate</b>.<br>4. Copy the password and paste it below.' };
+async function emConnect() {
+  const m = $('em_msg'); m.className = 'msg'; m.textContent = 'Connecting…';
+  const r = await sbInvoke('email-connect', { body: { provider: emProv, address: $('em_addr').value, password: $('em_pw').value } });
+  const d = r.data || {}, err = d.error || (r.error && r.error.message);
+  if (err || !d.ok) { m.className = 'msg err'; m.textContent = err || 'Could not connect'; return; }
+  SET.email_from = wz.email_from = d.address; SET.email_provider = wz.email_provider = emProv; emProv = '';
+  stDraw(); $('em_msg').textContent = '✓ Connected. Check your inbox for the test email.';
+}
+async function emDisconnect() {
+  if (!confirm('Disconnect your email? Messages will go back to sending from your phone.')) return;
+  await sbInvoke('email-connect', { body: { disconnect: true } });
+  SET.email_from = wz.email_from = ''; SET.email_provider = wz.email_provider = ''; stDraw();
+}
+function stTab(t) { stKeep(); const h = wz.hide_tabs = wz.hide_tabs || []; const i = h.indexOf(t); i >= 0 ? h.splice(i, 1) : h.push(t); stDraw(); }
+function stOpen() { wz = JSON.parse(JSON.stringify(SET)); wzSet = true; $('wzCard').innerHTML = ''; show('setupView'); stDraw(); }
+function stDraw() {
+  stKeep(); stPolDef = stFill(ST_POLICY); stWavDef = stFill(ST_WAIVER);
+  const sec = (t, sub, n) => `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">${t}</b><div style="color:var(--muted);font-size:13px">${sub}</div>${wzPart(n)}</div>`;
+  $('wzCard').innerHTML = `<div class="hdr" style="margin-top:0">⚙ Settings</div>`
+    + sec('Look', 'Logo and main color for your top bar and buttons.', 0)
+    + sec('Lessons and prices', 'Prices for new lessons. Lessons you already have and ★ special prices are never changed.', 1)
+    + sec('Payment buttons', 'These show when you record a payment.', 2)
+    + `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Skills</b><div style="color:var(--muted);font-size:13px">Every kid in a level works on these. Changes apply to everyone and save right away.</div><div id="st_skills"><div class="center">Loading…</div></div></div>`
+    + `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Tabs</b><div style="color:var(--muted);font-size:13px">Tap to turn a tab off or on. Hiding a tab never deletes anything. Dashboard, Schedule and Students always show.</div>
+       <div style="margin-top:8px">${ST_TABS.map(([t, n]) => { const off = (wz.hide_tabs || []).includes(t); return `<button class="paybtn" style="margin:0 6px 6px 0;padding:8px 12px;${off ? 'background:#eee;color:#aaa;text-decoration:line-through' : 'background:var(--mint-soft);color:#1c7a5a'}" onclick="stTab('${t}')">${off ? '' : '✓ '}${n}</button>`; }).join('')}</div></div>`
+    + (gymSlug === 'fliplab' ? '' : `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Your email</b>
+       ${SET.email_from ? `<div style="margin-top:6px;background:#eaf6ef;border-radius:8px;padding:10px 12px;font-size:14px">✅ Emails to families come from <b>${esc(SET.email_from)}</b>. Replies land in your inbox.</div>
+         <button class="btn ghost" style="margin-top:8px" onclick="emDisconnect()">Disconnect</button>`
+       : `<div style="color:var(--muted);font-size:13px">Connect your email so messages to families come from your own address. Until then, you send them yourself from your phone.</div>
+         <label>Your email is</label><div>${[['gmail', 'Gmail'], ['yahoo', 'Yahoo'], ['aol', 'AOL']].map(([k, n]) => `<button class="paybtn" style="margin:0 6px 6px 0;padding:8px 12px;${emProv === k ? 'background:var(--mint-soft);color:#1c7a5a' : 'background:#eee;color:#888'}" onclick="emProv='${k}';stDraw()">${n}</button>`).join('')}</div>
+         ${emProv ? `<div style="background:#f7f8fa;border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.6;margin-top:6px">${EM_HELP[emProv]}</div>
+         <label>Email address</label><input id="em_addr" type="email" autocomplete="off" placeholder="you@${emProv === 'gmail' ? 'gmail' : emProv}.com">
+         <label>App password (not your normal password)</label><input id="em_pw" type="password" autocomplete="new-password" placeholder="16 letters">
+         <button class="btn" style="margin-top:10px" onclick="emConnect()">Connect and send me a test</button>` : ''}
+         <div style="font-size:12px;color:var(--muted);margin-top:6px">Outlook, Hotmail or iCloud? Those can't connect yet, so keep sending from your phone.</div>`}
+       <div id="em_msg" class="msg"></div></div>`)
+    + `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Policies and contact</b><div style="color:var(--muted);font-size:13px">Shown to families on your sign-up page.</div>
+       <label>Cancel at least this far ahead</label><div>${[12, 24, 48].map(h => `<button class="paybtn" style="margin:0 6px 6px 0;padding:8px 12px;${+wz.cancel_hrs === h ? 'background:var(--mint-soft);color:#1c7a5a' : 'background:#eee;color:#888'}" onclick="wz.cancel_hrs=${h};stDraw()">${h} hrs</button>`).join('')}</div>
+       <label>Gym email</label><input type="email" value="${esc(wz.c_email)}" onchange="wz.c_email=this.value.trim()">
+       <label>Texting number</label><input type="tel" inputmode="numeric" value="${esc(wz.c_text)}" oninput="this.value=typingPhone(this.value)" onchange="wz.c_text=this.value.trim()">
+       <label>Venmo link</label><input value="${esc(wz.c_venmo)}" placeholder="https://venmo.com/…" onchange="wz.c_venmo=this.value.trim()">
+       <label>Zelle (phone or email)</label><input value="${esc(wz.c_zelle)}" onchange="wz.c_zelle=this.value.trim()"></div>`
+    + `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Cancellation policy and waiver</b><div style="color:var(--muted);font-size:13px">Families agree to these when they sign up. Starter text is filled in. Edit it to fit your gym, and have your own waiver checked for your state.</div>
+       <label>Cancellation policy</label><textarea id="st_pol" rows="8" style="width:100%;font-size:13px">${esc(wz.policy_text || stPolDef)}</textarea>
+       <label>Liability waiver</label><textarea id="st_wav" rows="8" style="width:100%;font-size:13px">${esc(wz.waiver_text || stWavDef)}</textarea>
+       <a href="#" style="font-size:13px;color:var(--muted)" onclick="if(confirm('Put the starter text back?')){$('st_pol').value=stPolDef;$('st_wav').value=stWavDef;stDraw()}return false">Reset to starter text</a></div>`
+    + `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Sign-up page</b><div style="color:var(--muted);font-size:13px">Uses your logo and main color.</div>
+       <label>Header color</label><div>${[['navy', 'Navy'], ['white', 'White'], ['main', 'Main color']].map(([k, n]) => `<button class="paybtn" style="margin:0 6px 6px 0;padding:8px 12px;${wz.su_header === k ? 'background:var(--mint-soft);color:#1c7a5a' : 'background:#eee;color:#888'}" onclick="wz.su_header='${k}';stDraw()">${n}</button>`).join('')}</div>
+       <label>Welcome message</label><textarea id="st_wel" rows="2" style="width:100%" placeholder="Welcome! Pick a lesson time below.">${esc(wz.su_welcome)}</textarea>
+       <div style="margin-top:10px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden"><div style="padding:10px 12px;font-weight:700;${wz.su_header === 'white' ? 'background:#fff;color:#1f2933;border-bottom:1px solid #eee' : 'background:' + (wz.su_header === 'main' ? wz.color : '#0b1020') + ';color:#fff'}">${wz.logo_url ? `<img src="${esc(wz.logo_url)}" style="height:22px;vertical-align:middle;margin-right:6px;border-radius:3px">` : ''}${esc(gymTitle)}</div>
+         <div style="padding:10px 12px;font-size:13px;color:#555">${esc(wz.su_welcome || 'Your welcome message shows here.')}</div><div style="padding:0 12px 12px"><span style="display:inline-block;background:${wz.color};color:#fff;border-radius:6px;padding:6px 12px;font-size:13px">Continue</span></div></div>
+       <div style="font-size:12px;color:var(--muted);margin-top:4px">Preview only. Your sign-up page starts using these in the next update.</div></div>`
+    + `<button class="btn" style="margin-top:18px" onclick="stSave()">Save settings</button>
+       <button class="btn ghost" style="margin-top:8px" onclick="stClose()">Cancel</button><div id="st_msg" class="msg"></div>`;
+  skMasterDraw();
+}
+async function stSave() {
+  stKeep();
+  if (!wz.pay_methods.length) return alert('Keep at least one payment button.');
+  const m = $('st_msg'); m.className = 'msg'; m.textContent = 'Saving…';
+  const keep = JSON.parse(JSON.stringify(SET)); Object.assign(SET, wz);
+  if (!(await saveSettings({}))) { SET = keep; applySettings(); m.textContent = ''; return; }
+  m.className = 'msg'; m.style.color = '#3B6D11'; m.textContent = 'Saved ✓'; setTimeout(stClose, 700);
+}
+function stClose() { wzSet = false; $('tabBtn_schedule').click(); }
+const wzT = m => ((Math.floor(m / 60) % 12) || 12) + ':' + String(m % 60).padStart(2, '0') + ' ' + (m < 720 ? 'AM' : 'PM');
+const wzTimeOpts = v => Array.from({ length: 64 }, (_, i) => 360 + i * 15).map(m => `<option value="${m}"${m === v ? ' selected' : ''}>${wzT(m)}</option>`).join('');
+function wzSlots() { const times = []; for (let m = wz.from; m + wz.every <= wz.to; m += wz.every) times.push(wzT(m)); let count = 0; wz.days.forEach(d => times.forEach(t => { if (!wz.off.includes(d + '|' + t)) count++; })); return { times, count }; }
+function wzDay(d) { wz.days = wz.days.includes(d) ? wz.days.filter(x => x !== d) : DAYS.filter(x => x === d || wz.days.includes(x)); wzDraw(); }
+function wzOff(k) { wz.off = wz.off.includes(k) ? wz.off.filter(x => x !== k) : wz.off.concat(k); wzDraw(); }
+function wzLen(l) { const i = wz.lengths.indexOf(l); if (i >= 0) { if (wz.lengths.length > 1) wz.lengths.splice(i, 1); } else wz.lengths = SET_DEF.lengths.filter(x => x === l || wz.lengths.includes(x)); wzDraw(); }
+function wzAddPm() { const v = $('wz_pm').value.trim(); if (v && !wz.pay_methods.some(x => x.toLowerCase() === v.toLowerCase())) wz.pay_methods.push(v); wzDraw(); }
+async function wzLogo(inp) {
+  const f = inp.files[0], m = $('wz_lmsg'); if (!f) return;
+  if (f.size > 3e6) { m.className = 'msg err'; return m.textContent = 'Pick an image under 3 MB.'; }
+  m.className = 'msg'; m.textContent = 'Uploading…';
+  const path = gymId + '/logo-' + Date.now() + '.' + ((f.name.split('.').pop() || 'png').toLowerCase());
+  const r = await sb.storage.from('gym-logos').upload(path, f, { upsert: true, contentType: f.type });
+  if (r.error) { m.className = 'msg err'; return m.textContent = r.error.message; }
+  wz.logo_url = sb.storage.from('gym-logos').getPublicUrl(path).data.publicUrl; wzDraw();
+}
+async function wzNext() {
+  if (wzStep === 2 && !wz.pay_methods.length) return alert('Keep at least one payment button.');
+  wzStep++; wzDraw();
+}
+async function wzFinish(withSlots) {
+  const m = $('wz_msg'); m.className = 'msg'; m.textContent = 'Saving…';
+  let added = 0;
+  if (withSlots) {
+    const sl = wzSlots(); if (!sl.count) { m.className = 'msg err'; return m.textContent = 'Pick your days and times first, or tap Skip.'; }
+    // Same times go into every season (school year + summer); summer extras can be added later in Slots
+    const [SE, CO, HV] = await Promise.all([sb.from('seasons').select('id,name'), sb.from('coaches').select('name').eq('active', true).limit(1), sb.from('available_slots').select('day,time,season_id')]);
+    const have = new Set((HV.data || []).map(z => z.season_id + '|' + z.day + '|' + z.time)), coach = ((CO.data || [])[0] || {}).name || null, rows = [];
+    (SE.data || []).forEach(se => wz.days.forEach(d => sl.times.forEach(t => { if (!wz.off.includes(d + '|' + t) && !have.has(se.id + '|' + d + '|' + t))
+      rows.push({ gym_id: gymId, day: d, time: t, coach, season_id: se.id, is_summer: /summer/i.test(se.name || ''), active: true, booked: false }); })));
+    if (rows.length) { const r = await sb.from('available_slots').insert(rows); if (r.error) { m.className = 'msg err'; return m.textContent = r.error.message; } }
+    added = sl.count;
+  }
+  ['days', 'from', 'to', 'every', 'off'].forEach(k => delete wz[k]);
+  Object.assign(SET, wz);
+  if (!(await saveSettings({ setup_done: true }))) return;
+  $('wzCard').innerHTML = `<div style="text-align:center;padding:20px 0"><div style="font-size:40px">✅</div><div style="font-weight:600;font-size:18px;margin-top:6px">You're set up</div>
+    <div style="color:var(--muted);margin:8px 0 16px">${added ? added + ' weekly times saved. ' : ''}Bringing in your students is coming next.</div>
+    <button class="btn" onclick="ss.set('tab','schedule');ss.set('import',1);location.reload()">Bring in my students</button>
+    <button class="btn ghost" style="margin-top:8px" onclick="ss.set('tab','schedule');location.reload()">Open my schedule</button></div>`;
+}
+
+// ================= IMPORT STUDENTS (from another program's CSV / Excel / pasted rows) =================
+// Only headers + 3 sample rows go to the AI (edge fn import-map). Everything imported is tagged extra.ImportBatch so it can be undone.
+const IM_FIELDS = { full_name: 'Student name (whole)', first_name: 'Student first name', last_name: 'Student last name', dob: 'Birthday', parent_name: 'Parent name', phone: 'Phone', email: 'Email',
+  level: 'Level', notes: 'Notes', lesson_day: 'Lesson day', lesson_time: 'Lesson time', lesson_daytime: 'Lesson day + time', waiver: 'Waiver signed', skip: '— Skip —' };
+let im = null;
+function imStart() { im = { step: 0, head: [], rows: [], map: {} }; show('importView'); imDraw(); }
+function imClose() { im = null; go('students'); }
+function imCsv(t) {   // CSV or tab-separated (pasted) → array of rows; handles quotes
+  const sep = (t.split('\n')[0].match(/\t/g) || []).length >= (t.split('\n')[0].match(/,/g) || []).length && /\t/.test(t) ? '\t' : ',';
+  const out = []; let row = [], cur = '', q = false;
+  for (let i = 0; i < t.length; i++) { const c = t[i];
+    if (q) { if (c === '"' && t[i + 1] === '"') { cur += '"'; i++; } else if (c === '"') q = false; else cur += c; }
+    else if (c === '"') q = true; else if (c === sep) { row.push(cur); cur = ''; } else if (c === '\n' || c === '\r') { if (c === '\r' && t[i + 1] === '\n') i++; row.push(cur); out.push(row); row = []; cur = ''; } else cur += c; }
+  if (cur || row.length) { row.push(cur); out.push(row); }
+  return out.filter(r => r.some(c => String(c).trim()));
+}
+async function imFile(inp) {
+  const f = inp.files[0]; if (!f) return; const m = $('im_msg'); m.className = 'msg'; m.textContent = 'Reading…';
+  try {
+    let rows;
+    if (/\.(xlsx|xls)$/i.test(f.name)) {
+      if (!window.XLSX) await new Promise((ok, no) => { const sc = document.createElement('script'); sc.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'; sc.onload = ok; sc.onerror = no; document.head.appendChild(sc); });
+      const wb = XLSX.read(await f.arrayBuffer(), { cellDates: true });
+      rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, dateNF: 'yyyy-mm-dd', defval: '' });
+      rows = rows.filter(r => r.some(c => String(c).trim()));
+    } else rows = imCsv(await f.text());
+    imLoad(rows);
+  } catch (e) { m.className = 'msg err'; m.textContent = "Couldn't read that file. Try saving it as CSV."; }
+}
+function imPaste() { const t = $('im_paste').value; if (!t.trim()) return; imLoad(imCsv(t)); }
+async function imLoad(rows) {
+  const m = $('im_msg');
+  if (rows.length < 2) { m.className = 'msg err'; return m.textContent = 'Need a header row plus at least one student.'; }
+  im.head = rows[0].map((h, i) => String(h).trim() || 'Column ' + (i + 1)); im.rows = rows.slice(1).map(r => im.head.map((_, i) => String(r[i] ?? '').trim()));
+  m.className = 'msg'; m.textContent = 'Matching columns…';
+  im.map = imGuess(im.head); im.ai = false;
+  try { const r = await sb.functions.invoke('import-map', { body: { headers: im.head, samples: im.rows.slice(0, 3) } }); if (r.data && r.data.map) { im.map = r.data.map; im.ai = true; } } catch (e) {}
+  im.step = 1; imDraw();
+}
+function imGuess(head) {   // fallback when AI is unavailable
+  const used = new Set(), out = {};
+  const rules = [['email', /mail/i], ['phone', /phone|cell|mobile|tel/i], ['dob', /birth|dob|bday/i], ['parent_name', /parent|guardian|mom|dad|mother|father/i], ['waiver', /waiver|release/i],
+    ['first_name', /first/i], ['last_name', /last|surname/i], ['lesson_daytime', /day.*time|schedule|slot/i], ['lesson_day', /^day|weekday/i], ['lesson_time', /time/i], ['level', /level|class|group/i], ['notes', /note|comment/i], ['full_name', /name|athlete|student|child/i]];
+  head.forEach(h => { const r = rules.find(([f, re]) => re.test(h) && !used.has(f)); out[h] = r ? (used.add(r[0]), r[0]) : 'skip'; });
+  return out;
+}
+// ---- value cleanup ----
+function imDate(v) {
+  v = String(v || '').trim(); if (!v) return ''; let m;
+  if ((m = v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) return m[1] + '-' + m[2].padStart(2, '0') + '-' + m[3].padStart(2, '0');
+  if ((m = v.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/))) { let y = +m[3]; if (y < 100) y += y > (new Date().getFullYear() % 100) ? 1900 : 2000; if (+m[1] > 12 || +m[2] > 31 || !+m[1] || !+m[2]) return null; return y + '-' + m[1].padStart(2, '0') + '-' + m[2].padStart(2, '0'); }
+  const d = new Date(v); return isNaN(d) || d.getFullYear() < 1950 ? null : ymd(d);
+}
+function imDay(v) { const t = String(v || '').trim().toLowerCase().slice(0, 2); return DAYS.find(d => d.toLowerCase().startsWith(t)) && t.length === 2 ? DAYS.find(d => d.toLowerCase().startsWith(t)) : null; }
+function imTime(v) {
+  const m = String(v || '').trim().match(/(\d{1,2})(?::(\d{2}))?\s*([ap])?\.?m?\.?/i); if (!m) return null;
+  let h = +m[1], mm = +(m[2] || 0); if (h > 23 || mm > 59) return null;
+  if (m[3]) { if (/p/i.test(m[3]) && h < 12) h += 12; if (/a/i.test(m[3]) && h === 12) h = 0; } else if (h >= 1 && h <= 9) h += 12;   // no am/pm: 1–9 → afternoon
+  return ((h % 12) || 12) + ':' + String(mm).padStart(2, '0') + ' ' + (h < 12 ? 'AM' : 'PM');
+}
+function imParse() {   // rows → clean records (problems are worked out by imValidate)
+  const col = f => im.head.find(h => im.map[h] === f), get = (r, f) => { const h = col(f); return h ? r[im.head.indexOf(h)] : ''; };
+  return im.rows.map((r, i) => {
+    let first = get(r, 'first_name'), last = get(r, 'last_name'); const full = get(r, 'full_name');
+    if (!first && full) { if (full.includes(',')) { [last, first] = full.split(',').map(x => x.trim()); } else { const p = full.trim().split(/\s+/); first = p.shift(); last = p.join(' '); } }
+    const rawDob = get(r, 'dob'), dob = imDate(rawDob);
+    let day = imDay(get(r, 'lesson_day')), time = imTime(get(r, 'lesson_time')); const dt = get(r, 'lesson_daytime');
+    if (dt) { day = day || imDay(dt.split(/[\s,@]+/)[0]); time = time || imTime(dt.replace(/^[A-Za-z]+\.?,?\s*/, '')); }
+    const hasLesson = !!(get(r, 'lesson_day') || get(r, 'lesson_time') || dt);
+    const wv = get(r, 'waiver'), wDate = imDate(wv), signed = !!wDate || /^(y|yes|true|signed|x|✓|done|complete)/i.test(wv);
+    return { i, first: (first || '').trim(), last: (last || '').trim(), dob: dob || null, badDob: rawDob && !dob ? rawDob : '', parent: get(r, 'parent_name'), phone: fmtPhone(get(r, 'phone')), email: get(r, 'email').toLowerCase(),
+      level: get(r, 'level'), notes: get(r, 'notes'), day: day && time ? day : null, time: day && time ? time : null, badLesson: hasLesson && !(day && time), signed, wDate: wDate || null, issues: [], act: 'import', userAct: null };
+  });
+}
+function imValidate() {   // (re)work out problems + default choice for every row; a choice the coach picked is kept
+  const keyOf = (f, l, d) => (f + '|' + l).toLowerCase().replace(/\s+/g, '') + '|' + (d || '');
+  const seen = {}, times = {};
+  im.recs.forEach(rec => {
+    rec.issues = []; let act = 'import';
+    if (!rec.first) { rec.issues.push(['bad', 'No student name']); act = 'skip'; }
+    else {
+      const k = keyOf(rec.first, rec.last, rec.dob);
+      if (seen[k] != null && im.recs[seen[k]].userAct !== 'skip') { rec.issues.push(['bad', 'Same kid as row ' + (seen[k] + 2)]); act = 'skip'; } else if (seen[k] == null) seen[k] = rec.i;
+      if (students.some(s => keyOf(s.first_name || '', s.last_name || '', rec.dob ? s.dob : '') === keyOf(rec.first, rec.last, rec.dob || ''))) { rec.issues.push(['bad', 'Already in your students']); act = 'skip'; }
+      if (!rec.phone && !rec.email) rec.issues.push(['warn', 'No phone or email']);
+      if (rec.badDob) rec.issues.push(['warn', "Can't read birthday \"" + rec.badDob + '"']);
+      if (rec.badLesson) rec.issues.push(['warn', "Can't read lesson time"]);
+      if (rec.day) {
+        if (im.slots && !im.slots.has(rec.day + '|' + rec.time)) rec.issues.push(['warn', 'Lesson ' + rec.day.slice(0, 3) + ' ' + rec.time + ' is not one of your slots']);
+        const tk = rec.day + '|' + rec.time, mineAct = rec.userAct || act, other = im.taken[tk] || times[tk];
+        if (other) { rec.issues.push(['bad', 'Same lesson time as ' + other]); if (act === 'import') act = 'nolesson'; }
+        else if (mineAct === 'import') times[tk] = rec.first + ' ' + rec.last;
+      }
+    }
+    rec.flagged = rec.flagged || rec.issues.length > 0;   // stays in the list after it's fixed
+    rec.act = rec.userAct || act;
+    if (rec.act === 'nolesson' && !rec.day) rec.act = 'import';
+  });
+}
+function imOpenSlots(rec) {   // their slots not taken by a current lesson or another imported kid
+  const used = new Set(Object.keys(im.taken)); im.recs.forEach(r => { if (r !== rec && r.day && r.act === 'import') used.add(r.day + '|' + r.time); });
+  return [...(im.slots || [])].filter(k => !used.has(k)).sort((a, b) => DAYS.indexOf(a.split('|')[0]) - DAYS.indexOf(b.split('|')[0]) || timeVal(a.split('|')[1]) - timeVal(b.split('|')[1]));
+}
+function imEdit(i) { im.edit = im.edit === i ? null : i; imDraw(); }
+function imSaveFix(i) {
+  const r = im.recs[i], ph = $('imf_phone').value.trim(), em = $('imf_email').value.trim(), dob = $('imf_dob').value, ls = $('imf_lesson').value;
+  r.phone = fmtPhone(ph); r.email = em.toLowerCase();
+  if (dob) { r.dob = dob; r.badDob = ''; }
+  if (ls === '') { r.day = r.time = null; r.badLesson = false; } else if (ls !== 'keep') { [r.day, r.time] = ls.split('|'); r.badLesson = false; }
+  if (r.userAct === 'nolesson' || r.act === 'nolesson') r.userAct = r.day ? 'import' : null;
+  im.edit = null; imValidate(); imDraw();
+}
+async function imCheck() {
+  const vals = Object.values(im.map);
+  if (!vals.includes('full_name') && !vals.includes('first_name')) return alert('Pick which column has the student name.');
+  const [S, L] = await Promise.all([sb.from('available_slots').select('day,time').eq('active', true), sb.from('private_lessons').select('day,time,student_name,end_date,status')]);
+  const today = ymd(new Date());
+  im.slots = (S.data || []).length ? new Set(S.data.map(x => x.day + '|' + x.time)) : null;
+  im.taken = {}; (L.data || []).filter(l => !['Cancelled', 'Dropped'].includes(l.status) && (!l.end_date || l.end_date > today)).forEach(l => im.taken[l.day + '|' + l.time] = l.student_name);
+  im.recs = imParse(); im.edit = null; imValidate(); im.step = 2; imDraw();
+}
+function imDraw() {
+  const n = im.step, last = SET.last_import && (Date.now() - new Date(SET.last_import.at)) < 864e5 ? SET.last_import : null;
+  const top = `<div class="hdr" style="margin-top:0">Bring in your students<span style="font-weight:400;font-size:13px">${n < 3 ? 'Step ' + (n + 1) + ' of 3' : ''}</span></div>`;
+  let b = '';
+  if (n === 0) b = `${last ? `<div class="arow" style="background:#FFF4D6;border-radius:8px;padding:8px 10px;margin-bottom:10px"><div class="who"><b>Last import: ${last.count} students</b><small>Undo removes those students, their lessons and waivers</small></div><button class="paybtn" style="background:#FCEBEB;color:#A32D2D" onclick="imUndo()">Undo</button></div>` : ''}
+    <div style="color:var(--muted);font-size:14px">Export your students from your old program or spreadsheet, then upload it here. Google Sheets: File → Download → CSV.</div>
+    <label>Upload a file</label><input type="file" accept=".csv,.txt,.xlsx,.xls" onchange="imFile(this)">
+    <label>…or paste rows from a spreadsheet (include the header row)</label><textarea id="im_paste" rows="5" style="width:100%;box-sizing:border-box;font-size:14px" placeholder="Name	Birthday	Parent	Phone"></textarea>
+    <button class="btn ghost" style="margin-top:8px" onclick="imPaste()">Use pasted rows</button><div id="im_msg" class="msg"></div>`;
+  if (n === 1) b = `<div style="font-size:14px;background:var(--mint-soft);color:#1c7a5a;padding:8px 10px;border-radius:8px">${im.ai ? '✨ AI matched your columns.' : 'Matched by column name.'} Check each one — ${im.rows.length} rows found.</div>
+    ${im.head.map((h, i) => `<div class="arow" style="padding:6px 0"><div class="who"><b>${esc(h)}</b><small>${esc(im.rows.slice(0, 2).map(r => r[i]).filter(Boolean).join(' · ').slice(0, 40))}</small></div>
+      <select style="width:52%" onchange="im.map['${esc(h).replace(/'/g, '&#39;')}']=this.value">${Object.entries(IM_FIELDS).map(([k, v]) => `<option value="${k}"${im.map[h] === k ? ' selected' : ''}>${v}</option>`).join('')}</select></div>`).join('')}
+    <div class="row2" style="margin-top:14px"><div><button class="btn ghost" onclick="im.step=0;imDraw()">Back</button></div><div><button class="btn" onclick="imCheck()">Next</button></div></div>`;
+  if (n === 2) {
+    const R = im.recs, go_ = R.filter(r => r.act !== 'skip'), probs = R.filter(r => r.flagged), open_ = probs.filter(r => r.issues.length).length, les = go_.filter(r => r.act === 'import' && r.day).length, wv = go_.filter(r => r.signed).length;
+    const fix = r => { const sl = imOpenSlots(r); return `<div style="background:var(--bg);border-radius:8px;padding:8px 10px;margin:4px 0 8px">
+      <div class="row2"><div><label>Phone</label><input id="imf_phone" type="tel" value="${esc(r.phone)}" oninput="this.value=typingPhone(this.value)"></div><div><label>Birthday</label><input id="imf_dob" type="date" value="${esc(r.dob || '')}"></div></div>
+      <label>Email</label><input id="imf_email" type="email" value="${esc(r.email)}">
+      <label>Weekly lesson</label><select id="imf_lesson"><option value="keep">${r.day ? 'Keep ' + esc(r.day.slice(0, 3) + ' ' + r.time) : 'No lesson'}</option>${r.day ? '<option value="">No lesson</option>' : ''}${sl.map(k => `<option value="${esc(k)}">${esc(k.split('|')[0].slice(0, 3) + ' ' + k.split('|')[1])} (open)</option>`).join('')}</select>
+      ${im.slots ? '' : '<small style="color:var(--muted)">Add slots to pick an open time here</small>'}
+      <div class="row2" style="margin-top:8px"><div><button class="btn ghost" onclick="imEdit(${r.i})">Cancel</button></div><div><button class="btn" onclick="imSaveFix(${r.i})">Save</button></div></div></div>`; };
+    b = `<div class="row2"><div class="card" style="margin:0;text-align:center"><small style="color:var(--muted)">Ready</small><div style="font-size:22px;font-weight:700">${go_.length}</div></div><div class="card" style="margin:0;text-align:center"><small style="color:var(--muted)">Need a look</small><div style="font-size:22px;font-weight:700;color:${open_ ? '#7A5B00' : '#3B6D11'}">${open_}</div></div></div>
+      <div style="font-size:13px;color:var(--muted);margin:8px 0">${les} weekly lessons · ${wv} waivers${im.slots ? '' : " · no slots set up yet, so times aren't checked"}<br>Tap a name to fix it here, or choose Import / Skip.</div>
+      ${probs.map(r => `<div class="arow" style="padding:7px 0;align-items:flex-start"><div class="who" style="cursor:pointer" onclick="imEdit(${r.i})"><b>${esc(r.first + ' ' + r.last)} <span style="color:var(--muted);font-weight:400;font-size:12px">✎ fix</span></b>${r.issues.map(([t, x]) => `<small style="color:${t === 'bad' ? '#A32D2D' : '#7A5B00'}">${esc(x)}</small>`).join('') || '<small style="color:#3B6D11">✓ Fixed</small>'}</div>
+        <select style="width:44%" onchange="im.recs[${r.i}].userAct=this.value;imValidate();imDraw()">${[['import', 'Import'], ['nolesson', 'Import, no lesson'], ['skip', 'Skip']].filter(([k]) => k !== 'nolesson' || r.day).map(([k, v]) => `<option value="${k}"${r.act === k ? ' selected' : ''}>${v}</option>`).join('')}</select></div>${im.edit === r.i ? fix(r) : ''}`).join('') || '<div class="center">No problems found 🎉</div>'}
+      <div class="row2" style="margin-top:14px"><div><button class="btn ghost" onclick="im.step=1;imDraw()">Back</button></div><div><button class="btn" id="im_go" onclick="imRun()">Import ${go_.length}</button></div></div><div id="im_msg" class="msg"></div>`;
+  }
+  if (n === 3) b = `<div style="text-align:center;padding:16px 0"><div style="font-size:40px">✅</div><div style="font-weight:600;font-size:18px">${im.done.s} students in</div>
+    <div style="color:var(--muted);margin:6px 0 14px">${im.done.l} weekly lessons · ${im.done.w} waivers</div><button class="btn" onclick="imClose()">See my students</button>
+    <button class="btn ghost" style="margin-top:8px" onclick="imUndo()">Undo this import</button><div id="im_msg" class="msg"></div></div>`;
+  $('imCard').innerHTML = top + b + (n < 3 ? '<div style="text-align:center;margin-top:12px"><a href="#" onclick="imClose();return false" style="color:var(--muted);font-size:13px">Cancel</a></div>' : '');
+}
+async function imRun() {
+  const btn = $('im_go'), m = $('im_msg'); btn.disabled = true; btn.textContent = 'Importing…';
+  const batch = 'IMP' + Date.now(), today = ymd(new Date()), recs = im.recs.filter(r => r.act !== 'skip');
+  const coach = mainCoach() || ((coachRows.find(c => c.active) || {}).name) || null, dur = SET.lengths.includes('30 min') ? '30 min' : SET.lengths[0];
+  const S = recs.map((r, k) => ({ id: batch + '-' + k, gym_id: gymId, first_name: r.first, last_name: r.last || null, dob: r.dob, skill_level: r.level || null, parent_name: r.parent || null,
+    parent_phone: r.phone || null, parent_email: r.email || null, notes: r.notes || null, status: 'Active', active: true, join_date: today, extra: { ImportBatch: batch } }));
+  const L = recs.map((r, k) => r.act === 'import' && r.day ? { gym_id: gymId, student_id: S[k].id, student_name: (r.first + ' ' + r.last).trim(), coach, day: r.day, time: r.time, duration: dur,
+    price: priceFor(dur, 'Solo'), lesson_type: 'Solo', status: 'Confirmed', booked_date: today, paid: 'Unpaid', start_date: today, extra: { ImportBatch: batch } } : null).filter(Boolean);
+  const W = recs.map((r, k) => r.signed ? { id: batch + '-W' + k, gym_id: gymId, student_id: S[k].id, parent_name: r.parent || null, signature: 'Imported',
+    signed_at: r.wDate ? r.wDate + 'T12:00:00' : null, extra: { ImportBatch: batch, Imported: true } } : null).filter(Boolean);
+  for (let i = 0; i < S.length; i += 500) { const r = await sb.from('students').insert(S.slice(i, i + 500)); if (r.error) { btn.disabled = false; btn.textContent = 'Try again'; m.className = 'msg err'; return m.textContent = r.error.message; } }
+  const r2 = L.length ? await sb.from('private_lessons').insert(L) : {}, r3 = W.length ? await sb.from('waivers').insert(W) : {};
+  await saveSettings({ last_import: { batch, at: new Date().toISOString(), count: S.length } });
+  if (r2.error || r3.error) alert('Students are in, but ' + (r2.error ? 'lessons' : 'waivers') + ' failed: ' + (r2.error || r3.error).message);
+  im.done = { s: S.length, l: r2.error ? 0 : L.length, w: r3.error ? 0 : W.length }; im.step = 3; imDraw(); loadStudents(true);
+}
+async function imUndo() {
+  const li = SET.last_import; if (!li) return;
+  if (!confirm('Undo the import of ' + li.count + ' students? Their lessons and waivers are removed too.')) return;
+  for (const t of ['waivers', 'private_lessons', 'students']) { const r = await sb.from(t).delete().eq('extra->>ImportBatch', li.batch); if (r.error) return alert(r.error.message); }
+  await saveSettings({ last_import: null }); await loadStudents(true); alert('Import undone.'); imStart();
+}
+
 async function changePw() {
   const a = $('pw1').value, b = $('pw2').value, m = $('pwMsg');
   m.className = 'msg err';
@@ -1190,9 +1906,10 @@ async function signOut() { await sb.auth.signOut(); show('loginView'); }
 async function boot() {
   const { data: { session } } = await sb.auth.getSession();
   if (!session) { show('loginView'); return; }
-  const { data: gyms, error } = await sb.from('gyms').select('id,name').limit(1);
+  const { data: gyms, error } = await sb.from('gyms').select('id,name,slug').limit(1);
   if (error || !gyms || !gyms.length) { show('waitView'); return; }
-  gymId = gyms[0].id; gymTitle = gyms[0].name; $('gymName').textContent = gyms[0].name + ' — Students';
+  gymId = gyms[0].id; gymTitle = gyms[0].name; gymSlug = gyms[0].slug; $('gymName').textContent = gyms[0].name + ' — Students';
+  if (!(await loadSettings())) return wzStart();
   const SE = await sb.from('seasons').select('*').order('sort'); seasons = SE.data || [];
   myEmail = (session.user.email || '').toLowerCase(); await loadCoaches(); rtStart(); msBadge();
   await loadStudents();
@@ -1201,9 +1918,10 @@ async function boot() {
   const tab = ss.get('tab', 'dashboard'), sid = ss.get('student', null);
   if (tab === 'student' && sid && students.find(x => x.id === sid)) { curTab = 'students'; openEdit(sid); if (!weekRows.length) loadWeek(); }
   else go(['dashboard','schedule','attendance','classes','openings','pairings','comm','msgs','payments','students','slots'].includes(tab) ? tab : 'dashboard');
+  if (ss.get('import', 0)) { ss.set('import', 0); imStart(); }
 }
 let curTab = 'schedule';
-function go(tab) { curTab = tab; ss.set('tab', tab); if (tab === 'classes') { show('classesView'); return loadClasses(); } if (tab === 'pairings') { show('pairingsView'); return loadPairings(); } if (tab === 'comm') { show('commView'); return loadComm(); } if (tab === 'msgs') { show('msgsView'); return loadMsgs(); } if (tab === 'slots') { show('slotsView'); return loadSlots(); } if (tab === 'students') { show('studentsView'); render(); if (!weekRows.length) loadWeek(); return; } show(tab + 'View'); loadWeek(); }
+function go(tab) { if ((SET.hide_tabs || []).includes(tab)) tab = 'schedule'; curTab = tab; ss.set('tab', tab); if (tab === 'classes') { show('classesView'); return loadClasses(); } if (tab === 'pairings') { show('pairingsView'); return loadPairings(); } if (tab === 'comm') { show('commView'); return loadComm(); } if (tab === 'msgs') { show('msgsView'); return loadMsgs(); } if (tab === 'slots') { show('slotsView'); return loadSlots(); } if (tab === 'students') { show('studentsView'); render(); if (!weekRows.length) loadWeek(); return; } show(tab + 'View'); loadWeek(); }
 
 async function loadStudents(quiet) {
   if (!quiet) $('list').innerHTML = '<div class="center">Loading…</div>';
@@ -1265,6 +1983,7 @@ function openEdit(id) {
 }
 
 async function saveStudent() {
+  if ($('f_dob').dataset.part) { $('editMsg').className = 'msg err'; $('editMsg').textContent = 'Please finish the birthday (month, day and year).'; return; }
   const st = $('f_status').value;
   const cur = students.find(x => x.id === editingId) || {}, prevStatus = cur.status, extra = { ...(cur.extra || {}) };
   XF.forEach(f => { if (f !== 'WaiverSigned') { const v = $('x_' + f).value.trim(); if (v) extra[f] = v; else delete extra[f]; } });
@@ -1347,6 +2066,7 @@ function renderSdTop(s) {
     if (live.length) qa.push(`<button class="warn" onclick="sdCancelWeek()">✕ Cancel ${weekOffset === 0 ? 'this week' : 'that week'}</button>`);
     qa.push(`<button class="dang" onclick="sdStatus('Dropped')">Drop student</button>`);
   }
+  if (s.parent_phone && (!gymSlug || gymSlug === 'fliplab')) qa.push(`<button class="dang" onclick="sdResetCode()">Reset portal code</button>`);
   $('sdTop').innerHTML = `<div class="shead"><div class="av">${esc((s.first_name || '?')[0])}${esc((s.last_name || '')[0] || '')}</div>
     <div><b>${esc(s.first_name)} ${esc(s.last_name)}</b> <span class="pill ${isOn(s) ? '' : 'off'}">${esc(s.status || 'Active')}</span>${s.skill_level ? ` <span class="pill">${esc(s.skill_level)}</span>` : ''}${x.PhotoPermission === 'No' ? ' <span class="tag t-nophoto">No Photo</span>' : ''}
     <small>${age !== '' ? 'Age ' + age + ' · ' : ''}${esc(s.parent_name || '')}${s.parent_phone ? ` · <a href="${smsHref(s.parent_phone)}">${esc(s.parent_phone)}</a>` : ''}</small></div></div>
@@ -1355,7 +2075,7 @@ function renderSdTop(s) {
 }
 function sdRemindText() {
   const s = sd.s, owed = weekRows.filter(p => p.student_id === s.id && p.status !== 'Cancelled' && !noCharge(p)).reduce((t, p) => t + Math.max(0, priceNum(p) - paidOf(p).amt), 0);
-  return 'Hi' + (s.parent_name ? ' ' + s.parent_name.split(' ')[0] : '') + '! Just a friendly reminder that ' + s.first_name + "'s lesson this week (" + money(owed) + ') is still open. Cash, Venmo or Zelle all work. Thank you!';
+  return 'Hi' + (s.parent_name ? ' ' + s.parent_name.split(' ')[0] : '') + '! Just a friendly reminder that ' + s.first_name + "'s lesson this week (" + money(owed) + ') is still open. ' + payList() + ' all work. Thank you!';
 }
 async function sdCancelWeek() {
   const s = sd.s, ls = weekRows.filter(p => p.student_id === s.id && p.status !== 'Cancelled');
@@ -1367,6 +2087,13 @@ async function sdCancelWeek() {
   }
   await loadWeek(); renderSdTop(s);
 }
+async function sdResetCode() {
+  const s = sd.s;
+  if (!confirm('Reset the parent portal code for ' + s.parent_phone + '?\n\nNext time they log in, they get a new code by text and pick a new one. Their account and messages stay the same.')) return;
+  const r = await sb.rpc('portal_reset_code', { p_phone: s.parent_phone });
+  if (r.error) return alert(r.error.message);
+  alert(r.data ? 'Portal code reset.' : 'This family has not set up the parent portal yet, so there is nothing to reset.');
+}
 async function sdStatus(st) {
   const s = sd.s;
   if (st === 'Dropped' && !confirm('Mark ' + s.first_name + ' as Dropped?\n\nTheir lessons stay on the schedule until you remove them (tap the lesson → Cancel → Permanent).')) return;
@@ -1377,6 +2104,7 @@ async function sdStatus(st) {
 }
 function renderSdPanel(t) {
   const el = $('sdPanel');
+  if (t === 'skills') { el.innerHTML = '<div class="card center">Loading…</div>'; skFull(sd.s); return; }
   if (!sd || sd.loading) { el.innerHTML = '<div class="card center">Loading…</div>'; return; }
   const row = (a, b, c) => `<div class="arow"><div class="who">${a}</div>${b || ''}${c || ''}</div>`;
   if (t === 'schedule') {
@@ -1494,9 +2222,10 @@ function renderWeek() {
   const slots = slotsForWeek().filter(s => !coach || s.coach === coach);
   const photo = {}; students.forEach(s => photo[s.id] = (s.extra || {}).PhotoPermission || '');
   const mc = mainCoach();
+  const portalAdd = p => weekEx.some(e => e.type === 'Add' && 'EX_ONLY_' + e.id === p.id && (e.extra || {}).by === 'parent');
   const pills = p => (p.lesson_type === 'Shared' && !p.pair_id ? '<span class="tag t-shared">Shared</span>' : '')
     + (photo[p.student_id] === 'No' ? '<span class="tag t-nophoto">No Photo</span>' : photo[p.student_id] === 'Yes' ? '<span class="tag t-photo">Photo OK</span>' : '')
-    + (p.exType === 'Move' ? '<span class="tag t-ex">Moved</span>' : p.exType === 'Add' ? '<span class="tag t-ex">This week</span>' : '');
+    + (p.exType === 'Move' ? '<span class="tag t-ex">Moved</span>' : p.exType === 'Add' ? '<span class="tag t-ex">This week</span>' + (portalAdd(p) ? '<span class="tag t-ex">Portal</span>' : '') : '');
   // Fill counts (main coach's slots only) + waitlist matches on open rows
   const wlOn = waitlist.filter(w => (w.extra || {}).Unsubscribed !== 'Yes'), fill = {};
   const mine = slot => slot.coach && (!mc || slot.coach === mc);
@@ -1569,7 +2298,7 @@ function openLesson(id) {
   const coaches = coachNames();
   $('lm_title').textContent = p.student_name + ' — ' + p.day + ' ' + p.time;
   $('lm_student').value = p.student_name || '';
-  $('lm_skill').value = stu.skill_level || p.focus || '';
+  $('lm_skill').innerHTML = '<span>' + esc(stu.skill_level ? stu.skill_level.split('-')[0] : 'No level') + '</span><span>Skills</span>'; skLabel(stu);
   $('lm_coach').innerHTML = opts(coaches.concat('TBD'), p.coach || 'TBD');
   $('lm_day').innerHTML = opts(DAYS, p.day);
   $('lm_time').innerHTML = opts(TIMES, p.time);
@@ -1694,7 +2423,7 @@ function openAdd(day, time, coach, o = {}) {
   $('al_coach').innerHTML = opts(coaches.concat('TBD'), coach || coaches[0] || 'TBD');
   $('al_day').innerHTML = opts(DAYS, day || 'Monday');
   $('al_time').innerHTML = opts(TIMES, time || '4:00 PM');
-  $('al_duration').value = '30 min';
+  $('al_duration').value = SET.lengths.includes('30 min') ? '30 min' : SET.lengths[0];
   $('al_scope').value = o.scope || 'permanent'; $('al_startWrap').classList.toggle('hidden', $('al_scope').value !== 'permanent'); $('al_start').value = weekStartStr();
   alWl = o.wl || null; alPriceTouched = false;
   alPrice(); alMsg('');
@@ -1826,6 +2555,8 @@ function afterPay(delta) {
 
 // ================= PAYMENTS TAB =================
 const money = n => '$' + (Math.round(n * 100) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 });
+// Late-cancel row (cancelled this week from the parent portal) for Record payment / Edit payment / Special price
+const lateObj = id => { const p = weekRows.find(r => r.id === id && r.status === 'Cancelled'); return p ? { ...p, late: true } : id; };
 function renderPay() {
   // Same rules as 2.0 getOutstandingBalances: skip lessons marked Cancelled/Absent in attendance
   const skip = new Set(weekAtt.filter(a => a.status === 'Cancelled' || a.status === 'Absent').map(a => a.lesson_id));
@@ -1835,7 +2566,8 @@ function renderPay() {
     const c = clsSched.find(x => x.id === a.schedule_id) || { id: a.schedule_id, class_name: a.class_name, day: a.day, time: '' };
     return { ...clsObj(c, { student_id: a.student_id, student_name: a.student_name }), cls: c.class_name || 'Class' };
   });
-  const bals = weekRows.filter(p => p.status !== 'Cancelled' && !noCharge(p) && (!skip.has(attKey(p)) || paidOf(p).amt > 0)).concat(clsItems).map(p => {
+  const lateCx = p => p.exType === 'Cancel' && weekEx.some(e => e.lesson_id === p.id && e.type === 'Cancel' && (e.extra || {}).late);   // late cancel from the parent portal = full price
+  const bals = weekRows.filter(p => (p.status !== 'Cancelled' || lateCx(p)) && !noCharge(p) && (!skip.has(attKey(p)) || paidOf(p).amt > 0)).map(p => lateCx(p) ? { ...p, late: true } : p).concat(clsItems).map(p => {
     const paid = paidOf(p), owed = paid.adj ? paid.amt : priceNum(p);
     return { p, owed, paid: paid.amt, method: paid.method, adj: paid.adj, bal: owed - paid.amt };
   }).sort((a, b) => DAYS.indexOf(a.p.day) - DAYS.indexOf(b.p.day) || (b.bal > 0) - (a.bal > 0) || timeVal(a.p.time) - timeVal(b.p.time));
@@ -1855,13 +2587,13 @@ function renderPay() {
   $('balList').innerHTML = bals.length ? bals.map(b => {
     const hdr = b.p.day !== lastDay ? (lastDay = b.p.day, `<div id="payDay_${esc(b.p.day)}" style="background:#f6f6f6;padding:6px 12px;font-weight:600;font-size:13px;display:flex;justify-content:space-between"><span>${esc(b.p.day)}</span><span style="color:#3B6D11">${money((dayT[b.p.day] || {}).got || 0)} collected${(dayT[b.p.day] || {}).due ? ' · <span style="color:#854F0B">' + money(dayT[b.p.day].due) + ' due</span>' : ''}</span></div>`) : '';
     const p = b.p, k = esc(p.id), s = stu[p.student_id] || {};
-    const what = p.cls ? p.day + ' ' + p.cls + ' class' : p.day + ' lesson';
-    const remind = 'Hi' + (s.parent_name ? ' ' + s.parent_name.split(' ')[0] : '') + '! Just a friendly reminder that ' + (p.student_name || '').split(' ')[0] + "'s " + what + ' this week (' + money(b.bal) + ') is still open. Cash, Venmo or Zelle all work. Thank you!';
-    const pk = p.cls ? `clsObjFor('${k}')` : `'${k}'`;
+    const what = p.cls ? p.day + ' ' + p.cls + ' class' : p.day + (p.late ? ' late cancel fee' : ' lesson');
+    const remind = 'Hi' + (s.parent_name ? ' ' + s.parent_name.split(' ')[0] : '') + '! Just a friendly reminder that ' + (p.student_name || '').split(' ')[0] + "'s " + what + ' this week (' + money(b.bal) + ') is still open. ' + payList() + ' all work. Thank you!';
+    const pk = p.cls ? `clsObjFor('${k}')` : p.late ? `lateObj('${k}')` : `'${k}'`;
     const phone = s.parent_phone ? `<a href="${smsHref(s.parent_phone, remind)}">📱 Remind</a> <span style="font-size:11px;color:#888">${esc(s.parent_phone)}</span>` : '';
-    return hdr + `<div class="arow"><div class="who"><b>${esc(p.student_name)}</b><small>${p.cls ? '🤸 ' + esc(p.cls) + ' · ' : ''}${esc(p.day)} ${esc(p.time)}${!p.cls && skip.has(attKey(p)) ? ' · <b style="color:#854F0B">' + esc((attOf(p) || {}).status || 'Absent') + ' · paid anyway</b>' : ''} · owed ${money(b.owed)}${b.paid ? ' · paid ' + money(b.paid) : ''}</small>${b.bal > 0 ? phone : ''}</div>
-      ${b.bal > 0 ? `<div class="bal">${money(b.bal)} due</div><button class="paybtn" onclick="openPay(${pk})">$ Record Payment</button>${b.paid && !p.cls ? `<button class="paybtn" style="background:#EFE7FF;color:#3C3489" onclick="markSpecial('${k}')">★ Special price</button>` : ''}`
-        : `<span class="paid" style="cursor:pointer" title="Tap to edit" onclick="${p.cls ? `clsUndoPayId('${k}')` : `undoPay('${k}')`}">✓ Paid ${money(b.paid)}${b.method ? ' · ' + esc(b.method) : ''}${b.adj ? ' · ★ special' : ''}</span>`}</div>`;
+    return hdr + `<div class="arow"><div class="who"><b>${esc(p.student_name)}</b><small>${p.cls ? '🤸 ' + esc(p.cls) + ' · ' : ''}${esc(p.day)} ${esc(p.time)}${p.late ? ' <span class="tag t-away">Late cancel</span>' : ''}${!p.cls && skip.has(attKey(p)) ? ' · <b style="color:#854F0B">' + esc((attOf(p) || {}).status || 'Absent') + ' · paid anyway</b>' : ''} · owed ${money(b.owed)}${b.paid ? ' · paid ' + money(b.paid) : ''}</small>${b.bal > 0 ? phone : ''}</div>
+      ${b.bal > 0 ? `<div class="bal">${money(b.bal)} due</div><button class="paybtn" onclick="openPay(${pk})">$ Record Payment</button>${b.paid && !p.cls ? `<button class="paybtn" style="background:#EFE7FF;color:#3C3489" onclick="markSpecial(${pk})">★ Special price</button>` : ''}`
+        : `<span class="paid" style="cursor:pointer" title="Tap to edit" onclick="${p.cls ? `clsUndoPayId('${k}')` : `undoPay(${pk})`}">✓ Paid ${money(b.paid)}${b.method ? ' · ' + esc(b.method) : ''}${b.adj ? ' · ★ special' : ''}</span>`}</div>`;
   }).join('') : '<div class="center">No lessons this week</div>';
   // history filter: students with a lesson this week or a payment this week, plus everyone active
   const f = $('histFilter'), cur = f.value;
@@ -1958,7 +2690,7 @@ async function loadHistory() {
 
 // Mark this week's payments for a lesson as a special price (2.0 "Adjusted") → counts as paid in full
 async function markSpecial(id) {
-  const p = weekRows.find(r => r.id === id && r.status !== 'Cancelled'); if (!p) return;
+  const p = typeof id === 'object' ? id : weekRows.find(r => r.id === id && r.status !== 'Cancelled'); if (!p) return;
   const rows = weekPay.filter(x => x.lesson_id === p.id), total = rows.reduce((t, x) => t + (+x.amount || 0), 0);
   if (!rows.length || !confirm('Special price for ' + p.student_name + ' this week?\n\nThe $' + total.toFixed(0) + ' they paid will count as paid in full.')) return;
   for (const x of rows) {
@@ -2005,7 +2737,7 @@ async function removePays(p) {
 // ---- Classes (port of 2.0 renderClassAttendanceTab_ / classAttMark_) ----
 // Class payment id = CLS_<scheduleId>_<studentId>_<weekStart> (same as 2.0)
 const clsPayId = (c, sid) => 'CLS_' + c.id + '_' + sid + '_' + weekStartStr();
-const clsPrice = c => +String(c.price || '').replace(/[^0-9.]/g, '') || 20;
+const clsPrice = c => +String(c.price || '').replace(/[^0-9.]/g, '') || SET.class_price;
 const clsAttOf = (c, sid) => clsAtt.find(a => a.schedule_id === c.id && a.student_id === sid);
 const clsObj = (c, r) => ({ id: clsPayId(c, r.student_id), student_id: r.student_id, student_name: r.student_name, day: c.day, time: c.time, price: '$' + clsPrice(c), lesson_type: null });
 async function toggleClassOff(id) {
@@ -2157,11 +2889,16 @@ function renderDash() {
   if (recentClaims.length) alerts.push(['#1D9E75', recentClaims.length + ' spot' + (recentClaims.length === 1 ? '' : 's') + ' claimed from a text', recentClaims.slice(0, 4).map(c => (c.student_name || '').split(' ')[0] + ' ' + SHORT[c.day] + ' ' + c.time).join(' · '), "go('schedule')"]);
   const out = weekRows.filter(p => p.status === 'Cancelled' && p.exType !== 'MoveOrigin' && !slotPast(p.day, p.time));
   if (out.length) alerts.push(['#B45309', out.length + ' out this week — spot' + (out.length === 1 ? '' : 's') + ' to fill', out.map(p => p.student_name.split(' ')[0] + ' ' + SHORT[p.day] + ' ' + p.time).join(' · '), "go('openings')"]);
+  // Changes parents made in the parent portal this week
+  const pp = weekEx.filter(e => (e.extra || {}).by === 'parent' && e.status === 'Active');
+  if (pp.length) alerts.push(['#1e8cff', pp.length + ' change' + (pp.length === 1 ? '' : 's') + ' from the parent portal', pp.map(e => String(e.student_name || '').split(' ')[0] + (e.type === 'Cancel' ? ' cancelled ' + SHORT[e.base_day] + ' ' + e.base_time : e.type === 'Add' ? ' booked an extra lesson ' + SHORT[e.new_day] + ' ' + e.new_time : ' moved ' + SHORT[e.base_day] + ' → ' + SHORT[e.new_day] + ' ' + e.new_time) + (e.extra.late ? ' (LATE)' : '')).join(' · '), "go('schedule')"]);
   if (dashHist) {
     const { absent, unpaid2 } = dashHist;
     if (absent.length) alerts.push(['#A32D2D', absent.length + ' kid' + (absent.length === 1 ? '' : 's') + ' missed the last 2 weeks', absent.join(' · '), "go('students')"]);
     if (unpaid2.length) alerts.push(['#854F0B', unpaid2.length + ' unpaid 2+ weeks running', unpaid2.join(' · '), "go('payments')"]);
   } else loadDashHist();
+  if (skReqs === null || Date.now() - skReqsAt > 30000) loadSkReqs();
+  if (skReqs && skReqs.length) alerts.push(['#185FA5', skReqs.length + ' skill request' + (skReqs.length === 1 ? '' : 's') + ' from ' + (skReqs.length === 1 ? 'a parent' : 'parents'), [...new Set(skReqs.map(r => r.who))].join(' · ') + ' · tap to answer', `openEdit('${esc(skReqs[0].student_id)}');sdTab('skills')`]);
   if (msUnread) alerts.push(['#d64545', msUnread + ' unread text' + (msUnread === 1 ? '' : 's') + ' from parents', 'Tap to open Messages', "go('msgs')"]);
   const mi = miKids();
   if (mi.length) alerts.push(['#7F77DD', mi.length + ' kid' + (mi.length === 1 ? '' : 's') + ' missing info', 'Birthdate or level · tap to fill in', 'openMissing()']);
@@ -2697,9 +3434,9 @@ async function msShow(phone, quiet) {
   $('ms_who').textContent = x.name + (x.kids ? ' (' + x.kids + ')' : '') + ' · ' + fmtPhone(phone);
   $('ms_bubbles').innerHTML = x.list.map(r => { const me = r.direction === 'OUT';
     return `<div style="align-self:${me ? 'flex-end' : 'flex-start'};max-width:82%;background:${me ? '#e6f8f1' : '#f1f3f5'};border-radius:12px;padding:7px 10px;font-size:14px;white-space:pre-wrap">${esc(r.body)}
-      <div style="font-size:11px;color:#888;margin-top:2px;text-align:${me ? 'right' : 'left'}">${msWhen(r.received_at)}${r.extra?.line === 'Voice' ? ' · ☎️ Voice' : ''}${me && r.status === 'Failed' ? ' · <span style="color:#d64545">Failed</span>' : ''}</div></div>`; }).join('');
+      <div style="font-size:11px;color:#888;margin-top:2px;text-align:${me ? 'right' : 'left'}">${msWhen(r.received_at)}${r.extra?.line === 'Voice' ? ' · ☎️ Voice' : r.extra?.via === 'Portal' ? ' · 💬 Portal' : ''}${me && r.status === 'Failed' ? ' · <span style="color:#d64545">Failed</span>' : ''}</div></div>`; }).join('');
   const bx = $('ms_bubbles'); bx.scrollTop = bx.scrollHeight;
-  if (!quiet) { $('ms_msg').value = ''; $('ms_idea').value = ''; const li = [...x.list].reverse().find(r => r.direction === 'IN'); $('ms_line').value = li?.extra?.line === 'Voice' ? 'Voice' : 'Cell'; }
+  if (!quiet) { $('ms_msg').value = ''; $('ms_idea').value = ''; const li = [...x.list].reverse().find(r => r.direction === 'IN' && r.extra?.via !== 'Portal'); $('ms_line').value = li?.extra?.line === 'Voice' ? 'Voice' : 'Cell'; }
   const ids = x.list.filter(r => r.direction === 'IN' && r.status === 'Unread').map(r => r.id);
   if (ids.length) { await sb.from('text_log').update({ status: 'Read' }).in('id', ids); ids.forEach(id => { const r = msRows.find(y => y.id === id); if (r) r.status = 'Read'; }); msBadge(); }
 }
@@ -2967,7 +3704,7 @@ function clFill(c) {
   const co = coachNames(); if (c.coach && !co.includes(c.coach)) co.push(c.coach);
   $('cx_coach').innerHTML = '<option value="">—</option>' + co.map(n => `<option${n === (c.coach || (clEditId ? '' : mainCoach())) ? ' selected' : ''}>${esc(n)}</option>`).join('');
   $('cx_name').value = c.class_name || ''; $('cx_time').value = to24(c.time || '10:30 AM');
-  $('cx_price').value = c.price != null ? +c.price : 20; $('cx_max').value = c.max_students != null ? c.max_students : 15;
+  $('cx_price').value = c.price != null ? +c.price : SET.class_price; $('cx_max').value = c.max_students != null ? c.max_students : 15;
   $('cx_len').value = c.duration || ''; $('cx_ages').value = c.age_group || ''; $('cx_date').value = c.clinic_date || '';
   $('clModal').classList.remove('hidden');
 }
@@ -3089,6 +3826,8 @@ function rtStart() {
   rtChan = sb.channel('fl3-admin');
   ['private_lessons','schedule_exceptions','attendance','payments','students','waitlist','available_slots','class_attendance','class_enrollments','coaches','class_schedule','class_rsvp','clinic_kids']
     .forEach(t => rtChan.on('postgres_changes', { event: '*', schema: 'public', table: t }, rtQueue));
+  rtChan.on('postgres_changes', { event: '*', schema: 'public', table: 'student_extra_skills' }, () => loadSkReqs());
+  loadSkReqs();   // logged in now — first check may have run before login and found nothing
   rtChan.on('postgres_changes', { event: '*', schema: 'public', table: 'text_log' }, () => { msBadge(); if (curTab === 'msgs') { clearTimeout(msRt); msRt = setTimeout(() => loadMsgs(true), 800); } });
   rtChan.subscribe();
 }

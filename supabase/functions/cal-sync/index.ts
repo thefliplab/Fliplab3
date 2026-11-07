@@ -53,6 +53,8 @@ async function wantedEvents(gym: string, s: any, ws: string): Promise<Want[]> {
     db.from("class_week_off").select("schedule_id").eq("gym_id", gym).eq("week_start", ws),
   ]);
   for (const r of [L, X]) if ((r as any).error) throw new Error((r as any).error.message);
+  // Test students (ID starts with TEST-) never go on the calendar
+  for (const r of [L, X]) (r as any).data = ((r as any).data || []).filter((x: any) => !String(x.student_id || "").startsWith("TEST-"));
   const out: Want[] = [];
   const ev = (key: string, title: string, day: string, time: string, mins: number, desc: string, color?: string) => {
     const di = DAYS.indexOf(day), t = timeVal(time); if (di < 0 || t >= 9999) return;

@@ -26,7 +26,7 @@ const addDays = (ymd: string, n: number) => { const d = new Date(ymd + "T12:00:0
 const mondayOf = (ymd: string) => { const d = new Date(ymd + "T12:00:00Z"), w = d.getUTCDay(); return addDays(ymd, w === 0 ? -6 : 1 - w); };
 const token = () => Array.from(crypto.getRandomValues(new Uint8Array(18)), (b) => b.toString(16).padStart(2, "0")).join("");
 
-function emailHtml(gym: string, parentFirst: string, first: string, sunLabel: string, time: string, yes: string, no: string) {
+function emailHtml(gym: string, parentFirst: string, first: string, sunLabel: string, time: string, yes: string, no: string, portal: string) {
   return `<div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto">`
     + `<div style="background:${BRAND};padding:20px;text-align:center"><h1 style="color:white;letter-spacing:3px;margin:0;font-size:22px">${esc(gym.toUpperCase())}</h1></div>`
     + `<div style="padding:24px;color:#2c2c2a;line-height:1.7">`
@@ -36,6 +36,7 @@ function emailHtml(gym: string, parentFirst: string, first: string, sunLabel: st
     + `<a href="${yes}" style="display:inline-block;background:#3B6D11;color:white;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px;margin:6px">Yes, we'll be there!</a>`
     + `<a href="${no}" style="display:inline-block;background:#A32D2D;color:white;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px;margin:6px">Can't make it</a>`
     + `</div><p style="font-size:13px;color:#888">Please reply by Saturday so we know who to expect.</p>`
+    + `<p style="font-size:13px;color:#888;margin-top:4px">Or <a href="${portal}" style="color:#888">reply in your parent portal</a></p>`
     + `<p style="color:${BRAND};font-weight:bold;margin-top:16px">— ${COACH} &amp; The ${esc(gym)} Team</p></div></div>`;
 }
 
@@ -51,12 +52,13 @@ Deno.serve(async (req) => {
   let gyms: { id: string; name: string }[] = [];
   if (body.test) {
     const user = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: req.headers.get("Authorization") || "" } } });
-    const { data } = await user.from("gyms").select("id,name").limit(1);   // RLS: signed-in owner only
+    const { data } = await user.from("gyms").select("id,name,slug").limit(1);   // RLS: signed-in owner only
     if (!data?.length) return json({ error: "Not signed in" }, 401);
+    if (data[0].slug !== "fliplab") return json({ error: "Automatic emails are not set up for this gym yet" }, 403);
     gyms = data;
   } else if (body.cron) {
     if (now.wd !== "Fri" || now.hour !== 8) return json({ skipped: "not Friday 8 AM in New York" });
-    const { data } = await db.from("gyms").select("id,name");
+    const { data } = await db.from("gyms").select("id,name").eq("slug", "fliplab");   // sends from Steve's Yahoo → Flip Lab only
     gyms = data || [];
   } else return json({ error: "Nothing to do" }, 400);
 
@@ -76,7 +78,7 @@ Deno.serve(async (req) => {
     if (body.test) {
       const c = (C || [])[0] || { class_name: "Sunday class", time: "10:30 AM" };
       try {
-        await send(from, `[TEST] Is Zoey coming Sunday ${sunLabel}? 🤸`, emailHtml(g.name, "Steve", "Zoey", sunLabel, c.time, site + "rsvp.html?t=TEST&a=yes", site + "rsvp.html?t=TEST&a=no"),
+        await send(from, `[TEST] Is Zoey coming Sunday ${sunLabel}?`, emailHtml(g.name, "Steve", "Zoey", sunLabel, c.time, site + "rsvp.html?t=TEST&a=yes", site + "rsvp.html?t=TEST&a=no", site + "portal.html"),
           `TEST — this is what families get on Friday.\nWill Zoey be at Sunday's class on ${sunLabel} at ${c.time}?`);
         out.push({ gym: g.name, test: true, to: from });
       } catch (e) { out.push({ gym: g.name, error: String((e as Error)?.message || e).slice(0, 300) }); }
@@ -107,12 +109,12 @@ Deno.serve(async (req) => {
         once: cur?.once || false, source: cur?.source || "admin", answer: cur?.answer || null }, { onConflict: "gym_id,schedule_id,student_id,week_start" });
       if (up.error) { failed++; skipped.push(name + " (" + up.error.message + ")"); continue; }
       const parentFirst = String(s.parent_name || k.parent_name || "").split(" ")[0] || "there";
-      const subject = `Is ${first} coming Sunday ${sunLabel}? 🤸`;
+      const subject = `Is ${first} coming Sunday ${sunLabel}?`;
       let ok = false, error: string | null = null;
       try {
         if (sent + failed > 0) await sleep(1500);
-        await send(to, subject, emailHtml(g.name, parentFirst, first, sunLabel, c.time, `${site}rsvp.html?t=${t}&a=yes`, `${site}rsvp.html?t=${t}&a=no`),
-          `Hi ${parentFirst},\nWill ${first} be at Sunday's class on ${sunLabel} at ${c.time}?\nYes: ${site}rsvp.html?t=${t}&a=yes\nCan't make it: ${site}rsvp.html?t=${t}&a=no`);
+        await send(to, subject, emailHtml(g.name, parentFirst, first, sunLabel, c.time, `${site}rsvp.html?t=${t}&a=yes`, `${site}rsvp.html?t=${t}&a=no`, `${site}portal.html`),
+          `Hi ${parentFirst},\nWill ${first} be at Sunday's class on ${sunLabel} at ${c.time}?\nYes: ${site}rsvp.html?t=${t}&a=yes\nCan't make it: ${site}rsvp.html?t=${t}&a=no\nOr reply in your parent portal: ${site}portal.html`);
         ok = true; sent++;
       } catch (e) { failed++; error = String((e as Error)?.message || e).slice(0, 300); }
       await db.from("email_log").insert({ gym_id: g.id, to_email: to, student_id: k.student_id, family_name: name, subject, body: "Friday RSVP email", status: ok ? "Sent" : "Failed", error, batch });
