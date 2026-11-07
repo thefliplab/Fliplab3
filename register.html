@@ -106,6 +106,7 @@ button.fl-tap,a.btn.fl-tap{outline:2px solid #1e8cff;outline-offset:2px}
 <div class="container">
   <div id="welcome" style="display:none;background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;margin-bottom:14px;font-size:14px;line-height:1.6;color:#444;white-space:pre-line"></div>
   <div class="banner" id="banner"></div>
+  <div id="portalTop" style="text-align:center;font-size:13px;color:#6b7280;margin:-4px 0 14px">Already a student? <a id="portalLink" href="portal.html" style="color:var(--accent);font-weight:600">Open the parent portal</a></div>
 
   <!-- STEP 1b — Lesson (first screen) -->
   <div class="step active" id="step1b">
@@ -328,6 +329,8 @@ button.fl-tap,a.btn.fl-tap{outline:2px solid #1e8cff;outline-offset:2px}
       <div class="hr" style="margin-top:0"></div>
       <div id="summaryBox" style="background:var(--bg);border-radius:var(--r);padding:16px;margin-bottom:16px;font-size:13px;line-height:2"></div>
       <div class="info" style="color:var(--hero)"><strong>What happens next?</strong><br><span id="doneNext"></span></div>
+      <div id="portalDone"><a class="btn" id="portalBtn" href="portal.html" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box">Open Your Parent Portal</a>
+        <div id="portalNote" style="display:none;text-align:center;font-size:12px;color:#6b7280;margin:6px 0 4px"></div></div>
       <button class="btn" onclick="location.reload()">Register Another Athlete</button>
     </div>
   </div>
@@ -359,8 +362,14 @@ function dobPick(inp, oldest) {
 document.querySelectorAll('#dob,#sibDob').forEach(i => dobPick(i, new Date().getFullYear() - 25));
 const sb = supabase.createClient('https://angmtyojkwlrefxpcgoa.supabase.co', 'sb_publishable_fPciNfnNHpHQikB8mqHNpw_hIVRIGo5');
 const GYM = new URLSearchParams(location.search).get('gym') || 'fliplab';
-let VENMO = 'https://venmo.com/code?user_id=2634245503713280412', ZELLE = '951-317-5158', COACH = 'Coach Steve', MINE = true;   // MINE = a confirmation email goes out (Flip Lab, or a gym with its email connected)
+if (GYM !== 'fliplab') {   // other gyms: never show Flip Lab's logo, title or payment info, even for a second
+  document.title = 'Register Your Athlete';
+  const hl = document.getElementById('heroLogo'); if (hl) { hl.style.display = 'none'; hl.removeAttribute('src'); }
+}
+let VENMO = GYM === 'fliplab' ? 'https://venmo.com/code?user_id=2634245503713280412' : '', ZELLE = GYM === 'fliplab' ? '951-317-5158' : '', COACH = GYM === 'fliplab' ? 'Coach Steve' : 'your coach', MINE = GYM === 'fliplab';   // MINE = a confirmation email goes out (Flip Lab, or a gym with its email connected)
 const $ = id => document.getElementById(id);
+// Parent portal link (top of page + done screen). Other gyms: ?gym=<slug>; hidden if that gym turned the portal off.
+if (GYM !== 'fliplab') ['portalLink', 'portalBtn'].forEach(id => $(id).href = 'portal.html?gym=' + encodeURIComponent(GYM));
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 const SKILLS = [
@@ -621,6 +630,8 @@ async function submitForm() {
     const img = document.getElementById('heroLogo'), txt = document.getElementById('logoText');
     txt.textContent = L.name; document.getElementById('hero-sub').style.display = 'none';
     if (L.logo_url) { img.src = L.logo_url; img.alt = L.name; txt.style.display = 'block'; } else { img.style.display = 'none'; txt.style.display = 'block'; }
+    if (L.portal_off) { $('portalTop').style.display = 'none'; $('portalDone').style.display = 'none'; }
+    else if (!L.mail) { $('portalNote').textContent = (COACH === 'your coach' ? 'Your coach' : COACH) + ' will give you a login code.'; $('portalNote').style.display = 'block'; }
     if (L.color) { const r = document.documentElement.style; ['--hero', '--btn', '--accent'].forEach(k => r.setProperty(k, L.color)); }
   }
   if (L.su_header === 'white') { hero.style.background = '#fff'; hero.style.borderBottom = '1px solid #eee'; document.getElementById('logoText').style.color = '#1f2933'; }
@@ -630,8 +641,10 @@ async function submitForm() {
   const fmt = t => t.trim().split(/\n\s*\n/).map(p => { const ls = p.split('\n').map(E); return (ls.length > 1 && ls[0].length < 70 ? '<strong>' + ls.shift() + '</strong><br>' : '') + ls.join('<br>'); }).join('<br><br>');
   const pol = document.getElementById('polBox'), wav = document.getElementById('wavBox');
   const swap = h => (me ? h.replace(/Flip Lab/g, E(L.name)) : h).replace(/24 hours/g, hrs + ' hours');
-  pol.innerHTML = L.policy_text ? fmt(L.policy_text) : swap(pol.innerHTML);
-  wav.innerHTML = L.waiver_text ? fmt(L.waiver_text) : swap(wav.innerHTML);
+  // Other gyms with no policy / waiver written in Settings: that part of the page is hidden (no Flip Lab starter text)
+  const hideBox = (box, chk) => { [box.previousElementSibling, box, box.nextElementSibling, box.nextElementSibling && box.nextElementSibling.nextElementSibling].forEach(el => { if (el) el.style.display = 'none'; }); document.getElementById(chk).checked = true; };
+  if (me && !L.policy_text) hideBox(pol, 'cancelAccept'); else pol.innerHTML = L.policy_text ? fmt(L.policy_text) : swap(pol.innerHTML);
+  if (me && !L.waiver_text) hideBox(wav, 'waiverAccept'); else wav.innerHTML = L.waiver_text ? fmt(L.waiver_text) : swap(wav.innerHTML);
 })();
 </script>
 <script>document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('button,a.btn'); if (!b || b.disabled) return; b.classList.add('fl-tap'); setTimeout(() => b.classList.remove('fl-tap'), 350); }, true);</script>

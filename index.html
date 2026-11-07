@@ -272,7 +272,7 @@ button.fl-tap,a.btn.fl-tap{outline:2px solid #1D9E75;outline-offset:2px}
       <textarea id="cm_msg" rows="4" placeholder="Hi {parent}! …" oninput="cmLen()"></textarea>
       <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin:4px 0"><button class="paybtn" style="background:#EEEDFE;color:#3C3489" onclick="cmAI('shorter')">Shorter</button><button class="paybtn" style="background:#EEEDFE;color:#3C3489" onclick="cmAI('friendlier')">Friendlier</button><button class="paybtn" style="background:#EEEDFE;color:#3C3489" onclick="cmAI('professional')">More professional</button><button class="paybtn" style="background:#EEEDFE;color:#3C3489" onclick="cmAI('onetext')">Fit in 1 text</button><small id="cm_len" style="margin-left:auto;color:#888"></small></div><div id="cm_ai" class="msg"></div>
       <small style="color:#888;display:block;margin:4px 0 8px">{parent} and {kid} fill in for each family. A family with two kids gets one text. <a href="#" onclick="cmSaveMsg();return false" style="color:#185FA5">Save this message</a> · <a href="#" onclick="cmDelSaved();return false" style="color:#A32D2D">Delete saved</a></small>
-      <input id="cm_subj" placeholder="Email subject (default: Flip Lab)" style="margin:0 0 4px">
+      <input id="cm_subj" placeholder="Email subject (default: your gym name)" style="margin:0 0 4px">
       <div id="cm_viaBox"></div>
       <label style="display:flex;gap:6px;align-items:center;font-size:13px;margin:0 0 6px;font-weight:400;color:#92400E"><input type="checkbox" id="cm_test" onchange="ss.set('prTest',this.checked);cmCount()" style="width:auto;margin:0">Test mode: texts go to this number, emails to your Yahoo</label>
       <input id="cm_testTo" placeholder="Test phone, e.g. (513) 555-1234" onchange="this.value=fmtPhone(this.value);ss.set('prTestTo',this.value)" style="margin:0 0 10px;max-width:260px">
@@ -779,10 +779,17 @@ function hsAdd(kind, list) {
   const now = new Date().toISOString();
   if (kind === 'text') sb.from('text_log').insert(list.map(m => ({ gym_id: gymId, direction: 'OUT', phone: String(m.to || '').replace(/\D/g, '').slice(-10), student_id: m.student_id || null, family_name: m.family || null, body: m.text, status: 'Sent by hand', received_at: now, extra: { hand: true } }))).then(() => {}, () => {});
   else sb.from('email_log').insert(list.map(m => ({ gym_id: gymId, to_email: m.to || '(none)', student_id: m.student_id || null, family_name: m.family || null, subject: m.subject || gymTitle, body: m.text || '', status: 'Sent by hand' }))).then(() => {}, () => {});
-  hsDraw();
+  // Just one message → open Messages/Mail straight away (no list). More than one → list (one app per tap).
+  if (hsPending) return;
+  if (hs.length > list.length) return hsDraw();
+  hsPending = true;
+  setTimeout(() => { hsPending = false; if (hs.length === 1 && hs[0].to) { const x = hs[0]; hs = []; hsDraw(); location.href = hsHref(x); } else hsDraw(); }, 0);
 }
+let hsPending = false;
+const HAND = () => !!gymSlug && gymSlug !== 'fliplab';   // other gyms send texts from their own phone
+const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
 function hsHref(x) {
-  return x.kind === 'text' ? 'sms:' + x.to.replace(/\D/g, '') + '?&body=' + encodeURIComponent(x.text)
+  return x.kind === 'text' ? 'sms:' + x.to.replace(/\D/g, '') + (IOS ? '&body=' : '?body=') + encodeURIComponent(x.text)
     : 'mailto:' + encodeURIComponent(x.to) + '?subject=' + encodeURIComponent(x.subject) + '&body=' + encodeURIComponent(x.text);
 }
 function hsDraw() {
@@ -791,7 +798,7 @@ function hsDraw() {
   if (!hs.length) return el.classList.add('hidden');
   el.classList.remove('hidden');
   const same = hs.every(x => x.text === hs[0].text), left = hs.filter(x => !x.done).length;
-  el.innerHTML = `<div class="mdl"><div class="mh"><b>Send these from your phone (${left} left)</b><button class="x" onclick="hs=[];hsDraw()">✕</button></div>
+  el.innerHTML = `<div class="mdl"><div class="mh"><b>Tap Text for each family (${left} left)</b><button class="x" onclick="hs=[];hsDraw()">✕</button></div>
     <div style="font-size:13px;color:var(--muted);margin-bottom:8px">Tap each one. Your Messages or Mail app opens with the message filled in. Just hit send.</div>
     ${same ? `<button class="btn ghost" style="margin-bottom:8px" onclick="hsCopy(0)">📋 Copy message</button>` : ''}
     ${hs.map((x, i) => `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid #eee;${x.done ? 'opacity:.45' : ''}">
@@ -852,7 +859,7 @@ async function openAcct() {
 // ================= PAIRINGS: current solo students + waitlist who could share a lesson =================
 // Pool: live solo lessons (main coach, not already sharing a slot) + Waiting/Waitlist entries (no drop-ins).
 let prSolos = [], prWait = [], prNeedsOpen = false, prM = { 1: [], 2: [] }, prOpen = null;
-const prLv = v => { const m = String(v || '').match(/^L(\d)/i); return m ? +m[1] : null; };
+const prLv = v => { if (HAND()) { const i = SK ? SK.levels.findIndex(l => l.code === v) : -1; return i > -1 ? i + 1 : null; } const m = String(v || '').match(/^L(\d)/i); return m ? +m[1] : null; };   // other gyms: position in their level list
 const prYrs = d => d ? (Date.now() - new Date(d + 'T00:00:00')) / 31557600000 : null;
 async function loadPairings() {
   const today = ymd(new Date());
@@ -883,7 +890,7 @@ function prMatch(a, b, close) {
   const ag = Math.abs(prYrs(a.dob) - prYrs(b.dob)); if (ag > 2) return null;
   return { gap, ag };
 }
-function prWho(x) { const age = ageOf(x.dob); return (x.skill ? esc(String(x.skill).split('-')[0]) : 'No level') + (age !== '' ? ' · age ' + age : '') + (((prStu(x.id) || {}).extra || {}).ShareType === 'Pair me up' ? ' · <b style="color:#1D9E75">🤝 asked to be paired</b>' : ''); }
+function prWho(x) { const age = ageOf(x.dob); return (x.skill ? esc(lvTxt(x.skill)) : 'No level') + (age !== '' ? ' · age ' + age : '') + (((prStu(x.id) || {}).extra || {}).ShareType === 'Pair me up' ? ' · <b style="color:#1D9E75">🤝 asked to be paired</b>' : ''); }
 function prRow(a, b, f, note, extra, k) {
   return `<div class="arow"><div class="who"><b>${esc(a.name)} + ${esc(b.name)}</b><small>${esc(a.name.split(' ')[0])}: ${note[0]}</small><small>${esc(b.name.split(' ')[0])}: ${note[1]}</small>${extra || ''}${prOffered(a.id, b.id)}</div><span class="tag ${f.gap ? 't-away' : 't-photo'}">${f.gap ? 'Close level' : 'Same level'}</span><div style="display:flex;gap:4px;flex-wrap:wrap"><button class="paybtn" style="background:#E6F1FB;color:#185FA5" onclick="prOpen=prOpen==='o${k}'?null:'o${k}';renderPairings()">Offer</button><button class="paybtn" onclick="prOpen=prOpen==='${k}'?null:'${k}';renderPairings()">Pair</button><button class="paybtn" style="background:#eef0f2;color:#555" onclick="prNo('${k}')">Said no</button><button class="paybtn" style="background:#eef0f2;color:#555" onclick="prSolo('${k}')">Solo only</button></div></div>${prOpen === k ? prConfirm(k) : prOpen === 'o' + k ? prOfferBox(k) : ''}`;
 }
@@ -1058,8 +1065,8 @@ async function openLevels() {
   if (L.error) { $('lvBody').innerHTML = '<div class="center">' + esc(L.error.message) + '</div>'; return; }
   const sk = (S.data || []).filter(x => x.active !== false);
   $('lvBody').innerHTML = (L.data || []).map(l => { const list = sk.filter(x => x.level_id === l.id);
-    return `<details style="border-bottom:1px solid #f0f0f0;padding:8px 2px"><summary style="cursor:pointer"><b>${esc(l.code.split('-')[0])}</b> · ${esc(l.name)} <small style="color:#888">${list.length ? list.length + ' skills' : ''}</small></summary>
-      ${list.length ? '<ul style="margin:6px 0 2px 18px;padding:0;font-size:13px">' + list.map(x => '<li>' + esc(x.name) + '</li>').join('') + '</ul>' : '<small style="color:#888;display:block;margin-top:4px">Skills not copied to 3.0 yet (run export3Skills).</small>'}</details>`; }).join('');
+    return `<details style="border-bottom:1px solid #f0f0f0;padding:8px 2px"><summary style="cursor:pointer"><b>${esc(skAb(l))}</b>${HAND() ? '' : ' · ' + esc(l.name)} <small style="color:#888">${list.length ? list.length + ' skills' : ''}</small></summary>
+      ${list.length ? '<ul style="margin:6px 0 2px 18px;padding:0;font-size:13px">' + list.map(x => '<li>' + esc(x.name) + '</li>').join('') + '</ul>' : '<small style="color:#888;display:block;margin-top:4px">No skills in this level yet.</small>'}</details>`; }).join('');
 }
 // ================= SKILLS CHECKLIST (admin: Student page Skills tab + quick check-off from Edit lesson) =================
 // Same tables the parent portal reads: skill_levels, skills, student_skills (check-offs), skill_log (level moves)
@@ -1072,7 +1079,13 @@ async function skLoad() {
   return SK;
 }
 const skShort = d => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
-const skLvName = l => l ? l.code.split('-')[0] + ' · ' + l.name : 'No level';
+const skLvName = l => l ? (HAND() ? l.name : l.code.split('-')[0] + ' · ' + l.name) : 'No level';
+const skAb = l => HAND() ? l.name : l.code.split('-')[0];            // short level label (Flip Lab "L3", other gyms the name)
+const lvTxt = c => HAND() ? String(c || '') : String(c || '').split('-')[0];   // same, from a saved level code
+const LV_FL = ['L1-Foundations','L2-Rising','L3-Building','L4-Progressing','L5-Advanced','L6-Elite'];
+const lvNorm = t => String(t || '').trim().toLowerCase();
+const lvMatch = t => { if (!t || !HAND() || !SK) return t; const l = SK.levels.find(x => lvNorm(x.name) === lvNorm(t) || lvNorm(x.code) === lvNorm(t)); return l ? l.code : t; };   // import: "beginner" → their "Beginner" level
+const lvCodes = () => HAND() ? (SK ? SK.levels.map(l => l.code) : []) : LV_FL;   // level dropdowns
 function skCur(s) { return SK.levels.find(l => l.code === s.skill_level) || null; }
 function skNext(l) { const i = SK.levels.indexOf(l); return i > -1 ? SK.levels[i + 1] || null : SK.levels[0] || null; }
 async function skChecks(id) {
@@ -1085,7 +1098,7 @@ async function skLabel(stu) {
   try {
     await skLoad(); const l = skCur(stu); if (!l) return;
     const ch = await skChecks(stu.id), list = SK.skills.filter(x => x.level_id === l.id);
-    if (lmRow && lmRow.student_id === stu.id) $('lm_skill').innerHTML = `<span>${esc(l.code.split('-')[0])} · ${list.filter(x => ch.has(x.id)).length} of ${list.length}</span><span>Skills</span>`;
+    if (lmRow && lmRow.student_id === stu.id) $('lm_skill').innerHTML = `<span>${esc(skAb(l))} · ${list.filter(x => ch.has(x.id)).length} of ${list.length}</span><span>Skills</span>`;
   } catch (e) {}
 }
 function skList(lv, ch) {
@@ -1108,14 +1121,14 @@ async function skFull(s) {
     if (!skOpenLv || skOpenLv.sid !== s.id) skOpenLv = { sid: s.id, id: null };
     const head = l ? (() => { const list = SK.skills.filter(x => x.level_id === l.id), n = list.filter(x => ch.has(x.id)).length, since = log.find(g => g.to_level === l.code);
       return `<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:16px">Skills</b><span class="pill">${esc(skLvName(l))}</span></div>
-        <div style="display:flex;justify-content:space-between;font-size:13px;color:#6b7680;margin:10px 0 4px"><span>${n} of ${list.length} skills</span><span>${since && since.date ? 'On ' + esc(l.code.split('-')[0]) + ' since ' + skShort(since.date + 'T12:00:00') : ''}</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;color:#6b7680;margin:10px 0 4px"><span>${n} of ${list.length} skills</span><span>${since && since.date ? 'On ' + esc(skAb(l)) + ' since ' + skShort(since.date + 'T12:00:00') : ''}</span></div>
         <div class="skbar"><div style="width:${list.length ? Math.round(n / list.length * 100) : 0}%"></div></div>
         <div style="font-size:12px;color:#999;margin:12px 0 2px">Working on · tap to check off</div>${skList(l, ch)}${skUpBtn(s, l, ch)}`; })()
       : `<b style="font-size:16px">Skills</b><div style="font-size:13px;color:#6b7680;margin:8px 0">No level set. Pick one on the Profile tab, or start at ${esc(skLvName(SK.levels[0]))}.</div>${SK.levels[0] ? `<button class="btn ghost" onclick="skSetLevel('${esc(SK.levels[0].code)}')">Start at ${esc(skLvName(SK.levels[0]))}</button>` : ''}`;
     const others = SK.levels.filter(x => x !== l).map(x => { const list = SK.skills.filter(k => k.level_id === x.id), n = list.filter(k => ch.has(k.id)).length, open = skOpenLv.id === x.id;
       return `<div class="sklv" onclick="skOpenLv.id=${open ? 'null' : `'${esc(x.id)}'`};skFull(sd.s)"><span>${esc(skLvName(x))}</span><span style="color:${list.length && n === list.length ? '#1c7a5a' : '#999'}">${list.length && n === list.length ? 'Done ' : ''}${n}/${list.length}</span></div>${open ? '<div style="padding-left:8px">' + skList(x, ch) + '</div>' : ''}`; }).join('');
     $('sdPanel').innerHTML = `<div class="card">${head}<div style="font-size:12px;color:#999;margin:16px 0 2px">Other levels · tap to open</div>${others}
-      ${log.length ? `<div style="font-size:12px;color:#999;margin-top:12px">History: ${log.slice(0, 6).map(g => 'Moved to ' + esc(String(g.to_level).split('-')[0]) + (g.date ? ' ' + skShort(g.date + 'T12:00:00') : '')).join(' · ')}</div>` : ''}</div>
+      ${log.length ? `<div style="font-size:12px;color:#999;margin-top:12px">History: ${log.slice(0, 6).map(g => 'Moved to ' + esc(lvTxt(g.to_level)) + (g.date ? ' ' + skShort(g.date + 'T12:00:00') : '')).join(' · ')}</div>` : ''}</div>
       <div class="card" id="xsBox"><div class="center">Loading…</div></div>`;
     xsDraw(s);
   } catch (e) { $('sdPanel').innerHTML = '<div class="card msg err">' + esc(e.message) + '</div>'; }
@@ -1221,16 +1234,53 @@ async function skMasterDraw() {
   const el = $('st_skills'); if (!el) return;
   try { await skLoad(); } catch (e) { el.innerHTML = '<div class="msg err">' + esc(e.message) + '</div>'; return; }
   if (!$('st_skills')) return;
-  if (!SK.levels.length) { el.innerHTML = '<div style="color:#888;font-size:13px;padding:8px 0">No skill levels set up yet.</div>'; return; }
-  el.innerHTML = SK.levels.map(l => { const list = SK.skills.filter(x => x.level_id === l.id), open = skMOpen === l.id;
+  if (!SK.levels.length && !HAND()) { el.innerHTML = '<div style="color:#888;font-size:13px;padding:8px 0">No skill levels set up yet.</div>'; return; }
+  const H = HAND(), lb = 'padding:6px 8px;font-size:12px', lbtn = (t, f, off) => `<button class="paybtn" style="${lb}" ${off ? 'disabled' : ''} onclick="event.stopPropagation();${f}">${t}</button>`;
+  el.innerHTML = SK.levels.map((l, li) => { const list = SK.skills.filter(x => x.level_id === l.id), open = skMOpen === l.id;
     return `<div class="sklv" onclick="skMOpen=${open ? 'null' : `'${esc(l.id)}'`};skMasterDraw()"><span${open ? ' style="font-weight:600"' : ''}>${esc(skLvName(l))}</span><span style="color:#999">${open ? 'close' : list.length + ' skills'}</span></div>
       ${open ? `<div style="padding-left:6px">${list.map((x, i) => `<div style="display:flex;gap:6px;align-items:center;padding:4px 0;border-bottom:1px solid #f0f0f0">
         <input value="${esc(x.name)}" style="flex:1;margin:0;font-size:14px;padding:8px" onchange="skMRename('${esc(x.id)}',this.value)">
         <button class="paybtn" style="padding:8px 10px" ${i ? '' : 'disabled'} onclick="skMMove('${esc(l.id)}',${i},-1)">Up</button>
         <button class="paybtn" style="padding:8px 10px" ${i < list.length - 1 ? '' : 'disabled'} onclick="skMMove('${esc(l.id)}',${i},1)">Down</button>
         <button class="paybtn" style="padding:8px 10px;background:#FCEBEB;color:#A32D2D" onclick="skMHide('${esc(x.id)}')">Remove</button></div>`).join('')}
-        <div style="display:flex;gap:6px;margin:8px 0"><input id="skm_new" placeholder="New ${esc(l.code.split('-')[0])} skill" style="flex:1;margin:0"><button class="paybtn" style="padding:8px 14px" onclick="skMAdd('${esc(l.id)}')">Add</button></div></div>` : ''}`; }).join('')
+        <div style="display:flex;gap:6px;margin:8px 0"><input id="skm_new" placeholder="New ${esc(skAb(l))} skill" style="flex:1;margin:0"><button class="paybtn" style="padding:8px 14px" onclick="skMAdd('${esc(l.id)}')">Add</button></div>
+        ${H ? `<div style="display:flex;gap:6px;margin:0 0 10px;align-items:center"><small style="color:#999;flex:1">Level</small>${lbtn('Rename', `lvRename('${esc(l.id)}')`) + lbtn('Up', `lvMove(${li},-1)`, !li) + lbtn('Down', `lvMove(${li},1)`, li === SK.levels.length - 1)}<button class="paybtn" style="${lb};background:#FCEBEB;color:#A32D2D" onclick="lvRemove('${esc(l.id)}')">Remove</button></div>` : ''}</div>` : ''}`; }).join('')
+    + (H ? `<div style="display:flex;gap:6px;margin:10px 0 0"><input id="lv_new" placeholder="New level name" style="flex:1;margin:0"><button class="paybtn" style="padding:8px 14px" onclick="lvAdd()">Add level</button></div><div style="font-size:12px;color:#999;margin-top:6px">Kids move up through the levels in this order. A level with kids on it can't be removed until they're moved.</div>` : '')
     + '<div style="font-size:12px;color:#999;margin-top:8px">Removing a skill hides it. Kids who already checked it keep it in their history. Adding a skill changes "X of Y" for kids in that level.</div>';
+}
+// ---- Other gyms: their own levels (code = level name, so kids' level shows as the name everywhere) ----
+async function lvRecode(from, to) {   // move every kid (and waitlist row) on level text "from" to code "to"
+  for (const t of ['students', 'waitlist']) { const r = await sb.from(t).update({ skill_level: to }).eq('gym_id', gymId).eq('skill_level', from); if (r.error) throw new Error(r.error.message); }
+  students.forEach(s => { if (s.skill_level === from) s.skill_level = to; }); (waitlist || []).forEach(w => { if (w.skill_level === from) w.skill_level = to; });
+}
+async function lvRename(id) {
+  const l = SK.levels.find(x => x.id === id); if (!l) return;
+  const v = (prompt('New name for "' + l.name + '"', l.name) || '').trim(); if (!v || v === l.name) return;
+  if (SK.levels.some(x => x.id !== id && lvNorm(x.name) === lvNorm(v))) return alert('You already have a level called "' + v + '".');
+  const r = await sb.from('skill_levels').update({ name: v, code: v }).eq('id', id); if (r.error) return alert(r.error.message);
+  try { await lvRecode(l.code, v); } catch (e) { alert(e.message); }
+  render(); skMDone();
+}
+async function lvMove(i, d) {
+  const L = SK.levels.slice(), j = i + d; if (j < 0 || j >= L.length) return;
+  [L[i], L[j]] = [L[j], L[i]];
+  const res = await Promise.all(L.map((x, k) => sb.from('skill_levels').update({ sort: k + 1 }).eq('id', x.id)));
+  skMDone(res.find(r => r.error));
+}
+async function lvRemove(id) {
+  const l = SK.levels.find(x => x.id === id); if (!l) return;
+  const kids = students.filter(s => s.skill_level === l.code).length;
+  if (kids) return alert(kids + ' kid' + (kids > 1 ? 's are' : ' is') + ' on ' + l.name + '. Move them to another level first.');
+  const n = SK.skills.filter(x => x.level_id === id).length;
+  if (!confirm('Remove the level "' + l.name + '"' + (n ? ' and its ' + n + ' skills' : '') + '?')) return;
+  if (skMOpen === id) skMOpen = null;
+  skMDone(await sb.from('skill_levels').delete().eq('id', id));
+}
+async function lvAdd() {
+  const v = ($('lv_new').value || '').trim(); if (!v) return alert('Enter a level name first.');
+  if (SK.levels.some(x => lvNorm(x.name) === lvNorm(v))) return alert('You already have a level called "' + v + '".');
+  const max = Math.max(0, ...SK.levels.map(x => x.sort || 0));
+  skMDone(await sb.from('skill_levels').insert({ gym_id: gymId, code: v, name: v, sort: max + 1 }));
 }
 async function skMDone(r) { if (r && r.error) { alert(r.error.message); } SK = null; skMasterDraw(); }
 async function skMRename(id, v) { v = v.trim(); if (!v) return skMasterDraw(); skMDone(await sb.from('skills').update({ name: v }).eq('id', id)); }
@@ -1311,7 +1361,7 @@ function cmBuild() {
   else cmPicked.forEach(fromStu);
   cmSkipped = kids.filter(k => k.unsub).length;
   const fam = {};
-  kids.filter(k => !k.unsub).forEach(k => { const key = String(k.phone || '').replace(/\D/g, '').slice(-10) || (okMail(k.email) ? String(k.email).trim().toLowerCase() : '') || 'none:' + k.sid;
+  kids.filter(k => !k.unsub).forEach(k => { const key = (HAND() && k.parent ? 'p:' + String(k.parent).trim().toLowerCase() : '') || String(k.phone || '').replace(/\D/g, '').slice(-10) || (okMail(k.email) ? String(k.email).trim().toLowerCase() : '') || 'none:' + k.sid;
     const f = fam[key] = fam[key] || { key, phone: k.phone, email: okMail(k.email) ? String(k.email).trim() : '', parent: k.parent, kids: [], sid: k.sid };
     if (!f.email && okMail(k.email)) f.email = String(k.email).trim(); if (!f.kids.includes(k.kid)) f.kids.push(k.kid); });
   cmFams = Object.values(fam).sort((a, b) => String(a.parent || '').localeCompare(String(b.parent || '')));
@@ -1356,7 +1406,7 @@ async function cmDelSaved() {
 }
 async function cmSend() {
   const tpl = $('cm_msg').value.trim(), r = $('cm_res'), picks = cmFams.filter(f => cmOn.has(f.key)), test = $('cm_test').checked, to = $('cm_testTo').value.trim();
-  const via = viaGet('cm_via'), subj = $('cm_subj').value.trim() || 'Flip Lab';
+  const via = viaGet('cm_via'), subj = $('cm_subj').value.trim() || (HAND() ? gymTitle : 'Flip Lab');
   r.className = 'msg err';
   if (!tpl) return r.textContent = 'Type a message.';
   if (!picks.length) return r.textContent = 'Pick at least one family.';
@@ -1406,11 +1456,12 @@ async function testText() {
 }
 async function testEmail() {
   const m = $('cs_msg');
-  const to = prompt('Send a test email to:', 'thefliplab@yahoo.com'); if (!to) return;
+  const FROM = HAND() ? (SET.email_from || '') : 'thefliplab@yahoo.com';
+  const to = prompt('Send a test email to:', FROM); if (!to) return;
   m.className = 'msg'; m.textContent = 'Sending test email…';
-  const r = await sb.functions.invoke('send-email', { body: { messages: [{ to, subject: 'FlipLab 3.0 test email', text: 'FlipLab 3.0 test email ✓\n\nIf you can read this, 3.0 can send email as thefliplab@yahoo.com.', family: 'Test' }] } });
+  const r = await sb.functions.invoke('send-email', { body: { messages: [{ to, subject: 'FlipLab 3.0 test email', text: 'FlipLab 3.0 test email ✓\n\nIf you can read this, 3.0 can send email as ' + (FROM || 'your connected email') + '.', family: 'Test' }] } });
   const err = r.error ? ((r.data && r.data.error) || r.error.message) : r.data.failed ? r.data.results[0].error : '';
-  m.className = err ? 'msg err' : 'msg'; m.textContent = err ? 'Not sent: ' + err : '✓ Sent from thefliplab@yahoo.com — check ' + to;
+  m.className = err ? 'msg err' : 'msg'; m.textContent = err ? 'Not sent: ' + err : '✓ Sent from ' + (FROM || 'your connected email') + ' — check ' + to;
 }
 async function saveCal() {
   const mode = $('cs_mode').value, m = $('cs_msg');
@@ -1610,6 +1661,7 @@ let stPolDef = '', stWavDef = '';   // starter text as last shown (with the hour
 function stKeep() { if (!$('st_pol')) return; const p = $('st_pol').value.trim(), w = $('st_wav').value.trim();
   wz.policy_text = p === stPolDef.trim() ? '' : p; wz.waiver_text = w === stWavDef.trim() ? '' : w; wz.su_welcome = $('st_wel').value.trim(); }
 let emProv = '';
+const EM_MSN = '<b>MSN, Hotmail and Outlook can\'t connect.</b> Microsoft doesn\'t allow it. Make a free Gmail for your gym instead (about 10 minutes):<br>1. Go to <a href="https://accounts.google.com/signup" target="_blank">accounts.google.com/signup</a> and make an address for your gym.<br>2. Turn on <b>2-Step Verification</b>: <a href="https://myaccount.google.com/security" target="_blank">myaccount.google.com/security</a>.<br>3. Go to <a href="https://myaccount.google.com/apppasswords" target="_blank">myaccount.google.com/apppasswords</a>, name it <b>FlipLab</b>, tap <b>Create</b> and copy the 16-letter password.<br>4. Tap <b>Gmail</b> above, enter the new address and paste the password.<br>Parent replies go to that Gmail, so add it to the Gmail app on your phone.';
 const EM_HELP = {
   gmail: '<b>Make a Gmail app password</b> (2 minutes):<br>1. Go to <a href="https://myaccount.google.com/apppasswords" target="_blank">myaccount.google.com/apppasswords</a> and sign in.<br>2. If it says app passwords aren\'t available, turn on <b>2-Step Verification</b> first (Security page), then come back.<br>3. Name it <b>FlipLab</b> and tap <b>Create</b>.<br>4. Copy the 16-letter password and paste it below.',
   yahoo: '<b>Make a Yahoo app password</b> (2 minutes):<br>1. Go to <a href="https://login.yahoo.com/account/security" target="_blank">login.yahoo.com/account/security</a>.<br>2. Tap <b>Generate app password</b> (or "Manage app passwords").<br>3. Name it <b>FlipLab</b> and tap <b>Generate</b>.<br>4. Copy the password and paste it below.',
@@ -1627,10 +1679,25 @@ async function emDisconnect() {
   await sbInvoke('email-connect', { body: { disconnect: true } });
   SET.email_from = wz.email_from = ''; SET.email_provider = wz.email_provider = ''; stDraw();
 }
+// Settings → Parent portal. Other gyms: on/off + which tabs parents see (settings.portal_off / portal_hide, enforced in portal-act). Flip Lab: link only.
+const PT_TABS = [['lessons', 'Lessons'], ['classes', 'Classes'], ['skills', 'Skills'], ['message', 'Message'], ['account', 'Account']];
+const ptUrl = () => location.origin + '/portal.html' + (HAND() ? '?gym=' + encodeURIComponent(gymSlug) : '');
+function ptTab(t) { stKeep(); const h = wz.portal_hide = (wz.portal_hide || []).slice(); const i = h.indexOf(t); i >= 0 ? h.splice(i, 1) : h.push(t); stDraw(); }
+function ptCopy() { const u = ptUrl(); (navigator.clipboard ? navigator.clipboard.writeText(u) : Promise.reject()).then(() => alert('Link copied'), () => prompt('Copy this link:', u)); }
+function ptText() { location.href = 'sms:' + (IOS ? '&body=' : '?body=') + encodeURIComponent('Here is the link to your parent portal: ' + ptUrl()); }
+function stPortal() {
+  const on = !wz.portal_off, chip = (txt, act, sel) => `<button class="paybtn" style="margin:0 6px 6px 0;padding:8px 12px;${sel ? 'background:var(--mint-soft);color:#1c7a5a' : 'background:#eee;color:#aaa;text-decoration:line-through'}" onclick="${act}">${sel ? '✓ ' : ''}${txt}</button>`;
+  return `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Parent portal</b><div style="color:var(--muted);font-size:13px">Families log in to see lessons, cancel or move, message you and more.</div>`
+    + (HAND() ? `<label>Portal</label><div>${[[true, 'On'], [false, 'Off']].map(([v, n]) => `<button class="paybtn" style="margin:0 6px 6px 0;padding:8px 12px;${on === v ? 'background:var(--mint-soft);color:#1c7a5a' : 'background:#eee;color:#888'}" onclick="stKeep();wz.portal_off=${!v};stDraw()">${n}</button>`).join('')}</div>`
+      + (on ? `<label>Tabs parents can see (Home always shows)</label><div>${PT_TABS.map(([t, n]) => chip(n, `ptTab('${t}')`, !(wz.portal_hide || []).includes(t))).join('')}</div>` : `<div style="font-size:13px;color:var(--muted)">Portal is off. Families who open the link see "Portal is off", and the sign-up page hides the portal link.</div>`) : '')
+    + (on || !HAND() ? `<label>Portal link for families</label><div style="font-family:monospace;font-size:12px;background:#f7f8fa;border-radius:8px;padding:8px 10px;word-break:break-all">${esc(ptUrl())}</div>
+       <div style="display:flex;gap:8px;margin-top:8px"><button class="btn ghost" style="margin:0" onclick="ptCopy()">Copy link</button><button class="btn ghost" style="margin:0" onclick="ptText()">Text link</button></div>` : '')
+    + `</div>`;
+}
 function stTab(t) { stKeep(); const h = wz.hide_tabs = wz.hide_tabs || []; const i = h.indexOf(t); i >= 0 ? h.splice(i, 1) : h.push(t); stDraw(); }
 function stOpen() { wz = JSON.parse(JSON.stringify(SET)); wzSet = true; $('wzCard').innerHTML = ''; show('setupView'); stDraw(); }
 function stDraw() {
-  stKeep(); stPolDef = stFill(ST_POLICY); stWavDef = stFill(ST_WAIVER);
+  stKeep(); stPolDef = HAND() ? '' : stFill(ST_POLICY); stWavDef = HAND() ? '' : stFill(ST_WAIVER);   // other gyms: blank, they write their own
   const sec = (t, sub, n) => `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">${t}</b><div style="color:var(--muted);font-size:13px">${sub}</div>${wzPart(n)}</div>`;
   $('wzCard').innerHTML = `<div class="hdr" style="margin-top:0">⚙ Settings</div>`
     + sec('Look', 'Logo and main color for your top bar and buttons.', 0)
@@ -1639,16 +1706,17 @@ function stDraw() {
     + `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Skills</b><div style="color:var(--muted);font-size:13px">Every kid in a level works on these. Changes apply to everyone and save right away.</div><div id="st_skills"><div class="center">Loading…</div></div></div>`
     + `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Tabs</b><div style="color:var(--muted);font-size:13px">Tap to turn a tab off or on. Hiding a tab never deletes anything. Dashboard, Schedule and Students always show.</div>
        <div style="margin-top:8px">${ST_TABS.map(([t, n]) => { const off = (wz.hide_tabs || []).includes(t); return `<button class="paybtn" style="margin:0 6px 6px 0;padding:8px 12px;${off ? 'background:#eee;color:#aaa;text-decoration:line-through' : 'background:var(--mint-soft);color:#1c7a5a'}" onclick="stTab('${t}')">${off ? '' : '✓ '}${n}</button>`; }).join('')}</div></div>`
+    + stPortal()
     + (gymSlug === 'fliplab' ? '' : `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Your email</b>
        ${SET.email_from ? `<div style="margin-top:6px;background:#eaf6ef;border-radius:8px;padding:10px 12px;font-size:14px">✅ Emails to families come from <b>${esc(SET.email_from)}</b>. Replies land in your inbox.</div>
          <button class="btn ghost" style="margin-top:8px" onclick="emDisconnect()">Disconnect</button>`
        : `<div style="color:var(--muted);font-size:13px">Connect your email so messages to families come from your own address. Until then, you send them yourself from your phone.</div>
-         <label>Your email is</label><div>${[['gmail', 'Gmail'], ['yahoo', 'Yahoo'], ['aol', 'AOL']].map(([k, n]) => `<button class="paybtn" style="margin:0 6px 6px 0;padding:8px 12px;${emProv === k ? 'background:var(--mint-soft);color:#1c7a5a' : 'background:#eee;color:#888'}" onclick="emProv='${k}';stDraw()">${n}</button>`).join('')}</div>
-         ${emProv ? `<div style="background:#f7f8fa;border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.6;margin-top:6px">${EM_HELP[emProv]}</div>
+         <label>Your email is</label><div>${[['gmail', 'Gmail'], ['yahoo', 'Yahoo'], ['aol', 'AOL'], ['msn', 'MSN / Outlook']].map(([k, n]) => `<button class="paybtn" style="margin:0 6px 6px 0;padding:8px 12px;${emProv === k ? 'background:var(--mint-soft);color:#1c7a5a' : 'background:#eee;color:#888'}" onclick="emProv='${k}';stDraw()">${n}</button>`).join('')}</div>
+         ${emProv === 'msn' ? `<div style="background:#f7f8fa;border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.6;margin-top:6px">${EM_MSN}</div>` : emProv ? `<div style="background:#f7f8fa;border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.6;margin-top:6px">${EM_HELP[emProv]}</div>
          <label>Email address</label><input id="em_addr" type="email" autocomplete="off" placeholder="you@${emProv === 'gmail' ? 'gmail' : emProv}.com">
          <label>App password (not your normal password)</label><input id="em_pw" type="password" autocomplete="new-password" placeholder="16 letters">
          <button class="btn" style="margin-top:10px" onclick="emConnect()">Connect and send me a test</button>` : ''}
-         <div style="font-size:12px;color:var(--muted);margin-top:6px">Outlook, Hotmail or iCloud? Those can't connect yet, so keep sending from your phone.</div>`}
+         <div style="font-size:12px;color:var(--muted);margin-top:6px">iCloud? Can't connect yet, so keep sending from your phone.</div>`}
        <div id="em_msg" class="msg"></div></div>`)
     + `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Policies and contact</b><div style="color:var(--muted);font-size:13px">Shown to families on your sign-up page.</div>
        <label>Cancel at least this far ahead</label><div>${[12, 24, 48].map(h => `<button class="paybtn" style="margin:0 6px 6px 0;padding:8px 12px;${+wz.cancel_hrs === h ? 'background:var(--mint-soft);color:#1c7a5a' : 'background:#eee;color:#888'}" onclick="wz.cancel_hrs=${h};stDraw()">${h} hrs</button>`).join('')}</div>
@@ -1656,10 +1724,10 @@ function stDraw() {
        <label>Texting number</label><input type="tel" inputmode="numeric" value="${esc(wz.c_text)}" oninput="this.value=typingPhone(this.value)" onchange="wz.c_text=this.value.trim()">
        <label>Venmo link</label><input value="${esc(wz.c_venmo)}" placeholder="https://venmo.com/…" onchange="wz.c_venmo=this.value.trim()">
        <label>Zelle (phone or email)</label><input value="${esc(wz.c_zelle)}" onchange="wz.c_zelle=this.value.trim()"></div>`
-    + `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Cancellation policy and waiver</b><div style="color:var(--muted);font-size:13px">Families agree to these when they sign up. Starter text is filled in. Edit it to fit your gym, and have your own waiver checked for your state.</div>
-       <label>Cancellation policy</label><textarea id="st_pol" rows="8" style="width:100%;font-size:13px">${esc(wz.policy_text || stPolDef)}</textarea>
-       <label>Liability waiver</label><textarea id="st_wav" rows="8" style="width:100%;font-size:13px">${esc(wz.waiver_text || stWavDef)}</textarea>
-       <a href="#" style="font-size:13px;color:var(--muted)" onclick="if(confirm('Put the starter text back?')){$('st_pol').value=stPolDef;$('st_wav').value=stWavDef;stDraw()}return false">Reset to starter text</a></div>`
+    + `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Cancellation policy and waiver</b><div style="color:var(--muted);font-size:13px">${HAND() ? 'Families agree to these when they sign up. Write your own here; if a box is blank, families won\'t see it. Have your waiver checked for your state.' : 'Families agree to these when they sign up. Starter text is filled in. Edit it to fit your gym, and have your own waiver checked for your state.'}</div>
+       <label>Cancellation policy</label><textarea id="st_pol" rows="8" style="width:100%;font-size:13px" placeholder="Enter your cancellation policy here. Leave blank to not show one.">${esc(wz.policy_text || stPolDef)}</textarea>
+       <label>Liability waiver</label><textarea id="st_wav" rows="8" style="width:100%;font-size:13px" placeholder="Enter your liability waiver here. Leave blank to not show one.">${esc(wz.waiver_text || stWavDef)}</textarea>
+       ${HAND() ? '' : `<a href="#" style="font-size:13px;color:var(--muted)" onclick="if(confirm('Put the starter text back?')){$('st_pol').value=stPolDef;$('st_wav').value=stWavDef;stDraw()}return false">Reset to starter text</a>`}</div>`
     + `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Sign-up page</b><div style="color:var(--muted);font-size:13px">Uses your logo and main color.</div>
        <label>Header color</label><div>${[['navy', 'Navy'], ['white', 'White'], ['main', 'Main color']].map(([k, n]) => `<button class="paybtn" style="margin:0 6px 6px 0;padding:8px 12px;${wz.su_header === k ? 'background:var(--mint-soft);color:#1c7a5a' : 'background:#eee;color:#888'}" onclick="wz.su_header='${k}';stDraw()">${n}</button>`).join('')}</div>
        <label>Welcome message</label><textarea id="st_wel" rows="2" style="width:100%" placeholder="Welcome! Pick a lesson time below.">${esc(wz.su_welcome)}</textarea>
@@ -1724,7 +1792,23 @@ async function wzFinish(withSlots) {
 // ================= IMPORT STUDENTS (from another program's CSV / Excel / pasted rows) =================
 // Only headers + 3 sample rows go to the AI (edge fn import-map). Everything imported is tagged extra.ImportBatch so it can be undone.
 const IM_FIELDS = { full_name: 'Student name (whole)', first_name: 'Student first name', last_name: 'Student last name', dob: 'Birthday', parent_name: 'Parent name', phone: 'Phone', email: 'Email',
-  level: 'Level', notes: 'Notes', lesson_day: 'Lesson day', lesson_time: 'Lesson time', lesson_daytime: 'Lesson day + time', waiver: 'Waiver signed', skip: '— Skip —' };
+  level: 'Level', school: 'School', notes: 'Notes', lesson_day: 'Lesson day', lesson_time: 'Lesson time', lesson_daytime: 'Lesson day + time', ...Object.fromEntries(DAYS.map(d => ['t_' + d, d + ' lesson time'])), waiver: 'Waiver signed', skip: '— Skip —' };
+const IM_DAYRE = [/\bmon(day)?\b/i, /\btue(s|sday)?\b/i, /\bwed(nesday)?\b/i, /\bthu(r|rs|rsday)?\b/i, /\bfri(day)?\b/i, /\bsat(urday)?\b/i, /\bsun(day)?\b/i];
+function imTidy(head, map) {   // fixes after the AI / name matching
+  const has = f => Object.values(map).includes(f);
+  head.forEach(h => { if (/^(time\s*stamp|edit link|column \d+|import status|submitted|submission)/i.test(h)) map[h] = 'skip'; });   // form junk is never a lesson or a name
+  imDayCols(head, map);
+  if (!has('school')) { const h = head.find(h => /school/i.test(h) && map[h] === 'skip'); if (h) map[h] = 'school'; }
+  if (!has('phone')) { const h = head.find(h => /phone|cell|mobile|text|#|number/i.test(h) && map[h] === 'skip'); if (h) map[h] = 'phone'; }
+  const nm = head.find(h => /last\s*,\s*first/i.test(h)); if (nm) map[nm] = 'full_name';
+  if (has('first_name') && !has('last_name') && !has('full_name')) head.forEach(h => { if (map[h] === 'first_name') map[h] = 'full_name'; });   // one name column → whole name ("First Last" or "Last, First")
+  return map;
+}
+function imDayCols(head, map) {   // sheets with one column per weekday ("Monday Time", "Tuesday Time"…) → that day's lesson time
+  const hit = h => { const f = DAYS.filter((d, i) => IM_DAYRE[i].test(h)); return f.length === 1 ? f[0] : null; };
+  if (head.filter(hit).length >= 2) head.forEach(h => { const d = hit(h); if (d) map[h] = 't_' + d; else if (/^lesson_(day|time|daytime)$/.test(map[h])) map[h] = 'skip'; });
+  return map;
+}
 let im = null;
 function imStart() { im = { step: 0, head: [], rows: [], map: {} }; show('importView'); imDraw(); }
 function imClose() { im = null; go('students'); }
@@ -1758,12 +1842,13 @@ async function imLoad(rows) {
   m.className = 'msg'; m.textContent = 'Matching columns…';
   im.map = imGuess(im.head); im.ai = false;
   try { const r = await sb.functions.invoke('import-map', { body: { headers: im.head, samples: im.rows.slice(0, 3) } }); if (r.data && r.data.map) { im.map = r.data.map; im.ai = true; } } catch (e) {}
+  imTidy(im.head, im.map);
   im.step = 1; imDraw();
 }
 function imGuess(head) {   // fallback when AI is unavailable
   const used = new Set(), out = {};
-  const rules = [['email', /mail/i], ['phone', /phone|cell|mobile|tel/i], ['dob', /birth|dob|bday/i], ['parent_name', /parent|guardian|mom|dad|mother|father/i], ['waiver', /waiver|release/i],
-    ['first_name', /first/i], ['last_name', /last|surname/i], ['lesson_daytime', /day.*time|schedule|slot/i], ['lesson_day', /^day|weekday/i], ['lesson_time', /time/i], ['level', /level|class|group/i], ['notes', /note|comment/i], ['full_name', /name|athlete|student|child/i]];
+  const rules = [['email', /mail/i], ['phone', /phone|cell|mobile|tel|text|#/i], ['dob', /birth|dob|bday/i], ['parent_name', /parent|guardian|mom|dad|mother|father/i], ['waiver', /waiver|release/i], ['school', /school/i],
+    ['first_name', /first/i], ['last_name', /last|surname/i], ['lesson_daytime', /day.*time|schedule|slot/i], ['lesson_day', /\bday\b|weekday/i], ['lesson_time', /time(?!\s*stamp)/i], ['level', /level|class|group/i], ['notes', /note|comment/i], ['full_name', /name|^(student|athlete|child|gymnast|dancer)$/i]];
   head.forEach(h => { const r = rules.find(([f, re]) => re.test(h) && !used.has(f)); out[h] = r ? (used.add(r[0]), r[0]) : 'skip'; });
   return out;
 }
@@ -1776,24 +1861,37 @@ function imDate(v) {
 }
 function imDay(v) { const t = String(v || '').trim().toLowerCase().slice(0, 2); return DAYS.find(d => d.toLowerCase().startsWith(t)) && t.length === 2 ? DAYS.find(d => d.toLowerCase().startsWith(t)) : null; }
 function imTime(v) {
-  const m = String(v || '').trim().match(/(\d{1,2})(?::(\d{2}))?\s*([ap])?\.?m?\.?/i); if (!m) return null;
+  const m = String(v || '').trim().match(/(\d{1,2})(?::(\d{2}))?(?::\d{2})?\s*([ap])?\.?m?\.?/i); if (!m) return null;
   let h = +m[1], mm = +(m[2] || 0); if (h > 23 || mm > 59) return null;
   if (m[3]) { if (/p/i.test(m[3]) && h < 12) h += 12; if (/a/i.test(m[3]) && h === 12) h = 0; } else if (h >= 1 && h <= 9) h += 12;   // no am/pm: 1–9 → afternoon
   return ((h % 12) || 12) + ':' + String(mm).padStart(2, '0') + ' ' + (h < 12 ? 'AM' : 'PM');
 }
 function imParse() {   // rows → clean records (problems are worked out by imValidate)
   const col = f => im.head.find(h => im.map[h] === f), get = (r, f) => { const h = col(f); return h ? r[im.head.indexOf(h)] : ''; };
-  return im.rows.map((r, i) => {
+  const recs = im.rows.map((r, i) => {
     let first = get(r, 'first_name'), last = get(r, 'last_name'); const full = get(r, 'full_name');
     if (!first && full) { if (full.includes(',')) { [last, first] = full.split(',').map(x => x.trim()); } else { const p = full.trim().split(/\s+/); first = p.shift(); last = p.join(' '); } }
     const rawDob = get(r, 'dob'), dob = imDate(rawDob);
     let day = imDay(get(r, 'lesson_day')), time = imTime(get(r, 'lesson_time')); const dt = get(r, 'lesson_daytime');
     if (dt) { day = day || imDay(dt.split(/[\s,@]+/)[0]); time = time || imTime(dt.replace(/^[A-Za-z]+\.?,?\s*/, '')); }
-    const hasLesson = !!(get(r, 'lesson_day') || get(r, 'lesson_time') || dt);
+    const hasLesson = !!(get(r, 'lesson_day') || get(r, 'lesson_time') || dt), lessons = [];
+    let badLesson = hasLesson && !(day && time); if (day && time) lessons.push({ day, time });
+    DAYS.forEach(d => { const v = get(r, 't_' + d); if (!v) return; const t = imTime(v); if (t) lessons.push({ day: d, time: t }); else badLesson = true; });
     const wv = get(r, 'waiver'), wDate = imDate(wv), signed = !!wDate || /^(y|yes|true|signed|x|✓|done|complete)/i.test(wv);
     return { i, first: (first || '').trim(), last: (last || '').trim(), dob: dob || null, badDob: rawDob && !dob ? rawDob : '', parent: get(r, 'parent_name'), phone: fmtPhone(get(r, 'phone')), email: get(r, 'email').toLowerCase(),
-      level: get(r, 'level'), notes: get(r, 'notes'), day: day && time ? day : null, time: day && time ? time : null, badLesson: hasLesson && !(day && time), signed, wDate: wDate || null, issues: [], act: 'import', userAct: null };
+      level: get(r, 'level'), school: get(r, 'school'), notes: get(r, 'notes'), lessons, badLesson, signed, wDate: wDate || null, row: i + 2, issues: [], act: 'import', userAct: null };
   });
+  // same kid on more than one row (same name + parent phone) → one student with all their lessons
+  const out = [], by = {};
+  recs.forEach(r => {
+    const k = (r.first + '|' + r.last).toLowerCase().replace(/\s+/g, '') + '|' + String(r.phone || '').replace(/\D/g, ''), o = r.first && by[k];
+    if (!o) { if (r.first) by[k] = r; return out.push(r); }
+    r.lessons.forEach(l => { if (!o.lessons.some(x => x.day === l.day && x.time === l.time)) o.lessons.push(l); });
+    ['dob', 'parent', 'email', 'level', 'school', 'notes', 'wDate'].forEach(f => { if (!o[f] && r[f]) o[f] = r[f]; });
+    o.signed = o.signed || r.signed; o.badLesson = o.badLesson || r.badLesson; o.merged = (o.merged || 1) + 1;
+  });
+  out.forEach((r, i) => r.i = i);
+  return out;
 }
 function imValidate() {   // (re)work out problems + default choice for every row; a choice the coach picked is kept
   const keyOf = (f, l, d) => (f + '|' + l).toLowerCase().replace(/\s+/g, '') + '|' + (d || '');
@@ -1803,34 +1901,42 @@ function imValidate() {   // (re)work out problems + default choice for every ro
     if (!rec.first) { rec.issues.push(['bad', 'No student name']); act = 'skip'; }
     else {
       const k = keyOf(rec.first, rec.last, rec.dob);
-      if (seen[k] != null && im.recs[seen[k]].userAct !== 'skip') { rec.issues.push(['bad', 'Same kid as row ' + (seen[k] + 2)]); act = 'skip'; } else if (seen[k] == null) seen[k] = rec.i;
+      if (seen[k] != null && im.recs[seen[k]].userAct !== 'skip') { rec.issues.push(['bad', 'Same kid as row ' + im.recs[seen[k]].row]); act = 'skip'; } else if (seen[k] == null) seen[k] = rec.i;
       if (students.some(s => keyOf(s.first_name || '', s.last_name || '', rec.dob ? s.dob : '') === keyOf(rec.first, rec.last, rec.dob || ''))) { rec.issues.push(['bad', 'Already in your students']); act = 'skip'; }
       if (!rec.phone && !rec.email) rec.issues.push(['warn', 'No phone or email']);
       if (rec.badDob) rec.issues.push(['warn', "Can't read birthday \"" + rec.badDob + '"']);
       if (rec.badLesson) rec.issues.push(['warn', "Can't read lesson time"]);
-      if (rec.day) {
-        if (im.slots && !im.slots.has(rec.day + '|' + rec.time)) rec.issues.push(['warn', 'Lesson ' + rec.day.slice(0, 3) + ' ' + rec.time + ' is not one of your slots']);
-        const tk = rec.day + '|' + rec.time, mineAct = rec.userAct || act, other = im.taken[tk] || times[tk];
-        if (other) { rec.issues.push(['bad', 'Same lesson time as ' + other]); if (act === 'import') act = 'nolesson'; }
-        else if (mineAct === 'import') times[tk] = rec.first + ' ' + rec.last;
-      }
+      rec.lessons.forEach(l => {
+        const lbl = l.day.slice(0, 3) + ' ' + l.time, tk = l.day + '|' + l.time, mineAct = rec.userAct || act, other = im.taken[tk] || times[tk];
+        if (im.slots && !im.slots.has(tk)) rec.issues.push(['warn', lbl + ' is not one of your slots — new slot will be added']);
+        const mate = !im.taken[tk] && times[tk], me = (rec.first + ' ' + rec.last).trim();
+        l.clash = false; l.shareWith = null;
+        if (mate && !mate.l.shareWith && mineAct === 'import') { l.shareWith = mate.name; mate.l.shareWith = me; }   // two kids in the file at the same time = Shared lesson
+        else if (other) { l.clash = true; rec.issues.push(['bad', lbl + ' is the same time as ' + (other.name || other) + ' — that lesson is left off']); }
+        else if (mineAct === 'import') times[tk] = { name: me, l };
+      });
     }
     rec.flagged = rec.flagged || rec.issues.length > 0;   // stays in the list after it's fixed
     rec.act = rec.userAct || act;
-    if (rec.act === 'nolesson' && !rec.day) rec.act = 'import';
+    if (rec.act === 'nolesson' && !rec.lessons.length) rec.act = 'import';
   });
 }
 function imOpenSlots(rec) {   // their slots not taken by a current lesson or another imported kid
-  const used = new Set(Object.keys(im.taken)); im.recs.forEach(r => { if (r !== rec && r.day && r.act === 'import') used.add(r.day + '|' + r.time); });
+  const used = new Set(Object.keys(im.taken)); im.recs.forEach(r => { if (r !== rec && r.act === 'import') r.lessons.forEach(l => { if (!l.clash) used.add(l.day + '|' + l.time); }); });
   return [...(im.slots || [])].filter(k => !used.has(k)).sort((a, b) => DAYS.indexOf(a.split('|')[0]) - DAYS.indexOf(b.split('|')[0]) || timeVal(a.split('|')[1]) - timeVal(b.split('|')[1]));
 }
 function imEdit(i) { im.edit = im.edit === i ? null : i; imDraw(); }
 function imSaveFix(i) {
-  const r = im.recs[i], ph = $('imf_phone').value.trim(), em = $('imf_email').value.trim(), dob = $('imf_dob').value, ls = $('imf_lesson').value;
+  const r = im.recs[i], ph = $('imf_phone').value.trim(), em = $('imf_email').value.trim(), dob = $('imf_dob').value;
   r.phone = fmtPhone(ph); r.email = em.toLowerCase();
   if (dob) { r.dob = dob; r.badDob = ''; }
-  if (ls === '') { r.day = r.time = null; r.badLesson = false; } else if (ls !== 'keep') { [r.day, r.time] = ls.split('|'); r.badLesson = false; }
-  if (r.userAct === 'nolesson' || r.act === 'nolesson') r.userAct = r.day ? 'import' : null;
+  const nl = [];
+  for (let k = 0; k < Math.max(r.lessons.length, 1); k++) {
+    const v = $('imf_lesson' + k).value, cur = r.lessons[k];
+    if (v === 'keep') { if (cur) nl.push(cur); } else { r.badLesson = false; if (v) { const [day, time] = v.split('|'); nl.push({ day, time }); } }
+  }
+  r.lessons = nl;
+  if (r.userAct === 'nolesson' || r.act === 'nolesson') r.userAct = r.lessons.length ? 'import' : null;
   im.edit = null; imValidate(); imDraw();
 }
 async function imCheck() {
@@ -1846,7 +1952,7 @@ function imDraw() {
   const n = im.step, last = SET.last_import && (Date.now() - new Date(SET.last_import.at)) < 864e5 ? SET.last_import : null;
   const top = `<div class="hdr" style="margin-top:0">Bring in your students<span style="font-weight:400;font-size:13px">${n < 3 ? 'Step ' + (n + 1) + ' of 3' : ''}</span></div>`;
   let b = '';
-  if (n === 0) b = `${last ? `<div class="arow" style="background:#FFF4D6;border-radius:8px;padding:8px 10px;margin-bottom:10px"><div class="who"><b>Last import: ${last.count} students</b><small>Undo removes those students, their lessons and waivers</small></div><button class="paybtn" style="background:#FCEBEB;color:#A32D2D" onclick="imUndo()">Undo</button></div>` : ''}
+  if (n === 0) b = `${last ? `<div class="arow" style="background:#FFF4D6;border-radius:8px;padding:8px 10px;margin-bottom:10px"><div class="who"><b>Last import: ${last.count} students</b><small>Undo removes those students, their lessons, waivers and any slots it added</small></div><button class="paybtn" style="background:#FCEBEB;color:#A32D2D" onclick="imUndo()">Undo</button></div>` : ''}
     <div style="color:var(--muted);font-size:14px">Export your students from your old program or spreadsheet, then upload it here. Google Sheets: File → Download → CSV.</div>
     <label>Upload a file</label><input type="file" accept=".csv,.txt,.xlsx,.xls" onchange="imFile(this)">
     <label>…or paste rows from a spreadsheet (include the header row)</label><textarea id="im_paste" rows="5" style="width:100%;box-sizing:border-box;font-size:14px" placeholder="Name	Birthday	Parent	Phone"></textarea>
@@ -1856,21 +1962,21 @@ function imDraw() {
       <select style="width:52%" onchange="im.map['${esc(h).replace(/'/g, '&#39;')}']=this.value">${Object.entries(IM_FIELDS).map(([k, v]) => `<option value="${k}"${im.map[h] === k ? ' selected' : ''}>${v}</option>`).join('')}</select></div>`).join('')}
     <div class="row2" style="margin-top:14px"><div><button class="btn ghost" onclick="im.step=0;imDraw()">Back</button></div><div><button class="btn" onclick="imCheck()">Next</button></div></div>`;
   if (n === 2) {
-    const R = im.recs, go_ = R.filter(r => r.act !== 'skip'), probs = R.filter(r => r.flagged), open_ = probs.filter(r => r.issues.length).length, les = go_.filter(r => r.act === 'import' && r.day).length, wv = go_.filter(r => r.signed).length;
+    const R = im.recs, go_ = R.filter(r => r.act !== 'skip'), probs = R.filter(r => r.flagged), open_ = probs.filter(r => r.issues.length).length, les = go_.reduce((n, r) => n + (r.act === 'import' ? r.lessons.filter(l => !l.clash).length : 0), 0), mg = R.filter(r => r.merged).length, sh = go_.reduce((n, r) => n + (r.act === 'import' ? r.lessons.filter(l => l.shareWith && !l.clash).length : 0), 0) / 2, wv = go_.filter(r => r.signed).length;
     const fix = r => { const sl = imOpenSlots(r); return `<div style="background:var(--bg);border-radius:8px;padding:8px 10px;margin:4px 0 8px">
       <div class="row2"><div><label>Phone</label><input id="imf_phone" type="tel" value="${esc(r.phone)}" oninput="this.value=typingPhone(this.value)"></div><div><label>Birthday</label><input id="imf_dob" type="date" value="${esc(r.dob || '')}"></div></div>
       <label>Email</label><input id="imf_email" type="email" value="${esc(r.email)}">
-      <label>Weekly lesson</label><select id="imf_lesson"><option value="keep">${r.day ? 'Keep ' + esc(r.day.slice(0, 3) + ' ' + r.time) : 'No lesson'}</option>${r.day ? '<option value="">No lesson</option>' : ''}${sl.map(k => `<option value="${esc(k)}">${esc(k.split('|')[0].slice(0, 3) + ' ' + k.split('|')[1])} (open)</option>`).join('')}</select>
+      <label>Weekly lesson${r.lessons.length > 1 ? 's' : ''}</label>${(r.lessons.length ? r.lessons : [null]).map((l, k) => `<select id="imf_lesson${k}" style="margin-bottom:4px"><option value="keep">${l ? 'Keep ' + esc(l.day.slice(0, 3) + ' ' + l.time) : 'No lesson'}</option>${l ? '<option value="">Remove this lesson</option>' : ''}${sl.map(x => `<option value="${esc(x)}">${esc(x.split('|')[0].slice(0, 3) + ' ' + x.split('|')[1])} (open)</option>`).join('')}</select>`).join('')}
       ${im.slots ? '' : '<small style="color:var(--muted)">Add slots to pick an open time here</small>'}
       <div class="row2" style="margin-top:8px"><div><button class="btn ghost" onclick="imEdit(${r.i})">Cancel</button></div><div><button class="btn" onclick="imSaveFix(${r.i})">Save</button></div></div></div>`; };
     b = `<div class="row2"><div class="card" style="margin:0;text-align:center"><small style="color:var(--muted)">Ready</small><div style="font-size:22px;font-weight:700">${go_.length}</div></div><div class="card" style="margin:0;text-align:center"><small style="color:var(--muted)">Need a look</small><div style="font-size:22px;font-weight:700;color:${open_ ? '#7A5B00' : '#3B6D11'}">${open_}</div></div></div>
-      <div style="font-size:13px;color:var(--muted);margin:8px 0">${les} weekly lessons · ${wv} waivers${im.slots ? '' : " · no slots set up yet, so times aren't checked"}<br>Tap a name to fix it here, or choose Import / Skip.</div>
+      <div style="font-size:13px;color:var(--muted);margin:8px 0">${les} weekly lessons${sh ? ' (' + sh + ' shared)' : ''} · ${wv} waivers${mg ? ' · ' + mg + ' kids were on more than one row, combined' : ''}${im.slots ? '' : " · no slots set up yet, so times aren't checked"}<br>Tap a name to fix it here, or choose Import / Skip.</div>
       ${probs.map(r => `<div class="arow" style="padding:7px 0;align-items:flex-start"><div class="who" style="cursor:pointer" onclick="imEdit(${r.i})"><b>${esc(r.first + ' ' + r.last)} <span style="color:var(--muted);font-weight:400;font-size:12px">✎ fix</span></b>${r.issues.map(([t, x]) => `<small style="color:${t === 'bad' ? '#A32D2D' : '#7A5B00'}">${esc(x)}</small>`).join('') || '<small style="color:#3B6D11">✓ Fixed</small>'}</div>
-        <select style="width:44%" onchange="im.recs[${r.i}].userAct=this.value;imValidate();imDraw()">${[['import', 'Import'], ['nolesson', 'Import, no lesson'], ['skip', 'Skip']].filter(([k]) => k !== 'nolesson' || r.day).map(([k, v]) => `<option value="${k}"${r.act === k ? ' selected' : ''}>${v}</option>`).join('')}</select></div>${im.edit === r.i ? fix(r) : ''}`).join('') || '<div class="center">No problems found 🎉</div>'}
+        <select style="width:44%" onchange="im.recs[${r.i}].userAct=this.value;imValidate();imDraw()">${[['import', 'Import'], ['nolesson', 'Import, no lesson'], ['skip', 'Skip']].filter(([k]) => k !== 'nolesson' || r.lessons.length).map(([k, v]) => `<option value="${k}"${r.act === k ? ' selected' : ''}>${v}</option>`).join('')}</select></div>${im.edit === r.i ? fix(r) : ''}`).join('') || '<div class="center">No problems found 🎉</div>'}
       <div class="row2" style="margin-top:14px"><div><button class="btn ghost" onclick="im.step=1;imDraw()">Back</button></div><div><button class="btn" id="im_go" onclick="imRun()">Import ${go_.length}</button></div></div><div id="im_msg" class="msg"></div>`;
   }
   if (n === 3) b = `<div style="text-align:center;padding:16px 0"><div style="font-size:40px">✅</div><div style="font-weight:600;font-size:18px">${im.done.s} students in</div>
-    <div style="color:var(--muted);margin:6px 0 14px">${im.done.l} weekly lessons · ${im.done.w} waivers</div><button class="btn" onclick="imClose()">See my students</button>
+    <div style="color:var(--muted);margin:6px 0 14px">${im.done.l} weekly lessons · ${im.done.w} waivers${im.done.ns ? ' · ' + im.done.ns + ' new slots added' : ''}</div><button class="btn" onclick="imClose()">See my students</button>
     <button class="btn ghost" style="margin-top:8px" onclick="imUndo()">Undo this import</button><div id="im_msg" class="msg"></div></div>`;
   $('imCard').innerHTML = top + b + (n < 3 ? '<div style="text-align:center;margin-top:12px"><a href="#" onclick="imClose();return false" style="color:var(--muted);font-size:13px">Cancel</a></div>' : '');
 }
@@ -1878,22 +1984,40 @@ async function imRun() {
   const btn = $('im_go'), m = $('im_msg'); btn.disabled = true; btn.textContent = 'Importing…';
   const batch = 'IMP' + Date.now(), today = ymd(new Date()), recs = im.recs.filter(r => r.act !== 'skip');
   const coach = mainCoach() || ((coachRows.find(c => c.active) || {}).name) || null, dur = SET.lengths.includes('30 min') ? '30 min' : SET.lengths[0];
-  const S = recs.map((r, k) => ({ id: batch + '-' + k, gym_id: gymId, first_name: r.first, last_name: r.last || null, dob: r.dob, skill_level: r.level || null, parent_name: r.parent || null,
-    parent_phone: r.phone || null, parent_email: r.email || null, notes: r.notes || null, status: 'Active', active: true, join_date: today, extra: { ImportBatch: batch } }));
-  const L = recs.map((r, k) => r.act === 'import' && r.day ? { gym_id: gymId, student_id: S[k].id, student_name: (r.first + ' ' + r.last).trim(), coach, day: r.day, time: r.time, duration: dur,
-    price: priceFor(dur, 'Solo'), lesson_type: 'Solo', status: 'Confirmed', booked_date: today, paid: 'Unpaid', start_date: today, extra: { ImportBatch: batch } } : null).filter(Boolean);
+  const S = recs.map((r, k) => ({ id: batch + '-' + k, gym_id: gymId, first_name: r.first, last_name: r.last || null, dob: r.dob, skill_level: lvMatch(r.level) || null, parent_name: r.parent || null,
+    parent_phone: r.phone || null, parent_email: r.email || null, notes: r.notes || null, status: 'Active', active: true, join_date: today, extra: { ImportBatch: batch, ...(r.school ? { School: r.school } : {}) } }));
+  const pairs = {};   // day|time → pair id, so both kids of a shared lesson get the same one
+  const L = recs.flatMap((r, k) => r.act !== 'import' ? [] : r.lessons.filter(l => !l.clash).map(l => {
+    const tk = l.day + '|' + l.time, sh = !!l.shareWith, pairId = sh ? (pairs[tk] = pairs[tk] || 'PAIR' + Date.now() + '-' + Object.keys(pairs).length) : null;
+    return { gym_id: gymId, student_id: S[k].id, student_name: (r.first + ' ' + r.last).trim(), coach, day: l.day, time: l.time, duration: dur,
+      price: priceFor(dur, sh ? 'Shared' : 'Solo'), lesson_type: sh ? 'Shared' : 'Solo', share_type: sh ? 'Matched' : 'No', pair_id: pairId, matched_with: l.shareWith, friend_name: l.shareWith,
+      status: 'Confirmed', booked_date: today, paid: 'Unpaid', start_date: today, extra: { ImportBatch: batch } };
+  }));
   const W = recs.map((r, k) => r.signed ? { id: batch + '-W' + k, gym_id: gymId, student_id: S[k].id, parent_name: r.parent || null, signature: 'Imported',
     signed_at: r.wDate ? r.wDate + 'T12:00:00' : null, extra: { ImportBatch: batch, Imported: true } } : null).filter(Boolean);
   for (let i = 0; i < S.length; i += 500) { const r = await sb.from('students').insert(S.slice(i, i + 500)); if (r.error) { btn.disabled = false; btn.textContent = 'Try again'; m.className = 'msg err'; return m.textContent = r.error.message; } }
   const r2 = L.length ? await sb.from('private_lessons').insert(L) : {}, r3 = W.length ? await sb.from('waivers').insert(W) : {};
   await saveSettings({ last_import: { batch, at: new Date().toISOString(), count: S.length } });
+  // lesson times that aren't slots yet → add them to every season (a slot that's turned off is turned back on)
+  let ns = 0;
+  const need = r2.error ? [] : [...new Set(L.map(l => l.day + '|' + l.time))].filter(k => !im.slots || !im.slots.has(k));
+  if (need.length) {
+    const [SE, HV] = await Promise.all([sb.from('seasons').select('id,name'), sb.from('available_slots').select('id,day,time,season_id,active')]);
+    const have = {}; (HV.data || []).forEach(z => have[z.season_id + '|' + z.day + '|' + z.time] = z);
+    const add = [], on = [];
+    (SE.data || []).forEach(se => need.forEach(k => { const [d, t] = k.split('|'), h = have[se.id + '|' + k];
+      if (!h) add.push({ gym_id: gymId, day: d, time: t, coach, season_id: se.id, is_summer: /summer/i.test(se.name || ''), active: true, booked: false, extra: { ImportBatch: batch } });
+      else if (!h.active) on.push(h.id); }));
+    const r4 = add.length ? await sb.from('available_slots').insert(add) : {}, r5 = on.length ? await sb.from('available_slots').update({ active: true }).in('id', on) : {};
+    if (r4.error || r5.error) alert('Students and lessons are in, but adding slots failed: ' + (r4.error || r5.error).message); else ns = need.length;
+  }
   if (r2.error || r3.error) alert('Students are in, but ' + (r2.error ? 'lessons' : 'waivers') + ' failed: ' + (r2.error || r3.error).message);
-  im.done = { s: S.length, l: r2.error ? 0 : L.length, w: r3.error ? 0 : W.length }; im.step = 3; imDraw(); loadStudents(true);
+  im.done = { s: S.length, l: r2.error ? 0 : L.length, w: r3.error ? 0 : W.length, ns }; im.step = 3; imDraw(); loadStudents(true);
 }
 async function imUndo() {
   const li = SET.last_import; if (!li) return;
-  if (!confirm('Undo the import of ' + li.count + ' students? Their lessons and waivers are removed too.')) return;
-  for (const t of ['waivers', 'private_lessons', 'students']) { const r = await sb.from(t).delete().eq('extra->>ImportBatch', li.batch); if (r.error) return alert(r.error.message); }
+  if (!confirm('Undo the import of ' + li.count + ' students? Their lessons, waivers and any slots the import added are removed too.')) return;
+  for (const t of ['waivers', 'private_lessons', 'available_slots', 'students']) { const r = await sb.from(t).delete().eq('extra->>ImportBatch', li.batch); if (r.error) return alert(r.error.message); }
   await saveSettings({ last_import: null }); await loadStudents(true); alert('Import undone.'); imStart();
 }
 
@@ -1914,10 +2038,11 @@ async function boot() {
   if (!session) { show('loginView'); return; }
   const { data: gyms, error } = await sb.from('gyms').select('id,name,slug').limit(1);
   if (error || !gyms || !gyms.length) { show('waitView'); return; }
-  gymId = gyms[0].id; gymTitle = gyms[0].name; gymSlug = gyms[0].slug; $('gymName').textContent = gyms[0].name + ' — Students';
+  gymId = gyms[0].id; gymTitle = gyms[0].name; gymSlug = gyms[0].slug; if (HAND()) $('mi_send').textContent = 'Text these families from my phone'; $('gymName').textContent = gyms[0].name + ' — Students';
   if (!(await loadSettings())) return wzStart();
   const SE = await sb.from('seasons').select('*').order('sort'); seasons = SE.data || [];
   myEmail = (session.user.email || '').toLowerCase(); await loadCoaches(); rtStart(); msBadge();
+  if (HAND()) skLoad().catch(() => {});   // other gyms: their own levels for the level dropdowns
   await loadStudents();
   weekOffset = ss.get('week', 0); stuGroup = ss.get('group', 'priv'); attMode = ss.get('attMode', 'privates');
   if (attMode === 'classes') setAttModeButtons();
@@ -1965,7 +2090,7 @@ function render() {
     <div class="stu" onclick="openEdit('${esc(s.id)}')">
       <div><b>${esc(s.first_name)} ${esc(s.last_name)}</b>
         <small>${esc(s.parent_name || '')}${s.parent_phone ? ' · ' + esc(s.parent_phone) : ''}</small></div>
-      <span style="text-align:right"><span class="pill ${isOn(s) ? '' : 'off'}">${esc(s.status || 'Active')}${s.skill_level ? ' · ' + esc(s.skill_level.split('-')[0]) : ''}</span>
+      <span style="text-align:right"><span class="pill ${isOn(s) ? '' : 'off'}">${esc(s.status || 'Active')}${s.skill_level ? ' · ' + esc(lvTxt(s.skill_level)) : ''}</span>
         ${tags(s).length ? `<small style="display:block;margin-top:3px;color:#888;font-size:11px">${tags(s).join(' · ')}</small>` : ''}</span>
     </div>`).join('') : '<div class="center">No students in this group.</div>';
 }
@@ -1975,7 +2100,7 @@ function openEdit(id) {
   editingId = id;
   const s = students.find(x => x.id === id) || { status: 'Active' }, x = s.extra || {};
   // Level list = 2.0 levels; keep any older value (e.g. "Level Beginner 3") so saving never wipes it
-  const LV = ['L1-Foundations','L2-Rising','L3-Building','L4-Progressing','L5-Advanced','L6-Elite'];
+  const LV = lvCodes();
   $('f_skill_level').innerHTML = '<option value=""></option>' + LV.concat(s.skill_level && !LV.includes(s.skill_level) ? [s.skill_level] : []).map(v => `<option>${esc(v)}</option>`).join('');
   FIELDS.forEach(f => $('f_' + f).value = s[f] ?? '');
   XF.forEach(f => $('x_' + f).value = x[f] ?? '');
@@ -2073,6 +2198,7 @@ function renderSdTop(s) {
     qa.push(`<button class="dang" onclick="sdStatus('Dropped')">Drop student</button>`);
   }
   if (s.parent_phone && (!gymSlug || gymSlug === 'fliplab')) qa.push(`<button onclick="sdViewPortal()">View as parent</button>`, `<button class="dang" onclick="sdResetCode()">Reset portal code</button>`);
+  else if (s.parent_phone && HAND()) qa.push(`<button onclick="sdMakeCode()">Make login code</button>`);
   $('sdTop').innerHTML = `<div class="shead"><div class="av">${esc((s.first_name || '?')[0])}${esc((s.last_name || '')[0] || '')}</div>
     <div><b>${esc(s.first_name)} ${esc(s.last_name)}</b> <span class="pill ${isOn(s) ? '' : 'off'}">${esc(s.status || 'Active')}</span>${s.skill_level ? ` <span class="pill">${esc(s.skill_level)}</span>` : ''}${x.PhotoPermission === 'No' ? ' <span class="tag t-nophoto">No Photo</span>' : ''}
     <small>${age !== '' ? 'Age ' + age + ' · ' : ''}${esc(s.parent_name || '')}${s.parent_phone ? ` · <a href="${smsHref(s.parent_phone)}">${esc(s.parent_phone)}</a>` : ''}</small></div></div>
@@ -2105,6 +2231,16 @@ async function sdResetCode() {
   const r = await sb.rpc('portal_reset_code', { p_phone: s.parent_phone });
   if (r.error) return alert(r.error.message);
   alert(r.data ? 'Portal code reset.' : 'This family has not set up the parent portal yet, so there is nothing to reset.');
+}
+// Other gyms: make a one-time parent portal login code (30 min) the coach can read or text to the parent
+async function sdMakeCode() {
+  const s = sd.s;
+  const r = await sb.rpc('portal_make_code', { p_phone: s.parent_phone });
+  if (r.error || !r.data || r.data.error) return alert((r.data && r.data.error) || (r.error && r.error.message) || 'Could not make a code.');
+  const code = r.data.code, url = location.origin + '/portal.html?gym=' + encodeURIComponent(gymSlug);
+  const text = 'Your ' + gymTitle + ' parent portal login code is ' + code + ' (good for 30 minutes). Log in here: ' + url;
+  if (confirm('Login code for ' + s.parent_phone + ':\n\n' + code + '\n\nGood for 30 minutes. The parent enters their phone, taps "I have a code from my coach", then types it in.\n\nTap OK to text it to the parent from your phone.'))
+    location.href = 'sms:' + r.data.phone + (IOS ? '&body=' : '?body=') + encodeURIComponent(text);
 }
 async function sdStatus(st) {
   const s = sd.s;
@@ -2310,7 +2446,7 @@ function openLesson(id) {
   const coaches = coachNames();
   $('lm_title').textContent = p.student_name + ' — ' + p.day + ' ' + p.time;
   $('lm_student').value = p.student_name || '';
-  $('lm_skill').innerHTML = '<span>' + esc(stu.skill_level ? stu.skill_level.split('-')[0] : 'No level') + '</span><span>Skills</span>'; skLabel(stu);
+  $('lm_skill').innerHTML = '<span>' + esc(stu.skill_level ? lvTxt(stu.skill_level) : 'No level') + '</span><span>Skills</span>'; skLabel(stu);
   $('lm_coach').innerHTML = opts(coaches.concat('TBD'), p.coach || 'TBD');
   $('lm_day').innerHTML = opts(DAYS, p.day);
   $('lm_time').innerHTML = opts(TIMES, p.time);
@@ -2675,7 +2811,7 @@ function finCsv() {
   const f = v => { const s = v == null ? '' : String(v); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
   const row = a => a.map(f).join(','), L = [], sum = (key) => { const t = {}; finRows.forEach(x => { const k = key(x); t[k] = (t[k] || 0) + (+x.amount || 0); }); return Object.keys(t).sort().map(k => row([k, t[k].toFixed(2)])); };
   const from = $('fin_from').value, to = $('fin_to').value;
-  L.push(row(['Flip Lab — Financial Report']), row(['Scope', 'Range ' + from + ' to ' + to]), row(['Generated', new Date().toLocaleString()]), '');
+  L.push(row([(HAND() ? gymTitle : 'Flip Lab') + ' — Financial Report']), row(['Scope', 'Range ' + from + ' to ' + to]), row(['Generated', new Date().toLocaleString()]), '');
   L.push(row(['ITEMIZED TRANSACTIONS']), row(['Date','Student','Amount','Method','Category','Year','Month','Quarter','LessonID','Notes']));
   finRows.forEach(x => { const d = x.date || ''; L.push(row([d, x.student_name, (+x.amount || 0).toFixed(2), x.method, finCat(x), d.slice(0, 4), d ? +d.slice(5, 7) : '', d ? 'Q' + (Math.floor((+d.slice(5, 7) - 1) / 3) + 1) : '', x.lesson_id, x.notes])); });
   L.push('', row(['SUMMARY']), row(['Total transactions', finRows.length]), row(['Grand total', finRows.reduce((t, x) => t + (+x.amount || 0), 0).toFixed(2)]), '');
@@ -2946,7 +3082,6 @@ const dfGet = k => { try { return localStorage.getItem('fl3_fold_' + k) === '1';
 function dashFold(k) { try { localStorage.setItem('fl3_fold_' + k, dfGet(k) ? '0' : '1'); } catch (e) {} dashFoldApply(); }
 function dashFoldApply() { Object.entries(DFOLD).forEach(([k, id]) => { const c = dfGet(k); $(id).classList.toggle('hidden', c); $('dfa_' + k).textContent = c ? '▸' : '▾'; $('dfs_' + k).style.display = c ? '' : 'none'; }); }
 // ================= MISSING INFO (birthdate / level) =================
-const MI_LV = ['L1-Foundations','L2-Rising','L3-Building','L4-Progressing','L5-Advanced','L6-Elite'];
 function miKids() {
   return students.filter(s => ['Active', 'Waitlist'].includes(s.status)).map(s => {
     const w = waitlist.find(w => w.student_id === s.id) || {};
@@ -2962,7 +3097,7 @@ function renderMissing() {
   $('mi_list').innerHTML = k.map(({ s, noDob, noLv }) => { const id = esc(s.id), ph = s.parent_phone;
     return `<div class="arow" style="flex-wrap:wrap">${noDob && ph ? `<input type="checkbox" class="mi_ck" value="${id}" checked style="width:auto;margin:0">` : ''}
       <div class="who"><b>${esc(s.first_name)} ${esc(s.last_name)}</b><small>${esc(s.status)} · ${esc(s.parent_name || 'no parent')}${ph ? ' · ' + esc(ph) : ' · no phone'} · missing ${[noDob && 'birthdate', noLv && 'level'].filter(Boolean).join(' and ')}</small></div>
-      <div style="display:flex;gap:6px;width:100%;margin-top:4px">${noDob ? `<input type="date" id="mi_d_${id}" style="margin:0;flex:1">` : ''}${noLv ? `<select id="mi_l_${id}" style="margin:0;flex:1"><option value="">Level…</option>${MI_LV.map(v => `<option>${v}</option>`).join('')}</select>` : ''}<button class="paybtn" onclick="miSave('${id}')">Save</button></div></div>`; }).join('')
+      <div style="display:flex;gap:6px;width:100%;margin-top:4px">${noDob ? `<input type="date" id="mi_d_${id}" style="margin:0;flex:1">` : ''}${noLv ? `<select id="mi_l_${id}" style="margin:0;flex:1"><option value="">Level…</option>${lvCodes().map(v => `<option>${v}</option>`).join('')}</select>` : ''}<button class="paybtn" onclick="miSave('${id}')">Save</button></div></div>`; }).join('')
     || '<div class="center">Everyone has a birthdate and level ✓</div>';
   $('mi_askBox').style.display = k.some(x => x.noDob && x.s.parent_phone) ? '' : 'none';
 }
@@ -2982,14 +3117,15 @@ async function miAsk() {
   if (!tpl) return m.textContent = 'Type a message.';
   if (!ids.length) return m.textContent = 'Tick at least one family.';
   if (test && !to) return m.textContent = 'Test mode is on. Type a test phone number first.';
-  const fams = {}; ids.forEach(id => { const s = students.find(x => x.id === id), k = String(s.parent_phone).replace(/\D/g, '').slice(-10); (fams[k] = fams[k] || { phone: s.parent_phone, parent: s.parent_name, sid: s.id, kids: [] }).kids.push(s.first_name); });
+  const fams = {}; ids.forEach(id => { const s = students.find(x => x.id === id), k = (HAND() && s.parent_name ? 'p:' + String(s.parent_name).trim().toLowerCase() : '') || String(s.parent_phone).replace(/\D/g, '').slice(-10); (fams[k] = fams[k] || { phone: s.parent_phone, parent: s.parent_name, sid: s.id, kids: [] }).kids.push(s.first_name); });
   const list = Object.values(fams).slice(0, test ? 3 : 60), fill = f => tpl.replace(/\{parent\}/g, (f.parent || '').split(' ')[0] || 'there').replace(/\{kid\}/g, f.kids.join(' and '));
-  if (!confirm(test ? 'TEST: send ' + list.length + ' sample text(s) to ' + to + '?' : 'Text ' + list.length + ' famil' + (list.length === 1 ? 'y' : 'ies') + ' for real?\n' + list.map(f => (f.parent || '?') + ' (' + f.phone + ')').join('\n'))) return;
+  if (!HAND() && !confirm(test ? 'TEST: send ' + list.length + ' sample text(s) to ' + to + '?' : 'Text ' + list.length + ' famil' + (list.length === 1 ? 'y' : 'ies') + ' for real?\n' + list.map(f => (f.parent || '?') + ' (' + f.phone + ')').join('\n'))) return;
   $('mi_send').disabled = true; m.className = 'msg'; m.textContent = 'Sending…';
   const res = await sb.functions.invoke('sms-send', { body: { batch: crypto.randomUUID(), messages: list.map(f => ({ to: test ? to : f.phone, student_id: test ? null : f.sid, family: test ? 'Test' : f.parent, text: (test ? '[TEST for ' + (f.parent || 'family') + '] ' : '') + fill(f) })) } });
   $('mi_send').disabled = false;
   if (res.error || (res.data && res.data.error)) { m.className = 'msg err'; m.textContent = 'Not sent: ' + ((res.data && res.data.error) || res.error.message); return; }
   m.textContent = '✓ Sent ' + res.data.sent + (res.data.failed ? ' · ' + res.data.failed + ' failed' : '') + (test ? ' to your test number' : '. Replies come to your phone.');
+  if (HAND()) m.textContent = list.length === 1 ? '✓ Opened in your Messages app. Just hit send.' : '✓ Tap Text for each family in the list.';
 }
 async function loadNextMonday() {
   const nm = new Date(weekDates()[0].date); nm.setDate(nm.getDate() + 7); const ws = ymd(nm), we = ymd(new Date(nm.getTime() + 6 * 864e5));
@@ -3484,7 +3620,7 @@ function msBack() { msOpen = null; ss.set('msOpen', null); $('ms_thread').classL
 async function msAI() {
   const x = msThreads().find(t => t.phone === msOpen); if (!x) return;
   const btn = event.target; btn.disabled = true; const old = btn.textContent; btn.textContent = '✨ Writing…';
-  const thread = x.list.slice(-12).map(r => (r.direction === 'OUT' ? 'Steve: ' : 'Parent: ') + r.body).join('\n');
+  const thread = x.list.slice(-12).map(r => (r.direction === 'OUT' ? (HAND() ? 'Coach: ' : 'Steve: ') : 'Parent: ') + r.body).join('\n');
   const res = await sb.functions.invoke('ai-write', { body: { mode: 'reply', thread, parent: (x.name || '').split(' ')[0], kid: x.kids, idea: $('ms_idea').value.trim() } });
   btn.disabled = false; btn.textContent = old;
   if (res.error || res.data?.error) return alert('AI: ' + (res.data?.error || res.error.message));
@@ -3493,6 +3629,24 @@ async function msAI() {
 async function msSend() {
   const x = msThreads().find(t => t.phone === msOpen), text = $('ms_msg').value.trim();
   if (!x || !text) return;
+  // Other gyms: a reply to a parent-portal message is emailed from the coach's connected email and shows in their portal thread
+  if (HAND()) {
+    const viaPortal = [...x.list].reverse().find(r => r.direction === 'IN')?.extra?.via === 'Portal';
+    const st = students.find(s => String(s.parent_phone || '').replace(/\D/g, '').slice(-10) === x.phone && /@/.test(s.parent_email || ''));
+    if (viaPortal && st && SET.email_from) {
+      if (!confirm('Email this to ' + x.name + ' at ' + st.parent_email + '?\nIt also shows in their parent portal.\n\n' + text)) return;
+      const b = $('ms_send'); b.disabled = true; b.textContent = 'Sending…';
+      const url = location.origin + '/portal.html?gym=' + encodeURIComponent(gymSlug);
+      const res = await sb.functions.invoke('send-email', { body: { messages: [{ to: st.parent_email, subject: 'Message from ' + gymTitle, student_id: st.id, family: x.name,
+        text: text + '\n\nReply in your parent portal: ' + url }] } });
+      b.disabled = false; b.textContent = 'Send text';
+      if (res.error || !res.data?.sent) return alert('Not sent: ' + (res.data?.results?.[0]?.error || res.data?.error || res.error?.message || 'unknown error'));
+      await sb.from('text_log').insert({ gym_id: gymId, direction: 'OUT', phone: x.phone, student_id: st.id, family_name: x.name, body: text, status: 'Sent (email)',
+        received_at: new Date().toISOString(), extra: { line: 'Portal', via: 'Email' } });
+      $('ms_msg').value = ''; $('ms_idea').value = '';
+      return loadMsgs(true);
+    }
+  }
   let voice = $('ms_line').value === 'Voice';
   if (!confirm('Text this to ' + x.name + ' at ' + fmtPhone(x.phone) + ' from your ' + (voice ? 'Google Voice number' : 'cell') + '?\n\n' + text)) return;
   const b = $('ms_send'); b.disabled = true; b.textContent = 'Sending…';
