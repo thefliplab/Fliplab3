@@ -1830,7 +1830,7 @@ function imValidate() {   // (re)work out problems + default choice for every ro
       if (rec.badLesson) rec.issues.push(['warn', "Can't read lesson time"]);
       rec.lessons.forEach(l => {
         const lbl = l.day.slice(0, 3) + ' ' + l.time, tk = l.day + '|' + l.time, mineAct = rec.userAct || act, other = im.taken[tk] || times[tk];
-        if (im.slots && !im.slots.has(tk)) rec.issues.push(['warn', 'Lesson ' + lbl + ' is not one of your slots']);
+        if (im.slots && !im.slots.has(tk)) rec.issues.push(['warn', lbl + ' is not one of your slots — new slot will be added']);
         const mate = !im.taken[tk] && times[tk], me = (rec.first + ' ' + rec.last).trim();
         l.clash = false; l.shareWith = null;
         if (mate && !mate.l.shareWith && mineAct === 'import') { l.shareWith = mate.name; mate.l.shareWith = me; }   // two kids in the file at the same time = Shared lesson
@@ -1874,7 +1874,7 @@ function imDraw() {
   const n = im.step, last = SET.last_import && (Date.now() - new Date(SET.last_import.at)) < 864e5 ? SET.last_import : null;
   const top = `<div class="hdr" style="margin-top:0">Bring in your students<span style="font-weight:400;font-size:13px">${n < 3 ? 'Step ' + (n + 1) + ' of 3' : ''}</span></div>`;
   let b = '';
-  if (n === 0) b = `${last ? `<div class="arow" style="background:#FFF4D6;border-radius:8px;padding:8px 10px;margin-bottom:10px"><div class="who"><b>Last import: ${last.count} students</b><small>Undo removes those students, their lessons and waivers</small></div><button class="paybtn" style="background:#FCEBEB;color:#A32D2D" onclick="imUndo()">Undo</button></div>` : ''}
+  if (n === 0) b = `${last ? `<div class="arow" style="background:#FFF4D6;border-radius:8px;padding:8px 10px;margin-bottom:10px"><div class="who"><b>Last import: ${last.count} students</b><small>Undo removes those students, their lessons, waivers and any slots it added</small></div><button class="paybtn" style="background:#FCEBEB;color:#A32D2D" onclick="imUndo()">Undo</button></div>` : ''}
     <div style="color:var(--muted);font-size:14px">Export your students from your old program or spreadsheet, then upload it here. Google Sheets: File → Download → CSV.</div>
     <label>Upload a file</label><input type="file" accept=".csv,.txt,.xlsx,.xls" onchange="imFile(this)">
     <label>…or paste rows from a spreadsheet (include the header row)</label><textarea id="im_paste" rows="5" style="width:100%;box-sizing:border-box;font-size:14px" placeholder="Name	Birthday	Parent	Phone"></textarea>
@@ -1898,7 +1898,7 @@ function imDraw() {
       <div class="row2" style="margin-top:14px"><div><button class="btn ghost" onclick="im.step=1;imDraw()">Back</button></div><div><button class="btn" id="im_go" onclick="imRun()">Import ${go_.length}</button></div></div><div id="im_msg" class="msg"></div>`;
   }
   if (n === 3) b = `<div style="text-align:center;padding:16px 0"><div style="font-size:40px">✅</div><div style="font-weight:600;font-size:18px">${im.done.s} students in</div>
-    <div style="color:var(--muted);margin:6px 0 14px">${im.done.l} weekly lessons · ${im.done.w} waivers</div><button class="btn" onclick="imClose()">See my students</button>
+    <div style="color:var(--muted);margin:6px 0 14px">${im.done.l} weekly lessons · ${im.done.w} waivers${im.done.ns ? ' · ' + im.done.ns + ' new slots added' : ''}</div><button class="btn" onclick="imClose()">See my students</button>
     <button class="btn ghost" style="margin-top:8px" onclick="imUndo()">Undo this import</button><div id="im_msg" class="msg"></div></div>`;
   $('imCard').innerHTML = top + b + (n < 3 ? '<div style="text-align:center;margin-top:12px"><a href="#" onclick="imClose();return false" style="color:var(--muted);font-size:13px">Cancel</a></div>' : '');
 }
@@ -1920,13 +1920,26 @@ async function imRun() {
   for (let i = 0; i < S.length; i += 500) { const r = await sb.from('students').insert(S.slice(i, i + 500)); if (r.error) { btn.disabled = false; btn.textContent = 'Try again'; m.className = 'msg err'; return m.textContent = r.error.message; } }
   const r2 = L.length ? await sb.from('private_lessons').insert(L) : {}, r3 = W.length ? await sb.from('waivers').insert(W) : {};
   await saveSettings({ last_import: { batch, at: new Date().toISOString(), count: S.length } });
+  // lesson times that aren't slots yet → add them to every season (a slot that's turned off is turned back on)
+  let ns = 0;
+  const need = r2.error ? [] : [...new Set(L.map(l => l.day + '|' + l.time))].filter(k => !im.slots || !im.slots.has(k));
+  if (need.length) {
+    const [SE, HV] = await Promise.all([sb.from('seasons').select('id,name'), sb.from('available_slots').select('id,day,time,season_id,active')]);
+    const have = {}; (HV.data || []).forEach(z => have[z.season_id + '|' + z.day + '|' + z.time] = z);
+    const add = [], on = [];
+    (SE.data || []).forEach(se => need.forEach(k => { const [d, t] = k.split('|'), h = have[se.id + '|' + k];
+      if (!h) add.push({ gym_id: gymId, day: d, time: t, coach, season_id: se.id, is_summer: /summer/i.test(se.name || ''), active: true, booked: false, extra: { ImportBatch: batch } });
+      else if (!h.active) on.push(h.id); }));
+    const r4 = add.length ? await sb.from('available_slots').insert(add) : {}, r5 = on.length ? await sb.from('available_slots').update({ active: true }).in('id', on) : {};
+    if (r4.error || r5.error) alert('Students and lessons are in, but adding slots failed: ' + (r4.error || r5.error).message); else ns = need.length;
+  }
   if (r2.error || r3.error) alert('Students are in, but ' + (r2.error ? 'lessons' : 'waivers') + ' failed: ' + (r2.error || r3.error).message);
-  im.done = { s: S.length, l: r2.error ? 0 : L.length, w: r3.error ? 0 : W.length }; im.step = 3; imDraw(); loadStudents(true);
+  im.done = { s: S.length, l: r2.error ? 0 : L.length, w: r3.error ? 0 : W.length, ns }; im.step = 3; imDraw(); loadStudents(true);
 }
 async function imUndo() {
   const li = SET.last_import; if (!li) return;
-  if (!confirm('Undo the import of ' + li.count + ' students? Their lessons and waivers are removed too.')) return;
-  for (const t of ['waivers', 'private_lessons', 'students']) { const r = await sb.from(t).delete().eq('extra->>ImportBatch', li.batch); if (r.error) return alert(r.error.message); }
+  if (!confirm('Undo the import of ' + li.count + ' students? Their lessons, waivers and any slots the import added are removed too.')) return;
+  for (const t of ['waivers', 'private_lessons', 'available_slots', 'students']) { const r = await sb.from(t).delete().eq('extra->>ImportBatch', li.batch); if (r.error) return alert(r.error.message); }
   await saveSettings({ last_import: null }); await loadStudents(true); alert('Import undone.'); imStart();
 }
 
