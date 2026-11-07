@@ -1318,7 +1318,7 @@ function cmBuild() {
   else cmPicked.forEach(fromStu);
   cmSkipped = kids.filter(k => k.unsub).length;
   const fam = {};
-  kids.filter(k => !k.unsub).forEach(k => { const key = String(k.phone || '').replace(/\D/g, '').slice(-10) || (okMail(k.email) ? String(k.email).trim().toLowerCase() : '') || 'none:' + k.sid;
+  kids.filter(k => !k.unsub).forEach(k => { const key = (HAND() && k.parent ? 'p:' + String(k.parent).trim().toLowerCase() : '') || String(k.phone || '').replace(/\D/g, '').slice(-10) || (okMail(k.email) ? String(k.email).trim().toLowerCase() : '') || 'none:' + k.sid;
     const f = fam[key] = fam[key] || { key, phone: k.phone, email: okMail(k.email) ? String(k.email).trim() : '', parent: k.parent, kids: [], sid: k.sid };
     if (!f.email && okMail(k.email)) f.email = String(k.email).trim(); if (!f.kids.includes(k.kid)) f.kids.push(k.kid); });
   cmFams = Object.values(fam).sort((a, b) => String(a.parent || '').localeCompare(String(b.parent || '')));
@@ -3045,7 +3045,7 @@ async function miAsk() {
   if (!tpl) return m.textContent = 'Type a message.';
   if (!ids.length) return m.textContent = 'Tick at least one family.';
   if (test && !to) return m.textContent = 'Test mode is on. Type a test phone number first.';
-  const fams = {}; ids.forEach(id => { const s = students.find(x => x.id === id), k = String(s.parent_phone).replace(/\D/g, '').slice(-10); (fams[k] = fams[k] || { phone: s.parent_phone, parent: s.parent_name, sid: s.id, kids: [] }).kids.push(s.first_name); });
+  const fams = {}; ids.forEach(id => { const s = students.find(x => x.id === id), k = (HAND() && s.parent_name ? 'p:' + String(s.parent_name).trim().toLowerCase() : '') || String(s.parent_phone).replace(/\D/g, '').slice(-10); (fams[k] = fams[k] || { phone: s.parent_phone, parent: s.parent_name, sid: s.id, kids: [] }).kids.push(s.first_name); });
   const list = Object.values(fams).slice(0, test ? 3 : 60), fill = f => tpl.replace(/\{parent\}/g, (f.parent || '').split(' ')[0] || 'there').replace(/\{kid\}/g, f.kids.join(' and '));
   if (!HAND() && !confirm(test ? 'TEST: send ' + list.length + ' sample text(s) to ' + to + '?' : 'Text ' + list.length + ' famil' + (list.length === 1 ? 'y' : 'ies') + ' for real?\n' + list.map(f => (f.parent || '?') + ' (' + f.phone + ')').join('\n'))) return;
   $('mi_send').disabled = true; m.className = 'msg'; m.textContent = 'Sending…';
