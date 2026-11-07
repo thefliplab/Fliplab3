@@ -35,10 +35,10 @@ input.code{letter-spacing:10px;text-align:center;font-family:'DM Mono',monospace
 .btn:disabled{opacity:.6}
 .vbar{display:none;position:sticky;top:0;z-index:50;background:#f5a524;color:#3a2600;font-size:13px;padding:9px 14px;align-items:center;justify-content:space-between;gap:10px}
 .vbar button{background:none;border:1px solid #3a2600;color:#3a2600;border-radius:4px;padding:4px 10px;font-weight:800;font-size:12px;letter-spacing:1px;cursor:pointer}
-body.view .vbar{display:flex}
-body.view #bOut{display:none}
-body.view input,body.view textarea{pointer-events:none;opacity:.5}
-body.view :is(#bExtra,#bMsgSend,#bMsgClear,#bXs,#bFamEdit,#bWavSign,[data-q],[data-cancel],[data-move],[data-undo],[data-enroll],[data-leave],[data-rsvp],[data-clinic],[data-xt]){opacity:.35;cursor:not-allowed}
+body.adminview .vbar{display:flex}
+body.adminview #bOut{display:none}
+body.adminview input,body.adminview textarea{pointer-events:none;opacity:.5}
+body.adminview :is(#bExtra,#bMsgSend,#bMsgClear,#bXs,#bFamEdit,#bWavSign,[data-q],[data-cancel],[data-move],[data-undo],[data-enroll],[data-leave],[data-rsvp],[data-clinic],[data-xt]){opacity:.35;cursor:not-allowed}
 .link{background:none;border:none;color:var(--blue-light);font-size:14px;padding:12px 0 0;cursor:pointer;font-family:'DM Sans',sans-serif}
 .msg{font-size:14px;margin-top:10px;min-height:18px}
 .msg.err{color:var(--bad)} .msg.ok{color:var(--ok)}
@@ -762,7 +762,7 @@ $('bOut').onclick = async () => { await sb.auth.signOut(); ME = DATA = CL = ACCT
 document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => show(b.dataset.go));
 
 if (VIEW) {
-  document.body.classList.add('view');
+  document.body.classList.add('adminview');
   $('bVExit').onclick = () => { if (window.opener) window.close(); else location.href = 'index.html'; };
   const BLOCK = '#bExtra,#bMsgSend,#bMsgClear,#bXs,#bFamEdit,#bWavSign,#bOut,[data-q],[data-cancel],[data-move],[data-undo],[data-enroll],[data-leave],[data-rsvp],[data-clinic],[data-xt]';
   document.addEventListener('click', e => {
