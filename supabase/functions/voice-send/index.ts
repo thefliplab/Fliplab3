@@ -3,7 +3,7 @@
 // Gmail that owns Voice sends a text from the Voice number. Only works for families who texted the Voice number lately.
 // Signed-in user only (verify_jwt on).
 //   Check: { check: "5135551234" }            → { ok: true/false }  (is there a recent Voice email for that phone?)
-//   Send:  { to, text, student_id?, family? }  → logs text_log OUT (status "Sent (Voice)", extra.line Voice)
+//   Send:  { to, text, student_id?, family?, batch? }  → logs text_log OUT (status "Sent (Voice)", extra.line Voice, extra.batch for Communicate sends)
 // Secrets: GMAIL_VOICE_APP_PASSWORD. Gmail address: GMAIL_VOICE_USER secret or the default below.
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
@@ -81,7 +81,7 @@ Deno.serve(async (req) => {
     await client.close();
     const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     await db.from("text_log").insert({ gym_id: gym, direction: "OUT", phone: p10, student_id: b.student_id || null, family_name: b.family || null,
-      body: text, status: "Sent (Voice)", received_at: new Date().toISOString(), extra: { line: "Voice" } });
+      body: text, status: "Sent (Voice)", received_at: new Date().toISOString(), extra: b.batch ? { line: "Voice", batch: b.batch } : { line: "Voice" } });
     return json({ ok: true });
   } catch (e) {
     return json({ ok: false, error: String((e as Error).message || e).slice(0, 300) });

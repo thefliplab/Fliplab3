@@ -1,6 +1,6 @@
 // FlipLab 3.0 — send email. Flip Lab: through Yahoo as "Flip Lab" <thefliplab@yahoo.com>. Other gyms: only through their OWN connected email (email-connect).
 // Called by the admin page (signed-in user; verify_jwt on).
-//   { messages: [{ to, subject, text, student_id?, family? }], batch? }  → up to 40 per call, ~1.5s apart
+//   { messages: [{ to, subject, text, student_id?, family? }], batch? }  → up to 40 per call, ~2s apart, fresh connection every 8; one 30s retry, then the rest are marked paused
 //   Each email logged to email_log (status Sent / Failed).
 // Secrets: YAHOO_APP_PASSWORD (Yahoo app password "FlipLab 3.0"); YAHOO_USER optional (default thefliplab@yahoo.com).
 // Uses port 465 (Supabase blocks 25 and 587).
@@ -34,27 +34,41 @@ Deno.serve(async (req) => {
   if (!pw || !host) return json({ error: "Email isn't set up yet" }, 500);
   const { messages = [], batch = null } = await req.json().catch(() => ({}));
 
-  let client: SMTPClient;
-  try {
-    client = new SMTPClient({ connection: { hostname: host, port: 465, tls: true, auth: { username: from, password: pw } } });
-  } catch (e) { return json({ error: "Couldn't connect to email: " + String(e).slice(0, 200) }, 500); }
+  // Yahoo cuts a connection off after ~10 emails, so open a fresh connection every 8 (same as before).
+  // If the server drops us / refuses login: wait 30s, try ONCE more; still no → stop and mark the rest "paused" (don't hammer it).
+  const connect = () => new SMTPClient({ connection: { hostname: host, port: 465, tls: true, auth: { username: from, password: pw! } } });
+  const close = async (c: SMTPClient | null) => { try { await c?.close(); } catch (_) { /* already closed */ } };
+  let client: SMTPClient | null = null, onThis = 0, retried = false, paused = false;
+  const sendOne = async (mail: Record<string, string>) => {
+    if (!client || onThis >= 8) { await close(client); if (client) await sleep(3000); client = connect(); onThis = 0; }
+    onThis++;
+    await client.send(mail as never);
+  };
+  const errOf = (e: unknown) => String((e as Error)?.message || e).slice(0, 300);
 
   const results = [];
   for (const [i, m] of messages.slice(0, 40).entries()) {
     const to = String(m.to || "").trim();
     let ok = false, error: string | undefined;
+    const mail = { from: `${name} <${from}>`, to, subject: m.subject || name, content: m.text, html: toHtml(m.text || "") };
     if (!okEmail(to) || !m.text) error = "Bad email address or empty message";
+    else if (paused) error = "Mail server paused sending. Resend in 30 min.";
     else {
-      try {
-        if (i > 0) await sleep(1500);   // go easy on the mail server
-        await client.send({ from: `${name} <${from}>`, to, subject: m.subject || name, content: m.text, html: toHtml(m.text) });
-        ok = true;
-      } catch (e) { error = String((e as Error)?.message || e).slice(0, 300); }
+      if (i > 0) await sleep(2000);   // go easy on the mail server
+      try { await sendOne(mail); ok = true; }
+      catch (e) {
+        error = errOf(e);
+        if (!retried) {
+          retried = true; await close(client); client = null; await sleep(30000);
+          try { await sendOne(mail); ok = true; error = undefined; }
+          catch (e2) { error = errOf(e2); paused = true; }
+        } else paused = true;
+      }
     }
     await db.from("email_log").insert({ gym_id: gym, to_email: to || "(none)", student_id: m.student_id || null, family_name: m.family || null,
       subject: m.subject || name, body: m.text || "", status: ok ? "Sent" : "Failed", error: error || null, batch });
-    results.push({ to, ok, error });
+    results.push({ to, ok, error, family: m.family || null });
   }
-  try { await client.close(); } catch (_) { /* already closed */ }
+  await close(client);
   return json({ sent: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length, results });
 });

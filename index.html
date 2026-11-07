@@ -266,6 +266,7 @@ button.fl-tap,a.btn.fl-tap{outline:2px solid #1D9E75;outline-offset:2px}
     <div class="card"><div id="cm_aud" style="display:flex;flex-wrap:wrap;gap:6px"></div><div id="cm_sub" style="margin-top:8px"></div></div>
     <div class="sec">Families <span id="cm_cnt" style="font-weight:400;font-size:12px;color:#888"></span><a href="#" onclick="cmAll();return false" style="font-weight:400;font-size:12px;color:#185FA5;text-decoration:none">All / none</a></div>
     <div class="card" style="padding:0;overflow:hidden" id="cm_fam"><div class="center">Loading…</div></div>
+    <div id="cm_will" style="font-size:12px;color:#666;margin:-4px 2px 8px"></div>
     <div class="sec">Message <select id="cm_saved" onchange="cmUseSaved()"><option value="">Saved messages…</option></select></div>
     <div class="card">
       <div style="display:flex;gap:6px;margin-bottom:6px"><input id="cm_idea" placeholder="✨ What do you want to say? e.g. gym closed Thu for Thanksgiving" style="flex:1;margin:0"><button class="paybtn" style="background:#EEEDFE;color:#3C3489;white-space:nowrap" onclick="cmAI('draft')">✨ Write it</button></div>
@@ -955,14 +956,14 @@ function prHidden() {
 const VIA = [['text', '📱 Text'], ['email', '✉️ Email'], ['both', '📱+✉️ Both']];
 function viaHtml(id) { const v = ss.get('sendVia', 'text');
   return `<div id="${id}" data-v="${v}" style="display:flex;gap:4px;margin:6px 0">${VIA.map(([k, n]) => `<button type="button" class="paybtn" data-k="${k}" style="${k === v ? 'background:var(--mint);color:#fff' : 'background:#eef0f2;color:#555'}" onclick="viaSet('${id}','${k}')">${n}</button>`).join('')}</div>`; }
-function viaSet(id, k) { ss.set('sendVia', k); const c = $(id); c.dataset.v = k;
+function viaSet(id, k) { ss.set('sendVia', k); const c = $(id); c.dataset.v = k; if (id === 'cm_via' && typeof cmDefaults === 'function') setTimeout(cmDefaults);
   c.querySelectorAll('button').forEach(b => { const on = b.dataset.k === k; b.style.background = on ? 'var(--mint)' : '#eef0f2'; b.style.color = on ? '#fff' : '#555'; }); }
 const viaGet = id => ($(id) || {}).dataset ? $(id).dataset.v || 'text' : 'text';
 const okMail = e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e || '').trim());
-async function sendEmails(messages, batch) {   // send-email takes up to 40 per call
+async function sendEmails(messages, batch) {   // 25 per send-email call (it pauses between emails and may wait 30s once; must finish in time)
   const out = { sent: 0, failed: 0, error: '' };
-  for (let i = 0; i < messages.length; i += 40) {
-    const r = await sb.functions.invoke('send-email', { body: { messages: messages.slice(i, i + 40), batch } });
+  for (let i = 0; i < messages.length; i += 25) {
+    const r = await sb.functions.invoke('send-email', { body: { messages: messages.slice(i, i + 25), batch } });
     if (r.error || (r.data && r.data.error)) { out.error = (r.data && r.data.error) || r.error.message; break; }
     out.sent += r.data.sent || 0; out.failed += r.data.failed || 0;
   }
@@ -1328,14 +1329,41 @@ async function loadComm() {
 async function cmCheck(bl) {
   if (!bl.length) return;
   await sb.functions.invoke('sms-send', { body: { check: true } }).catch(() => {});
-  const r = await sb.from('text_log').select('status,family_name,batch:extra->>batch').in('extra->>batch', bl.map(b => b.id));
-  const by = {}; (r.data || []).forEach(t => (by[t.batch] = by[t.batch] || []).push(t));
+  const ids = bl.map(b => b.id);
+  const [r, e] = await Promise.all([sb.from('text_log').select('status,family_name,batch:extra->>batch,resent:extra->>resent').in('extra->>batch', ids),
+    sb.from('email_log').select('family_name,batch').in('batch', ids).eq('status', 'Failed')]);
+  const by = {}, eb = {}; (r.data || []).forEach(t => (by[t.batch] = by[t.batch] || []).push(t)); (e.data || []).forEach(x => (eb[x.batch] = eb[x.batch] || []).push(x));
   bl.forEach(b => {
-    const t = by[b.id], el = $('cms_' + b.id); if (!t || !el) return;
-    const n = s => t.filter(x => s.includes(x.status)).length, d = n(['Delivered']), sn = n(['Sent']), w = n(['Queued', 'Pending', 'Processed']), f = t.filter(x => x.status === 'Failed');
-    el.innerHTML = [d ? '✓ ' + d + ' delivered' : '', sn ? sn + ' sent' : '', w ? w + ' sending' : '', f.length ? '<span style="color:#A32D2D;font-weight:600">' + f.length + ' failed</span>' : ''].filter(Boolean).join(' · ');
-    if (f.length) $('cmf_' + b.id).textContent = 'Failed: ' + f.map(x => x.family_name || '?').join(', ');
+    const t = by[b.id] || [], el = $('cms_' + b.id); if (!el) return;
+    const n = s => t.filter(x => s.includes(x.status)).length, d = n(['Delivered']), sn = n(['Sent', 'Sent (Voice)']), w = n(['Queued', 'Pending', 'Processed']), f = t.filter(x => x.status === 'Failed' && !x.resent), ef = eb[b.id] || [];
+    if (t.length) el.innerHTML = [d ? '✓ ' + d + ' delivered' : '', sn ? sn + ' sent' : '', w ? w + ' sending' : '', f.length ? '<span style="color:#A32D2D;font-weight:600">' + f.length + ' failed</span>' : ''].filter(Boolean).join(' · ') + (ef.length ? '<br><span style="color:#A32D2D;font-weight:600">' + ef.length + ' email' + (ef.length === 1 ? '' : 's') + ' failed</span>' : '');
+    if (f.length || ef.length) $('cmf_' + b.id).innerHTML = 'Failed: ' + esc(f.map(x => x.family_name || '?').concat(ef.map(x => (x.family_name || '?') + ' (email)')).join(', '))
+      + ` <button class="paybtn" style="margin:4px 0 0;background:#FCEBEB;color:#A32D2D" onclick="cmResend('${b.id}')">Resend failed</button>`;
   });
+}
+// Resend just the failed texts/emails of one send (same words they were supposed to get). Old failed rows are marked resent.
+async function cmResend(id) {
+  const [T, E] = await Promise.all([sb.from('text_log').select('id,phone,student_id,family_name,body,extra').eq('extra->>batch', id).eq('status', 'Failed'),
+    sb.from('email_log').select('id,to_email,student_id,family_name,subject,body').eq('batch', id).eq('status', 'Failed')]);
+  const tf = (T.data || []).filter(x => !(x.extra || {}).resent), ef = E.data || [];
+  if (!tf.length && !ef.length) return loadComm();
+  const who = [...new Set(tf.concat(ef).map(x => x.family_name || '?'))].join(', ');
+  if (!confirm('Resend ' + [tf.length && tf.length + ' text' + (tf.length === 1 ? '' : 's'), ef.length && ef.length + ' email' + (ef.length === 1 ? '' : 's')].filter(Boolean).join(' + ') + ' to ' + who + '?')) return;
+  const box = $('cmf_' + id); if (box) box.textContent = 'Resending…';
+  let sent = 0, failed = 0, done = 0;
+  if (tf.length) {
+    const p = await sb.functions.invoke('sms-send', { body: { messages: tf.map(x => ({ to: x.phone, student_id: x.student_id, family: x.family_name, text: x.body })), batch: id } });
+    if (!p.error && !(p.data && p.data.error)) { sent += p.data.sent || 0; failed += p.data.failed || 0; done += tf.length;
+      for (const x of tf) await sb.from('text_log').update({ extra: { ...(x.extra || {}), resent: true } }).eq('id', x.id); }
+  }
+  if (ef.length) {
+    const o = await sendEmails(ef.map(x => ({ to: x.to_email, student_id: x.student_id, family: x.family_name, subject: x.subject, text: x.body })), id);
+    sent += o.sent; failed += o.failed;
+    if (!o.error) { done += ef.length; await sb.from('email_log').update({ status: 'Failed (resent)' }).in('id', ef.map(x => x.id)); }
+  }
+  const b = (await sb.from('blasts').select('sent,failed').eq('id', id).maybeSingle()).data;
+  if (b) await sb.from('blasts').update({ sent: (b.sent || 0) + sent, failed: Math.max(0, (b.failed || 0) - done + failed) }).eq('id', id);
+  loadComm();
 }
 function cmSetAud(a) {
   cmAud = a;
@@ -1368,17 +1396,39 @@ function cmBuild() {
   kids.filter(k => !k.unsub).forEach(k => { const key = (HAND() && k.parent ? 'p:' + String(k.parent).trim().toLowerCase() : '') || String(k.phone || '').replace(/\D/g, '').slice(-10) || (okMail(k.email) ? String(k.email).trim().toLowerCase() : '') || 'none:' + k.sid;
     const f = fam[key] = fam[key] || { key, phone: k.phone, email: okMail(k.email) ? String(k.email).trim() : '', parent: k.parent, kids: [], sid: k.sid };
     if (!f.email && okMail(k.email)) f.email = String(k.email).trim(); if (!f.kids.includes(k.kid)) f.kids.push(k.kid); });
+  const keep = Object.fromEntries((cmFams || []).map(f => [f.key, f]));
   cmFams = Object.values(fam).sort((a, b) => String(a.parent || '').localeCompare(String(b.parent || '')));
   cmOn = new Set(cmFams.filter(f => !f.key.startsWith('none:')).map(f => f.key));
-  cmRender();
+  cmDefaults(keep);
 }
+// Per-family send: f.em (email on/off), f.tx ('off' | 'cell' | 'voice'). Text/Email/Both at the top sets everyone's starting choice.
+const cmDef = () => { const v = viaGet('cm_via'); return { em: v !== 'text', tx: v === 'email' ? 'off' : 'cell' }; };
+function cmDefaults(keep) { const d = cmDef(); (cmFams || []).forEach(f => { const o = keep && keep[f.key]; f.em = o ? o.em : d.em; f.tx = o ? o.tx : d.tx; if (o) f.vOk = o.vOk; }); if ($('cm_fam')) cmRender(); }   // keep = earlier choices (adding a kid doesn't reset them)
+const cmChip = (on, dim) => `class="paybtn" style="padding:2px 9px;font-size:12px;margin:0;${dim ? 'opacity:.4;text-decoration:line-through;' : ''}${on ? 'background:var(--mint);color:#fff' : 'background:#eef0f2;color:#555'}"`;
 function cmRender() {
-  $('cm_fam').innerHTML = cmFams.map(f => { const no = f.key.startsWith('none:');
-    return `<label class="arow" style="font-weight:400;margin:0;cursor:pointer"><input type="checkbox" ${cmOn.has(f.key) ? 'checked' : ''} ${no ? 'disabled' : ''} onchange="cmOn.has('${f.key}')?cmOn.delete('${f.key}'):cmOn.add('${f.key}');cmCount()" style="width:auto;margin:0"><div class="who"><b>${esc(f.parent || 'Parent')}</b><small>${esc(f.kids.join(' and '))} · ${no ? 'no phone or email' : [f.phone && esc(fmtPhone(f.phone)), f.email && esc(f.email)].filter(Boolean).join(' · ')}</small></div></label>`; }).join('')
+  const d = cmDef(), voiceOk = !HAND();
+  $('cm_fam').innerHTML = cmFams.map((f, i) => { const no = f.key.startsWith('none:'), chg = !no && ((f.email && f.em !== d.em) || (f.phone && f.tx !== d.tx));
+    const sw = no ? '' : `<div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin-top:5px">`
+      + (f.email ? `<button type="button" ${cmChip(f.em)} onclick="event.preventDefault();cmEm(${i})">Email</button>` : '')
+      + (f.phone ? `<small style="color:#888;margin:0 2px 0 ${f.email ? 6 : 0}px">Text:</small><button type="button" ${cmChip(f.tx === 'off')} onclick="event.preventDefault();cmTx(${i},'off')">Off</button><button type="button" ${cmChip(f.tx === 'cell')} onclick="event.preventDefault();cmTx(${i},'cell')">Cell</button>`
+        + (voiceOk ? `<button type="button" ${cmChip(f.tx === 'voice', f.vOk === false)} onclick="event.preventDefault();cmTx(${i},'voice')">${f.vChk ? 'Checking…' : 'Voice'}</button>` : '') : '')
+      + `</div>` + (f.vOk === false && f.vTried ? `<small style="color:#92400E">No Voice text from them in 30 days. Stays on Cell.</small>` : '');
+    return `<label class="arow" style="font-weight:400;margin:0;cursor:pointer;${chg ? 'border-left:3px solid #EF9F27;border-radius:0' : ''}"><input type="checkbox" ${cmOn.has(f.key) ? 'checked' : ''} ${no ? 'disabled' : ''} onchange="cmOn.has('${f.key}')?cmOn.delete('${f.key}'):cmOn.add('${f.key}');cmCount()" style="width:auto;margin:0"><div class="who"><b>${esc(f.parent || 'Parent')}</b><small>${esc(f.kids.join(' and '))} · ${no ? 'no phone or email' : [f.phone && esc(fmtPhone(f.phone)), f.email && esc(f.email)].filter(Boolean).join(' · ')}</small>${sw}</div></label>`; }).join('')
     + (cmSkipped ? `<div class="center" style="font-size:12px">${cmSkipped} unsubscribed left out</div>` : '') || '<div class="center">' + (cmAud === 'pick' ? 'Search above to add kids' : 'No families') + '</div>';
   cmCount();
 }
-function cmCount() { const n = cmOn.size; $('cm_cnt').textContent = '(' + n + ' of ' + cmFams.length + ')'; $('cm_send').textContent = ($('cm_test').checked ? 'Test send (' + n + ')' : 'Send to ' + n + ' famil' + (n === 1 ? 'y' : 'ies')); }
+function cmEm(i) { const f = cmFams[i]; f.em = !f.em; cmRender(); }
+async function cmTx(i, t) {
+  const f = cmFams[i];
+  if (t === 'voice') {
+    if (f.vChk) return;
+    if (f.vOk === undefined) { f.vChk = true; cmRender(); const r = await sb.functions.invoke('voice-send', { body: { check: f.phone } }).catch(() => ({})); f.vChk = false; f.vOk = !!(r && r.data && r.data.ok); }
+    f.vTried = true; if (!f.vOk) return cmRender();
+  }
+  f.tx = t; cmRender();
+}
+function cmCount() { const n = cmOn.size, pk = cmFams.filter(f => cmOn.has(f.key)), c = x => pk.filter(x).length; $('cm_cnt').textContent = '(' + n + ' of ' + cmFams.length + ')';
+  if ($('cm_will')) $('cm_will').textContent = n ? 'Will send: ' + c(f => f.email && f.em) + ' emails · ' + c(f => f.phone && f.tx === 'cell') + ' texts from cell' + (HAND() ? '' : ' · ' + c(f => f.phone && f.tx === 'voice') + ' from Voice') : ''; $('cm_send').textContent = ($('cm_test').checked ? 'Test send (' + n + ')' : 'Send to ' + n + ' famil' + (n === 1 ? 'y' : 'ies')); }
 function cmAll() { const all = cmFams.filter(f => !f.key.startsWith('none:')); cmOn = cmOn.size === all.length ? new Set() : new Set(all.map(f => f.key)); cmRender(); }
 function cmUseSaved() { const m = cmSaved.find(x => x.id === $('cm_saved').value); if (m) { $('cm_msg').value = m.body; cmLen(); } }
 // Length with {parent}/{kid} counted as ~8 letters; 160 fits in one text
@@ -1416,28 +1466,41 @@ async function cmSend() {
   if (!picks.length) return r.textContent = 'Pick at least one family.';
   const label = CM_AUD.find(a => a[0] === cmAud)[1].replace('A day', ($('cm_day') || {}).value || 'Day').replace('A class', ($('cm_cls') && $('cm_cls').selectedOptions[0] ? $('cm_cls').selectedOptions[0].text.split(' · ')[0] : 'Class'));
   const fill = f => tpl.replace(/\{parent\}/g, (f.parent || '').split(' ')[0] || 'there').replace(/\{kid\}/g, f.kids.join(' and '));
-  let tl = via !== 'email' ? picks.filter(f => f.phone) : [], el = via !== 'text' ? picks.filter(f => f.email) : [];
+  let tl = picks.filter(f => f.phone && f.tx !== 'off'), el = picks.filter(f => f.email && f.em);
   if (test) { tl = tl.slice(0, 3); el = el.slice(0, 3); }
-  if (!tl.length && !el.length) return r.textContent = 'None of these families have ' + (via === 'email' ? 'an email' : via === 'text' ? 'a phone' : 'a phone or email') + ' on file.';
+  if (!tl.length && !el.length) return r.textContent = 'Nothing to send. These families have texts and email turned off, or no phone or email on file.';
+  const vl = test ? [] : tl.filter(f => f.tx === 'voice'), cl = test ? tl : tl.filter(f => f.tx !== 'voice');
   if (test && tl.length && !to) return r.textContent = 'Test mode is on. Type a test phone number first.';
-  const what = [tl.length && tl.length + ' text' + (tl.length === 1 ? '' : 's'), el.length && el.length + ' email' + (el.length === 1 ? '' : 's')].filter(Boolean).join(' + ');
+  const what = [tl.length && tl.length + ' text' + (tl.length === 1 ? '' : 's') + (vl.length ? ' (' + vl.length + ' from Voice)' : ''), el.length && el.length + ' email' + (el.length === 1 ? '' : 's')].filter(Boolean).join(' + ');
   if (!confirm(test ? 'TEST: send ' + what + ' as samples (' + [tl.length && 'texts to ' + to, el.length && 'emails to ' + myEmail].filter(Boolean).join(', ') + ')?' : 'Send ' + what + ' for real?')) return;
   $('cm_send').disabled = true; r.className = 'msg'; r.textContent = 'Sending…';
   const batch = crypto.randomUUID(); let sent = 0, failed = 0; const errs = [];
-  const msgs = tl.map(f => ({ to: test ? to : f.phone, student_id: test ? null : f.sid, family: test ? 'Test' : f.parent, text: (test ? '[TEST for ' + (f.parent || 'family') + '] ' : '') + fill(f) }));
+  const msgs = cl.map(f => ({ to: test ? to : f.phone, student_id: test ? null : f.sid, family: test ? 'Test' : f.parent, text: (test ? '[TEST for ' + (f.parent || 'family') + '] ' : '') + fill(f) }));
   for (let i = 0; i < msgs.length; i += 50) {   // sms-send takes up to 60 per call
     const part = await sb.functions.invoke('sms-send', { body: { messages: msgs.slice(i, i + 50), batch } });
     if (part.error || (part.data && part.data.error)) { errs.push('Texts' + (i ? ' after ' + i : '') + ': ' + ((part.data && part.data.error) || part.error.message)); break; }
     sent += part.data.sent || 0; failed += part.data.failed || 0;
   }
-  if (el.length) {
+  const fb = [], notes = [];   // Voice one at a time, 3s apart; any that can't go by Voice go from the cell instead
+  for (const [i, f] of vl.entries()) {
+    if (i) await new Promise(ok => setTimeout(ok, 3000));
+    r.textContent = 'Sending from Voice ' + (i + 1) + ' of ' + vl.length + '…';
+    const v = await sb.functions.invoke('voice-send', { body: { to: f.phone, student_id: f.sid, family: f.parent, text: fill(f), batch } }).catch(() => ({}));
+    if (v && v.data && v.data.ok) sent++; else fb.push(f);
+  }
+  if (fb.length) {
+    const part = await sb.functions.invoke('sms-send', { body: { messages: fb.map(f => ({ to: f.phone, student_id: f.sid, family: f.parent, text: fill(f) })), batch } });
+    if (part.error || (part.data && part.data.error)) errs.push('Voice texts: ' + ((part.data && part.data.error) || part.error.message));
+    else { sent += part.data.sent || 0; failed += part.data.failed || 0; notes.push(fb.length + ' Voice text' + (fb.length === 1 ? '' : 's') + ' went from your cell instead'); }
+  }
+  if (el.length) { r.textContent = 'Sending emails…';
     const er = await sendEmails(el.map(f => ({ to: test ? myEmail : f.email, student_id: test ? null : f.sid, family: test ? 'Test' : f.parent, subject: (test ? '[TEST] ' : '') + subj, text: (test ? '[TEST for ' + (f.parent || 'family') + '] ' : '') + fill(f) })), batch);
     if (er.error) errs.push('Emails: ' + er.error); sent += er.sent; failed += er.failed;
   }
   $('cm_send').disabled = false;
-  await sb.from('blasts').insert({ id: batch, gym_id: gymId, audience: label + (via === 'text' ? '' : via === 'email' ? ' · email' : ' · text+email'), body: tpl, families: picks.length, sent, failed, test });
+  await sb.from('blasts').insert({ id: batch, gym_id: gymId, audience: label + (!el.length ? '' : !tl.length ? ' · email' : ' · text+email'), body: tpl, families: picks.length, sent, failed, test });
   r.className = errs.length || failed ? 'msg err' : 'msg';
-  r.textContent = (sent ? '✓ Sent ' + sent : 'Not sent') + (failed ? ' · ' + failed + ' failed' : '') + (errs.length ? ' · ' + errs.join(' · ') : '') + (test && sent ? ' (test samples)' : '');
+  r.textContent = (sent ? '✓ Sent ' + sent : 'Not sent') + (failed ? ' · ' + failed + ' failed' : '') + (errs.length ? ' · ' + errs.join(' · ') : '') + (notes.length ? ' · ' + notes.join(' · ') : '') + (test && sent ? ' (test samples)' : '');
   loadComm();
 }
 // ================= CALENDAR SYNC SETTINGS (edge function cal-sync does the work) =================
