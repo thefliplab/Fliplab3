@@ -678,11 +678,15 @@ button.fl-tap,a.btn.fl-tap{outline:2px solid #1D9E75;outline-offset:2px}
   <div class="mdl">
     <div class="mh"><b id="so_title">Send opening</b><button class="x" onclick="$('soModal').classList.add('hidden')">✕</button></div>
     <div id="so_sub" style="font-size:12px;color:#888;margin:-4px 0 8px"></div>
+    <label>Days <span style="color:#aaa">(tap to add or remove)</span></label>
+    <div id="so_days" style="display:flex;flex-wrap:wrap;gap:4px;margin:4px 0 8px"></div>
     <div id="so_list" style="max-height:38vh;overflow:auto"></div>
     <div id="so_all" style="font-size:12px;color:#1c7a5a;cursor:pointer;margin:6px 0" onclick="soShowAll = true; soRender()">+ show all waitlist / drop-in</div>
     <label>Message <span style="color:#aaa">({parent} {kid} {link} fill in per family)</span></label>
-    <textarea id="so_msg" rows="4"></textarea>
+    <textarea id="so_msg" rows="4" oninput="soEdited = true"></textarea>
+    <label id="so_everyBox" style="display:flex;align-items:center;gap:6px;font-size:13px;margin:6px 0"><input type="checkbox" id="so_every" style="width:auto" onchange="soEvery = this.checked; soRender()">Send every picked day to every student (not just their matches)</label>
     <div id="so_viaBox"></div>
+    <div id="so_mailNote" style="display:none;font-size:12px;color:#888;margin:6px 0">Several days are sent by email. Each family can book one of them.</div>
     <button class="btn" id="so_send" onclick="sendOpening()">Send</button>
     <div id="so_res" class="msg"></div>
   </div>
@@ -3299,7 +3303,7 @@ function renderOpen() {
     const d = weekDates().find(x => x.name === o.day), m = live.filter(w => matchesSlot(w, o.day, o.time));
     return `<div class="arow"><div class="who"><b>${SHORT[o.day]} ${d.label} · ${esc(o.time)}</b><small>${esc(o.coach || '')}</small></div>
       ${isExtraSlot(o) ? '<span class="tag t-summer">☀️ Summer</span>' : ''}
-      <button class="mbtn ${m.length ? 'on' : 'off'}" onclick="$('om${i}').classList.toggle('hidden')">${m.length ? '✓ ' + m.length + ' match' + (m.length === 1 ? '' : 'es') : 'No matches'}</button>
+      <button class="mbtn ${m.length ? 'on' : 'off'}" onclick="openSendOpen(${i})">${m.length ? '✓ ' + m.length + ' match' + (m.length === 1 ? '' : 'es') : 'No matches'}</button>
       <button class="paybtn" style="background:var(--mint-soft);color:#1c7a5a" onclick="openAdd('${o.day}','${esc(o.time)}','${esc(o.coach || '')}',{scope:'week'})">Book Student</button>
       <button class="paybtn" onclick="openSendOpen(${i})">📣 Send</button>
       <div id="om${i}" class="mlist hidden">${m.length ? m.map(w => `<div>${esc(w.student_name)} <small style="color:#888">${esc(w.status)}</small> ·
@@ -3405,57 +3409,84 @@ async function removeWl(id) {
 
 // One-week fill sitting in a slot whose regular is Away → "covering for <name>"
 // ================= SEND OPENING (claim links, first tap wins) =================
-let openLive = [], soSlot = null, soShowAll = false, soPick = new Set(), recentClaims = [];
+let openLive = [], soDays = new Set(), soEvery = false, soEdited = false, soShowAll = false, soPick = new Set(), recentClaims = [];
+// Picked days = indexes into openSlots, kept in day/time order
+const soSel = () => [...soDays].sort((a, b) => a - b).map(i => openSlots[i]).filter(Boolean);
+const soLabel = o => { const d = weekDates().find(x => x.name === o.day); return SHORT[o.day] + ' ' + (d ? d.label : '') + ' at ' + o.time; };
+const soMatch = w => soSel().filter(o => matchesSlot(w, o.day, o.time));
+// Days a family gets: their matches among the picked days; all picked days if "every day" is ticked or none match
+const soFor = w => { const m = soMatch(w); return soEvery || !m.length ? soSel() : m; };
+// 2+ days go by email only (texts are for one-off openings)
+const soCan = w => soSel().length > 1 ? okMail(w.parent_email) : (w.parent_phone || okMail(w.parent_email));
 function openSendOpen(i) {
   const o = openSlots[i]; if (!o) return;
-  soSlot = o; soShowAll = false;
-  soPick = new Set(openLive.filter(w => (w.parent_phone || okMail(w.parent_email)) && matchesSlot(w, o.day, o.time)).map(w => w.id));
-  $('so_viaBox').innerHTML = viaHtml('so_via');
-  const d = weekDates().find(x => x.name === o.day);
-  $('so_title').textContent = 'Send opening · ' + SHORT[o.day] + ' ' + (d ? d.label : '') + ' · ' + o.time;
-  $('so_sub').textContent = (o.coach || '') + ' · this week only · first family to tap gets it';
-  $('so_msg').value = 'Hi {parent}! A spot opened ' + o.day + ' ' + (d ? d.label : '') + ' at ' + o.time + ' for {kid}. First to tap gets it: {link}';
+  soDays = new Set([i]); soEvery = false; soEdited = false; soShowAll = false;
+  soPick = new Set(openLive.filter(w => soCan(w) && matchesSlot(w, o.day, o.time)).map(w => w.id));
+  $('so_viaBox').innerHTML = viaHtml('so_via'); $('so_every').checked = false;
   $('so_res').textContent = ''; $('so_send').disabled = false; soRender(); $('soModal').classList.remove('hidden');
 }
+// Tap a day chip: add it (and tick its matching families) or remove it (at least one day stays)
+function soDay(i) {
+  if (soDays.has(i)) { if (soDays.size === 1) return; soDays.delete(i); }
+  else { soDays.add(i); const o = openSlots[i]; openLive.forEach(w => { if (soCan(w) && matchesSlot(w, o.day, o.time)) soPick.add(w.id); }); }
+  soRender();
+}
+function soDefMsg() {
+  const s = soSel();
+  return s.length === 1 ? 'Hi {parent}! A spot opened ' + s[0].day + soLabel(s[0]).slice(SHORT[s[0].day].length) + ' for {kid}. First to tap gets it: {link}'
+    : 'Hi {parent}! Spots opened this week for {kid}. First to tap gets it:\n{link}';
+}
 function soRender() {
-  const o = soSlot, rows = openLive.map(w => ({ w, m: matchesSlot(w, o.day, o.time) })).filter(x => soShowAll || x.m || soPick.has(x.w.id));
+  const s = soSel(), many = s.length > 1;
+  $('so_title').textContent = many ? 'Send ' + s.length + ' openings · this week' : 'Send opening · ' + soLabel(s[0]).replace(' at ', ' · ');
+  $('so_sub').textContent = (many ? '' : (s[0].coach || '') + ' · ') + 'this week only · first family to tap gets each spot';
+  $('so_days').innerHTML = openSlots.map((o, i) => `<button type="button" class="paybtn" style="${soDays.has(i) ? 'background:var(--mint);color:#fff' : 'background:#eef0f2;color:#555'}" onclick="soDay(${i})">${SHORT[o.day]} ${esc(o.time)}</button>`).join('');
+  $('so_everyBox').style.display = many ? 'flex' : 'none';
+  $('so_viaBox').style.display = many ? 'none' : ''; $('so_mailNote').style.display = many ? '' : 'none';
+  if (many) openLive.forEach(w => { if (!soCan(w)) soPick.delete(w.id); });
+  if (!soEdited) $('so_msg').value = soDefMsg();
+  const rows = openLive.map(w => ({ w, m: soMatch(w) })).filter(x => soShowAll || x.m.length || soPick.has(x.w.id));
   $('so_all').style.display = soShowAll ? 'none' : '';
-  const can = w => w.parent_phone || okMail(w.parent_email);
-  $('so_list').innerHTML = rows.length ? rows.map(({ w, m }) => `<label class="arow" style="padding:6px 0;gap:8px;${can(w) ? '' : 'opacity:.5'}">
-      <input type="checkbox" style="width:auto" ${soPick.has(w.id) ? 'checked' : ''} ${can(w) ? '' : 'disabled'} onchange="this.checked ? soPick.add('${esc(w.id)}') : soPick.delete('${esc(w.id)}'); soCount()">
+  $('so_list').innerHTML = rows.length ? rows.map(({ w, m }) => `<label class="arow" style="padding:6px 0;gap:8px;${soCan(w) ? '' : 'opacity:.5'}">
+      <input type="checkbox" style="width:auto" ${soPick.has(w.id) ? 'checked' : ''} ${soCan(w) ? '' : 'disabled'} onchange="this.checked ? soPick.add('${esc(w.id)}') : soPick.delete('${esc(w.id)}'); soCount()">
       <span style="flex:1">${esc(w.student_name)} <small style="color:#888">${esc(w.status)}</small></span>
-      <span class="tag" style="${m ? 'background:#E1F5EE;color:#085041' : 'background:#eee;color:#888'}">${m ? 'match' : 'no match'}</span>
+      <span class="tag" style="${m.length ? 'background:#E1F5EE;color:#085041' : 'background:#eee;color:#888'}">${m.length ? (many ? 'matches ' + m.map(o => SHORT[o.day] + ' ' + o.time).join(', ') : 'match') : 'no match'}</span>
       <small style="color:#888">${[w.parent_phone && '📱', okMail(w.parent_email) && '✉️'].filter(Boolean).join(' ') || 'no phone/email'}</small></label>`).join('') : '<div class="center">No matching families — tap "show all"</div>';
   soCount();
 }
 function soCount() { $('so_send').textContent = 'Send to ' + soPick.size + ' famil' + (soPick.size === 1 ? 'y' : 'ies'); }
 const soToken = () => { const a = new Uint8Array(9); crypto.getRandomValues(a); return [...a].map(b => 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'[b % 57]).join(''); };
 async function sendOpening() {
-  const o = soSlot, via = viaGet('so_via'), r = $('so_res');
+  const s = soSel(), many = s.length > 1, via = many ? 'email' : viaGet('so_via'), r = $('so_res');
   const hasT = w => via !== 'email' && w.parent_phone, hasE = w => via !== 'text' && okMail(w.parent_email);
   const picks = openLive.filter(w => soPick.has(w.id) && (hasT(w) || hasE(w)));
   if (!picks.length) { r.className = 'msg err'; r.textContent = soPick.size ? 'None of the picked families have ' + (via === 'email' ? 'an email' : 'a phone') + ' on file.' : 'Pick at least one family.'; return; }
   const tpl = $('so_msg').value; if (!tpl.includes('{link}')) { r.className = 'msg err'; r.textContent = 'Keep {link} in the message so they can claim it.'; return; }
   const nt = picks.filter(hasT).length, ne = picks.filter(hasE).length;
-  if (!confirm('Send this opening to ' + picks.length + ' famil' + (picks.length === 1 ? 'y' : 'ies') + '? (' + [nt && nt + ' text' + (nt === 1 ? '' : 's'), ne && ne + ' email' + (ne === 1 ? '' : 's')].filter(Boolean).join(' + ') + ')')) return;
+  if (!confirm('Send ' + (many ? s.length + ' openings' : 'this opening') + ' to ' + picks.length + ' famil' + (picks.length === 1 ? 'y' : 'ies') + '? (' + [nt && nt + ' text' + (nt === 1 ? '' : 's'), ne && ne + ' email' + (ne === 1 ? '' : 's')].filter(Boolean).join(' + ') + ')')) return;
   $('so_send').disabled = true; r.className = 'msg'; r.textContent = 'Sending…';
-  const batch = 'B' + Date.now(), date = dateFor(o.day), me = coachRows.find(c => c.name === mainCoach()) || {};
-  const links = picks.map(w => ({ token: soToken(), gym_id: gymId, batch_id: batch, waitlist_id: w.id, student_id: w.student_id, student_name: w.student_name, parent_phone: w.parent_phone,
-    day: o.day, time: o.time, coach: o.coach || mainCoach() || null, week_start: weekStartStr(), slot_date: date, price: priceFor('30 min', 'Solo'), alert_phone: me.phone || null }));
+  // One batch per day (first tap wins that day); one link per family per day they get
+  const stamp = 'B' + Date.now(), me = coachRows.find(c => c.name === mainCoach()) || {}, week = weekStartStr(), price = priceFor('30 min', 'Solo');
+  const links = [], per = new Map();
+  picks.forEach(w => soFor(w).forEach(o => {
+    const l = { token: soToken(), gym_id: gymId, batch_id: stamp + '_' + openSlots.indexOf(o), waitlist_id: w.id, student_id: w.student_id, student_name: w.student_name, parent_phone: w.parent_phone,
+      day: o.day, time: o.time, coach: o.coach || mainCoach() || null, week_start: week, slot_date: dateFor(o.day), price, alert_phone: me.phone || null };
+    links.push(l); if (!per.has(w.id)) per.set(w.id, []); per.get(w.id).push([o, l]);
+  }));
   const ins = await sb.from('claim_links').insert(links);
   if (ins.error) { $('so_send').disabled = false; r.className = 'msg err'; r.textContent = ins.error.message; return; }
   const base = location.origin + location.pathname.replace(/[^/]*$/, '') + 'claim.html?t=';
-  const body = (w, l) => tpl.replace(/\{parent\}/g, (w.parent_name || '').split(' ')[0] || 'there').replace(/\{kid\}/g, (w.student_name || '').split(' ')[0]).replace(/\{link\}/g, base + l.token);
-  const d = weekDates().find(x => x.name === o.day);
+  const linkTxt = w => { const ls = per.get(w.id); return many ? ls.map(([o, l]) => soLabel(o) + ': ' + base + l.token).join('\n') : base + ls[0][1].token; };
+  const body = w => tpl.replace(/\{parent\}/g, () => (w.parent_name || '').split(' ')[0] || 'there').replace(/\{kid\}/g, () => (w.student_name || '').split(' ')[0]).replace(/\{link\}/g, () => linkTxt(w));
   let sent = 0, failed = 0; const errs = [];
-  const messages = links.map((l, k) => [picks[k], l]).filter(([w]) => hasT(w)).map(([w, l]) => ({ to: w.parent_phone, student_id: w.student_id, family: w.parent_name || w.student_name, text: body(w, l) }));
+  const messages = picks.filter(hasT).map(w => ({ to: w.parent_phone, student_id: w.student_id, family: w.parent_name || w.student_name, text: body(w) }));
   if (messages.length) {
     const res = await sb.functions.invoke('sms-send', { body: { messages } });
     if (res.error || (res.data && res.data.error)) errs.push('Texts: ' + ((res.data && res.data.error) || res.error.message)); else { sent += res.data.sent || 0; failed += res.data.failed || 0; }
   }
-  const emails = links.map((l, k) => [picks[k], l]).filter(([w]) => hasE(w)).map(([w, l]) => ({ to: w.parent_email, student_id: w.student_id, family: w.parent_name || w.student_name,
-    subject: 'Spot open ' + SHORT[o.day] + ' ' + (d ? d.label : '') + ' at ' + o.time, text: body(w, l) }));
-  if (emails.length) { const er = await sendEmails(emails, batch); if (er.error) errs.push('Emails: ' + er.error); sent += er.sent; failed += er.failed; }
+  const emails = picks.filter(hasE).map(w => { const ls = per.get(w.id); return { to: w.parent_email, student_id: w.student_id, family: w.parent_name || w.student_name,
+    subject: ls.length === 1 ? 'Spot open ' + soLabel(ls[0][0]) : 'Spots open this week', text: body(w) }; });
+  if (emails.length) { const er = await sendEmails(emails, stamp); if (er.error) errs.push('Emails: ' + er.error); sent += er.sent; failed += er.failed; }
   if (!sent) { $('so_send').disabled = false; r.className = 'msg err'; r.textContent = 'Not sent: ' + (errs.join(' · ') || 'check phone/email'); return; }
   r.className = errs.length || failed ? 'msg err' : 'msg';
   r.textContent = '✓ Sent ' + sent + (failed ? ' · ' + failed + ' failed' : '') + (errs.length ? ' · ' + errs.join(' · ') : '') + ' — you\'ll get a text when someone claims it';
