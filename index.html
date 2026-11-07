@@ -1236,38 +1236,22 @@ async function skMasterDraw() {
   if (!$('st_skills')) return;
   if (!SK.levels.length && !HAND()) { el.innerHTML = '<div style="color:#888;font-size:13px;padding:8px 0">No skill levels set up yet.</div>'; return; }
   const H = HAND(), lb = 'padding:6px 8px;font-size:12px', lbtn = (t, f, off) => `<button class="paybtn" style="${lb}" ${off ? 'disabled' : ''} onclick="event.stopPropagation();${f}">${t}</button>`;
-  el.innerHTML = (H ? lvMisDraw() : '') + SK.levels.map((l, li) => { const list = SK.skills.filter(x => x.level_id === l.id), open = skMOpen === l.id;
-    return `<div class="sklv" onclick="skMOpen=${open ? 'null' : `'${esc(l.id)}'`};skMasterDraw()"><span${open ? ' style="font-weight:600"' : ''}>${esc(skLvName(l))}</span><span style="color:#999;display:flex;gap:4px;align-items:center">${open ? 'close' : list.length + ' skills'}${H ? lbtn('Rename', `lvRename('${esc(l.id)}')`) + lbtn('Up', `lvMove(${li},-1)`, !li) + lbtn('Down', `lvMove(${li},1)`, li === SK.levels.length - 1) + `<button class="paybtn" style="${lb};background:#FCEBEB;color:#A32D2D" onclick="event.stopPropagation();lvRemove('${esc(l.id)}')">Remove</button>` : ''}</span></div>
+  el.innerHTML = SK.levels.map((l, li) => { const list = SK.skills.filter(x => x.level_id === l.id), open = skMOpen === l.id;
+    return `<div class="sklv" onclick="skMOpen=${open ? 'null' : `'${esc(l.id)}'`};skMasterDraw()"><span${open ? ' style="font-weight:600"' : ''}>${esc(skLvName(l))}</span><span style="color:#999">${open ? 'close' : list.length + ' skills'}</span></div>
       ${open ? `<div style="padding-left:6px">${list.map((x, i) => `<div style="display:flex;gap:6px;align-items:center;padding:4px 0;border-bottom:1px solid #f0f0f0">
         <input value="${esc(x.name)}" style="flex:1;margin:0;font-size:14px;padding:8px" onchange="skMRename('${esc(x.id)}',this.value)">
         <button class="paybtn" style="padding:8px 10px" ${i ? '' : 'disabled'} onclick="skMMove('${esc(l.id)}',${i},-1)">Up</button>
         <button class="paybtn" style="padding:8px 10px" ${i < list.length - 1 ? '' : 'disabled'} onclick="skMMove('${esc(l.id)}',${i},1)">Down</button>
         <button class="paybtn" style="padding:8px 10px;background:#FCEBEB;color:#A32D2D" onclick="skMHide('${esc(x.id)}')">Remove</button></div>`).join('')}
-        <div style="display:flex;gap:6px;margin:8px 0"><input id="skm_new" placeholder="New ${esc(skAb(l))} skill" style="flex:1;margin:0"><button class="paybtn" style="padding:8px 14px" onclick="skMAdd('${esc(l.id)}')">Add</button></div></div>` : ''}`; }).join('')
+        <div style="display:flex;gap:6px;margin:8px 0"><input id="skm_new" placeholder="New ${esc(skAb(l))} skill" style="flex:1;margin:0"><button class="paybtn" style="padding:8px 14px" onclick="skMAdd('${esc(l.id)}')">Add</button></div>
+        ${H ? `<div style="display:flex;gap:6px;margin:0 0 10px;align-items:center"><small style="color:#999;flex:1">Level</small>${lbtn('Rename', `lvRename('${esc(l.id)}')`) + lbtn('Up', `lvMove(${li},-1)`, !li) + lbtn('Down', `lvMove(${li},1)`, li === SK.levels.length - 1)}<button class="paybtn" style="${lb};background:#FCEBEB;color:#A32D2D" onclick="lvRemove('${esc(l.id)}')">Remove</button></div>` : ''}</div>` : ''}`; }).join('')
     + (H ? `<div style="display:flex;gap:6px;margin:10px 0 0"><input id="lv_new" placeholder="New level name" style="flex:1;margin:0"><button class="paybtn" style="padding:8px 14px" onclick="lvAdd()">Add level</button></div><div style="font-size:12px;color:#999;margin-top:6px">Kids move up through the levels in this order. A level with kids on it can't be removed until they're moved.</div>` : '')
     + '<div style="font-size:12px;color:#999;margin-top:8px">Removing a skill hides it. Kids who already checked it keep it in their history. Adding a skill changes "X of Y" for kids in that level.</div>';
 }
 // ---- Other gyms: their own levels (code = level name, so kids' level shows as the name everywhere) ----
-function lvMis() {   // kids whose saved level isn't one of the gym's levels → { text: [student ids] }
-  const codes = new Set(SK.levels.map(l => l.code)), g = {};
-  students.forEach(s => { const t = String(s.skill_level || '').trim(); if (t && !codes.has(s.skill_level)) (g[s.skill_level] = g[s.skill_level] || []).push(s.id); });
-  return g;
-}
-function lvMisDraw() {
-  const g = lvMis(), keys = Object.keys(g).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })); if (!keys.length || !SK.levels.length) return '';
-  const n = keys.reduce((t, k) => t + g[k].length, 0);
-  return `<div style="background:#FAEEDA;border-radius:8px;padding:10px;margin:8px 0 10px;font-size:13px;color:#633806"><b>${n} kid${n > 1 ? 's have a level' : ' has a level'} that isn't on your list</b>
-    ${keys.map((k, i) => `<div style="display:flex;gap:6px;align-items:center;margin-top:6px"><span style="flex:1">"${esc(k)}" (${g[k].length} kid${g[k].length > 1 ? 's' : ''})</span><select class="lvmis" data-k="${esc(k)}" style="margin:0;width:150px;padding:6px"><option value="">Pick a level</option>${SK.levels.map(l => `<option value="${esc(l.code)}"${lvMatch(k) === l.code ? ' selected' : ''}>${esc(l.name)}</option>`).join('')}</select></div>`).join('')}
-    <button class="paybtn" style="margin-top:8px;padding:8px 14px" onclick="lvMisSave()">Save matches</button></div>`;
-}
 async function lvRecode(from, to) {   // move every kid (and waitlist row) on level text "from" to code "to"
   for (const t of ['students', 'waitlist']) { const r = await sb.from(t).update({ skill_level: to }).eq('gym_id', gymId).eq('skill_level', from); if (r.error) throw new Error(r.error.message); }
   students.forEach(s => { if (s.skill_level === from) s.skill_level = to; }); (waitlist || []).forEach(w => { if (w.skill_level === from) w.skill_level = to; });
-}
-async function lvMisSave() {
-  const sel = [...document.querySelectorAll('.lvmis')].filter(x => x.value); if (!sel.length) return alert('Pick a level for at least one first.');
-  try { for (const x of sel) await lvRecode(x.dataset.k, x.value); } catch (e) { alert(e.message); }
-  render(); skMDone();
 }
 async function lvRename(id) {
   const l = SK.levels.find(x => x.id === id); if (!l) return;
