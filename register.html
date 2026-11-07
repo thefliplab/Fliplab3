@@ -328,6 +328,29 @@ input:focus{outline:none;border-color:var(--btn);box-shadow:0 0 0 3px rgba(67,73
 </div>
 
 <script>
+
+// Birthday boxes = Month / Day / Year dropdowns (the phone date picker opens on today and saved wrong years).
+// The original input stays (hidden, same id), so existing .value code keeps working. Partly picked → value '' and data-part="1".
+function dobPick(inp, oldest) {
+  if (!inp || inp.dataset.dob) return; inp.dataset.dob = '1';
+  const P = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value'), start = inp.value, now = new Date().getFullYear();
+  const MO = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const wrap = document.createElement('div'); wrap.className = 'dobrow'; wrap.style.cssText = 'display:grid;grid-template-columns:1.4fr .8fr 1fr;gap:6px;' + (inp.style.flex ? 'flex:1;' : '');
+  const mk = lb => { const s = document.createElement('select'); s.setAttribute('aria-label', lb); s.style.width = '100%'; if (inp.style.margin) s.style.margin = inp.style.margin; wrap.appendChild(s); return s; };
+  const m = mk('Birthday month'), d = mk('Birthday day'), y = mk('Birthday year');
+  m.innerHTML = '<option value="">Month</option>' + MO.map((x, i) => `<option value="${i + 1}">${x}</option>`).join('');
+  let ys = '<option value="">Year</option>'; for (let i = now - 1; i >= oldest; i--) ys += `<option>${i}</option>`; y.innerHTML = ys;
+  const days = () => { const cur = d.value, n = new Date(+y.value || 2000, +m.value || 1, 0).getDate(); let s = '<option value="">Day</option>'; for (let i = 1; i <= n; i++) s += `<option>${i}</option>`; d.innerHTML = s; if (cur && +cur <= n) d.value = cur; };
+  const p2 = v => String(v).padStart(2, '0');
+  const sync = () => { days(); const all = m.value && d.value && y.value; P.set.call(inp, all ? `${y.value}-${p2(m.value)}-${p2(d.value)}` : ''); inp.dataset.part = !all && (m.value || d.value || y.value) ? '1' : ''; };
+  m.onchange = y.onchange = d.onchange = sync;
+  Object.defineProperty(inp, 'value', { get() { return P.get.call(inp); }, set(v) {
+    const t = /^(\d{4})-(\d{2})-(\d{2})/.exec(v || ''); P.set.call(inp, t ? t[0] : ''); inp.dataset.part = '';
+    if (t && ![...y.options].some(o => o.value === String(+t[1]))) y.add(new Option(String(+t[1]), String(+t[1])), +t[1] > now - 1 ? 1 : undefined);
+    y.value = t ? String(+t[1]) : ''; m.value = t ? String(+t[2]) : ''; days(); d.value = t ? String(+t[3]) : ''; } });
+  inp.type = 'hidden'; inp.after(wrap); inp.value = start;
+}
+document.querySelectorAll('#dob,#sibDob').forEach(i => dobPick(i, new Date().getFullYear() - 25));
 const sb = supabase.createClient('https://angmtyojkwlrefxpcgoa.supabase.co', 'sb_publishable_fPciNfnNHpHQikB8mqHNpw_hIVRIGo5');
 const GYM = new URLSearchParams(location.search).get('gym') || 'fliplab';
 let VENMO = 'https://venmo.com/code?user_id=2634245503713280412', ZELLE = '951-317-5158', COACH = 'Coach Steve', MINE = true;   // MINE = a confirmation email goes out (Flip Lab, or a gym with its email connected)
