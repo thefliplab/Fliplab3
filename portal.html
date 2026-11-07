@@ -280,12 +280,14 @@ const FL = GYM === 'fliplab';
 const NOT_FOUND = "We don't have that number. Use the phone number you signed up with, or " + (FL ? 'text Coach Steve.' : 'contact your coach.');
 // Other gyms: their name, logo and main color (Settings in their admin), read through signup_look
 async function lookFor(slug) {
-  $('topLogo').style.display = 'none'; $('topName').style.display = 'inline';
+  $('topLogo').style.display = 'none'; $('topName').style.display = 'inline'; document.title = 'Parent portal'; $('homeGym').textContent = '';
   $('phoneSub').textContent = 'Cancel or move lessons, sign up for classes, pay and message your coach.';
   $('codeH').innerHTML = 'Check your <span>email</span>'; $('bSend').textContent = 'Email me a code'; $('bHave').style.display = 'block';
   let L = null; try { L = (await sb.rpc('signup_look', { p_slug: slug })).data; } catch (e) {}
   if (!L) return;
   document.title = L.name + ' — Parent portal'; $('topName').textContent = L.name;
+  document.querySelector('meta[name="apple-mobile-web-app-title"]').content = L.name;
+  document.querySelectorAll('link[rel="icon"],link[rel="apple-touch-icon"]').forEach(l => { if (L.logo_url) l.href = L.logo_url; else l.remove(); });
   if (L.logo_url) { $('topLogo').src = L.logo_url; $('topLogo').alt = L.name; $('topLogo').style.display = ''; $('topName').style.display = 'none'; }
   if (L.color) ['--blue', '--blue-light'].forEach(k => document.documentElement.style.setProperty(k, L.color));
 }
@@ -671,11 +673,11 @@ function drawAcct() {
     <div class="tip" style="font-size:14px">${esc(k.parent_email || 'No email')}</div>
     <div class="tip" style="font-size:14px">Emergency: ${k.emergency_name ? esc(k.emergency_name) + (ph(k.emergency_phone) ? ' ' + ph(k.emergency_phone) : '') : 'none'}</div></div>`);
   // Waiver
-  const w = k.waiver;
-  h.push(`<div class="card"><label>Waiver</label>` + (w ? `<div>✓ Signed by ${esc(w.signature || w.parent_name)}${w.signed_at ? ' · ' + esc(fmtD(w.signed_at.slice(0, 10))) : ''}</div><button class="link" id="bWavView">${WAV_SHOW ? 'Hide waiver' : 'View waiver'}</button>${WAV_SHOW ? `<div class="ftxt">${wavHtml()}</div>` : ''}`
+  const w = k.waiver, noWav = G && !ACCT.waiver_text, noPol = G && !ACCT.policy_text;   // other gyms: blank = coach hasn't added one, so no card
+  if (!noWav) h.push(`<div class="card"><label>Waiver</label>` + (w ? `<div>✓ Signed by ${esc(w.signature || w.parent_name)}${w.signed_at ? ' · ' + esc(fmtD(w.signed_at.slice(0, 10))) : ''}</div><button class="link" id="bWavView">${WAV_SHOW ? 'Hide waiver' : 'View waiver'}</button>${WAV_SHOW ? `<div class="ftxt">${wavHtml()}</div>` : ''}`
     : `<div class="warnbox" style="margin-top:0">No waiver on file for ${esc(k.first_name)}.</div><button class="btn btn-primary" id="bWavSign">Sign waiver</button>`) + '</div>');
   // Policies
-  h.push(`<div class="card"><label>Policies</label><div class="ftxt" style="margin-top:0">${polHtml()}</div>
+  h.push(`<div class="card"><label>${noPol ? 'Contact' : 'Policies'}</label>${noPol ? '' : `<div class="ftxt" style="margin-top:0">${polHtml()}</div>`}
     <p class="tip" style="margin:10px 0 0">${textNum() ? `Text Coach Steve <a href="sms:+1${textNum()}" style="color:var(--blue-light)">${fmt(textNum())}</a>` : 'Contact Coach Steve'}${C.email ? ' · <a href="mailto:' + esc(C.email) + '" style="color:var(--blue-light)">' + esc(C.email) + '</a>' : ''}</p></div>`);
   $('acctBox').innerHTML = h.join('');
   const on = (id, f) => { const e = $(id); if (e) e.onclick = f; };

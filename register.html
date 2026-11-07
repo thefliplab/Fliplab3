@@ -630,8 +630,10 @@ async function submitForm() {
   const fmt = t => t.trim().split(/\n\s*\n/).map(p => { const ls = p.split('\n').map(E); return (ls.length > 1 && ls[0].length < 70 ? '<strong>' + ls.shift() + '</strong><br>' : '') + ls.join('<br>'); }).join('<br><br>');
   const pol = document.getElementById('polBox'), wav = document.getElementById('wavBox');
   const swap = h => (me ? h.replace(/Flip Lab/g, E(L.name)) : h).replace(/24 hours/g, hrs + ' hours');
-  pol.innerHTML = L.policy_text ? fmt(L.policy_text) : swap(pol.innerHTML);
-  wav.innerHTML = L.waiver_text ? fmt(L.waiver_text) : swap(wav.innerHTML);
+  // Other gyms with no policy / waiver written in Settings: that part of the page is hidden (no Flip Lab starter text)
+  const hideBox = (box, chk) => { [box.previousElementSibling, box, box.nextElementSibling, box.nextElementSibling && box.nextElementSibling.nextElementSibling].forEach(el => { if (el) el.style.display = 'none'; }); document.getElementById(chk).checked = true; };
+  if (me && !L.policy_text) hideBox(pol, 'cancelAccept'); else pol.innerHTML = L.policy_text ? fmt(L.policy_text) : swap(pol.innerHTML);
+  if (me && !L.waiver_text) hideBox(wav, 'waiverAccept'); else wav.innerHTML = L.waiver_text ? fmt(L.waiver_text) : swap(wav.innerHTML);
 })();
 </script>
 <script>document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('button,a.btn'); if (!b || b.disabled) return; b.classList.add('fl-tap'); setTimeout(() => b.classList.remove('fl-tap'), 350); }, true);</script>

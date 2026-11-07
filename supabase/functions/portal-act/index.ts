@@ -101,12 +101,21 @@ Deno.serve(async (req) => {
   const HIDE: string[] = FL ? [] : (Array.isArray(setRow?.value?.portal_hide) ? setRow.value.portal_hide : []);
   if (!FL && setRow?.value?.portal_off) return J({ error: "portal_off" });
   if (TAB_OF[b.action] && HIDE.includes(TAB_OF[b.action])) return J({ error: "That part of the portal is turned off." });
+  // Prices: Flip Lab = week.ts defaults; other gyms = their own Settings prices (never Flip Lab's)
+  const GP = FL ? null : (setRow?.value?.prices || null);
+  const pf = (dur: string, type: string) => { const t = type === "Shared" ? "Shared" : "Solo"; return (GP && GP[t] && (GP[t][dur] || GP[t]["30 min"])) || priceFor(dur, t); };
 
   // All lessons (needed for Shared counting + who holds a slot) and one week's changes
   const { data: lessons } = await db.from("private_lessons").select("*").eq("gym_id", gym).not("status", "in", '("Cancelled","Dropped")');
   async function week(ws: string) {
     const { data: exs } = await db.from("schedule_exceptions").select("*").eq("gym_id", gym).eq("week_start", ws).not("status", "in", '("Deleted","Expired")');
-    return { exs: exs || [], rows: buildWeek(lessons || [], exs || [], ws, addDays(ws, 6)) as any[] };
+    const rows = buildWeek(lessons || [], exs || [], ws, addDays(ws, 6)) as any[];
+    if (GP) rows.forEach(p => {   // re-price automatic Solo/Shared prices with the gym's own prices
+      if (p.extra?.SpecialPrice === "Yes" || !p.price) return;
+      const t = p.lesson_type === "Shared" ? "Shared" : "Solo", d = p.duration || "30 min";
+      if (p.price === priceFor(d, t)) p.price = pf(d, t);
+    });
+    return { exs: exs || [], rows };
   }
   const thisMon = mondayOf(nyNow().ymd);
   const validWs = (ws: string) => typeof ws === "string" && /^\d{4}-\d{2}-\d{2}$/.test(ws) && ws >= thisMon && ws <= addDays(thisMon, 21) && mondayOf(ws) === ws;
@@ -235,7 +244,7 @@ Deno.serve(async (req) => {
         const { rows } = await week(ws);
         weeks.push({ ws, slots: (await openSlots(ws, main, rows)).map(s => ({ ...s, date: dateOf(ws, s.day) })) });
       }
-      return J({ weeks, price: priceFor("30 min", "Solo"), coach: main, cancel_hrs: cancelHrs });
+      return J({ weeks, price: pf("30 min", "Solo"), coach: main, cancel_hrs: cancelHrs });
     }
     const ws = String(b.ws || ""), day = String(b.day || ""), time = String(b.time || "");
     if (!wk2.includes(ws)) return J({ error: "Pick this week or next week." });
@@ -414,7 +423,7 @@ Deno.serve(async (req) => {
     const { data: xs } = await db.from("student_extra_skills").select("student_id,name,tag,status,created_at").eq("gym_id", gym).in("student_id", ids).neq("status", "Not now").order("created_at");
     const main = FL ? String(cal?.main_coach || "") : "";
     const allPay = pays || [];
-    const priceNum = (p: any) => parseFloat(String(p.price || "").replace(/[^0-9.]/g, "")) || +priceFor(p.duration || "30 min", p.lesson_type === "Shared" ? "Shared" : "Solo").slice(1);
+    const priceNum = (p: any) => parseFloat(String(p.price || "").replace(/[^0-9.]/g, "")) || +String(pf(p.duration || "30 min", p.lesson_type === "Shared" ? "Shared" : "Solo")).replace(/[^0-9.]/g, "");
     const paidOf = (id: string, ws: string) => allPay.filter(x => x.lesson_id === id && x.week_start === ws)
       .reduce((t, x) => ({ amt: t.amt + (+x.amount || 0), adj: t.adj || x.extra?.Adjusted === "Yes" }), { amt: 0, adj: false });
     const owedBy: Record<string, { label: string; amt: number }[]> = {}; ids.forEach(id => owedBy[id] = []);

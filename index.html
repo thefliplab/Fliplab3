@@ -1638,7 +1638,7 @@ async function emDisconnect() {
 function stTab(t) { stKeep(); const h = wz.hide_tabs = wz.hide_tabs || []; const i = h.indexOf(t); i >= 0 ? h.splice(i, 1) : h.push(t); stDraw(); }
 function stOpen() { wz = JSON.parse(JSON.stringify(SET)); wzSet = true; $('wzCard').innerHTML = ''; show('setupView'); stDraw(); }
 function stDraw() {
-  stKeep(); stPolDef = stFill(ST_POLICY); stWavDef = stFill(ST_WAIVER);
+  stKeep(); stPolDef = HAND() ? '' : stFill(ST_POLICY); stWavDef = HAND() ? '' : stFill(ST_WAIVER);   // other gyms: blank, they write their own
   const sec = (t, sub, n) => `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">${t}</b><div style="color:var(--muted);font-size:13px">${sub}</div>${wzPart(n)}</div>`;
   $('wzCard').innerHTML = `<div class="hdr" style="margin-top:0">⚙ Settings</div>`
     + sec('Look', 'Logo and main color for your top bar and buttons.', 0)
@@ -1664,10 +1664,10 @@ function stDraw() {
        <label>Texting number</label><input type="tel" inputmode="numeric" value="${esc(wz.c_text)}" oninput="this.value=typingPhone(this.value)" onchange="wz.c_text=this.value.trim()">
        <label>Venmo link</label><input value="${esc(wz.c_venmo)}" placeholder="https://venmo.com/…" onchange="wz.c_venmo=this.value.trim()">
        <label>Zelle (phone or email)</label><input value="${esc(wz.c_zelle)}" onchange="wz.c_zelle=this.value.trim()"></div>`
-    + `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Cancellation policy and waiver</b><div style="color:var(--muted);font-size:13px">Families agree to these when they sign up. Starter text is filled in. Edit it to fit your gym, and have your own waiver checked for your state.</div>
-       <label>Cancellation policy</label><textarea id="st_pol" rows="8" style="width:100%;font-size:13px">${esc(wz.policy_text || stPolDef)}</textarea>
-       <label>Liability waiver</label><textarea id="st_wav" rows="8" style="width:100%;font-size:13px">${esc(wz.waiver_text || stWavDef)}</textarea>
-       <a href="#" style="font-size:13px;color:var(--muted)" onclick="if(confirm('Put the starter text back?')){$('st_pol').value=stPolDef;$('st_wav').value=stWavDef;stDraw()}return false">Reset to starter text</a></div>`
+    + `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Cancellation policy and waiver</b><div style="color:var(--muted);font-size:13px">${HAND() ? 'Families agree to these when they sign up. Write your own here; if a box is blank, families won\'t see it. Have your waiver checked for your state.' : 'Families agree to these when they sign up. Starter text is filled in. Edit it to fit your gym, and have your own waiver checked for your state.'}</div>
+       <label>Cancellation policy</label><textarea id="st_pol" rows="8" style="width:100%;font-size:13px" placeholder="Enter your cancellation policy here. Leave blank to not show one.">${esc(wz.policy_text || stPolDef)}</textarea>
+       <label>Liability waiver</label><textarea id="st_wav" rows="8" style="width:100%;font-size:13px" placeholder="Enter your liability waiver here. Leave blank to not show one.">${esc(wz.waiver_text || stWavDef)}</textarea>
+       ${HAND() ? '' : `<a href="#" style="font-size:13px;color:var(--muted)" onclick="if(confirm('Put the starter text back?')){$('st_pol').value=stPolDef;$('st_wav').value=stWavDef;stDraw()}return false">Reset to starter text</a>`}</div>`
     + `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Sign-up page</b><div style="color:var(--muted);font-size:13px">Uses your logo and main color.</div>
        <label>Header color</label><div>${[['navy', 'Navy'], ['white', 'White'], ['main', 'Main color']].map(([k, n]) => `<button class="paybtn" style="margin:0 6px 6px 0;padding:8px 12px;${wz.su_header === k ? 'background:var(--mint-soft);color:#1c7a5a' : 'background:#eee;color:#888'}" onclick="wz.su_header='${k}';stDraw()">${n}</button>`).join('')}</div>
        <label>Welcome message</label><textarea id="st_wel" rows="2" style="width:100%" placeholder="Welcome! Pick a lesson time below.">${esc(wz.su_welcome)}</textarea>
