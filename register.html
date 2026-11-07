@@ -359,7 +359,11 @@ function dobPick(inp, oldest) {
 document.querySelectorAll('#dob,#sibDob').forEach(i => dobPick(i, new Date().getFullYear() - 25));
 const sb = supabase.createClient('https://angmtyojkwlrefxpcgoa.supabase.co', 'sb_publishable_fPciNfnNHpHQikB8mqHNpw_hIVRIGo5');
 const GYM = new URLSearchParams(location.search).get('gym') || 'fliplab';
-let VENMO = 'https://venmo.com/code?user_id=2634245503713280412', ZELLE = '951-317-5158', COACH = 'Coach Steve', MINE = true;   // MINE = a confirmation email goes out (Flip Lab, or a gym with its email connected)
+if (GYM !== 'fliplab') {   // other gyms: never show Flip Lab's logo, title or payment info, even for a second
+  document.title = 'Register Your Athlete';
+  const hl = document.getElementById('heroLogo'); if (hl) { hl.style.display = 'none'; hl.removeAttribute('src'); }
+}
+let VENMO = GYM === 'fliplab' ? 'https://venmo.com/code?user_id=2634245503713280412' : '', ZELLE = GYM === 'fliplab' ? '951-317-5158' : '', COACH = GYM === 'fliplab' ? 'Coach Steve' : 'your coach', MINE = GYM === 'fliplab';   // MINE = a confirmation email goes out (Flip Lab, or a gym with its email connected)
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
