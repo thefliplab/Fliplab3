@@ -1725,8 +1725,19 @@ async function wzFinish(withSlots) {
 // Only headers + 3 sample rows go to the AI (edge fn import-map). Everything imported is tagged extra.ImportBatch so it can be undone.
 const IM_FIELDS = { full_name: 'Student name (whole)', first_name: 'Student first name', last_name: 'Student last name', dob: 'Birthday', parent_name: 'Parent name', phone: 'Phone', email: 'Email',
   level: 'Level', school: 'School', notes: 'Notes', lesson_day: 'Lesson day', lesson_time: 'Lesson time', lesson_daytime: 'Lesson day + time', ...Object.fromEntries(DAYS.map(d => ['t_' + d, d + ' lesson time'])), waiver: 'Waiver signed', skip: '— Skip —' };
+const IM_DAYRE = [/\bmon(day)?\b/i, /\btue(s|sday)?\b/i, /\bwed(nesday)?\b/i, /\bthu(r|rs|rsday)?\b/i, /\bfri(day)?\b/i, /\bsat(urday)?\b/i, /\bsun(day)?\b/i];
+function imTidy(head, map) {   // fixes after the AI / name matching
+  const has = f => Object.values(map).includes(f);
+  head.forEach(h => { if (/^(time\s*stamp|edit link|column \d+|import status|submitted|submission)/i.test(h)) map[h] = 'skip'; });   // form junk is never a lesson or a name
+  imDayCols(head, map);
+  if (!has('school')) { const h = head.find(h => /school/i.test(h) && map[h] === 'skip'); if (h) map[h] = 'school'; }
+  if (!has('phone')) { const h = head.find(h => /phone|cell|mobile|text|#|number/i.test(h) && map[h] === 'skip'); if (h) map[h] = 'phone'; }
+  const nm = head.find(h => /last\s*,\s*first/i.test(h)); if (nm) map[nm] = 'full_name';
+  if (has('first_name') && !has('last_name') && !has('full_name')) head.forEach(h => { if (map[h] === 'first_name') map[h] = 'full_name'; });   // one name column → whole name ("First Last" or "Last, First")
+  return map;
+}
 function imDayCols(head, map) {   // sheets with one column per weekday ("Monday Time", "Tuesday Time"…) → that day's lesson time
-  const hit = h => { const f = DAYS.filter(d => new RegExp('\\b' + d + '\\b', 'i').test(h)); return f.length === 1 ? f[0] : null; };
+  const hit = h => { const f = DAYS.filter((d, i) => IM_DAYRE[i].test(h)); return f.length === 1 ? f[0] : null; };
   if (head.filter(hit).length >= 2) head.forEach(h => { const d = hit(h); if (d) map[h] = 't_' + d; else if (/^lesson_(day|time|daytime)$/.test(map[h])) map[h] = 'skip'; });
   return map;
 }
@@ -1763,14 +1774,13 @@ async function imLoad(rows) {
   m.className = 'msg'; m.textContent = 'Matching columns…';
   im.map = imGuess(im.head); im.ai = false;
   try { const r = await sb.functions.invoke('import-map', { body: { headers: im.head, samples: im.rows.slice(0, 3) } }); if (r.data && r.data.map) { im.map = r.data.map; im.ai = true; } } catch (e) {}
-  imDayCols(im.head, im.map);
-  if (!Object.values(im.map).includes('school')) { const h = im.head.find(h => /school/i.test(h)); if (h) im.map[h] = 'school'; }
+  imTidy(im.head, im.map);
   im.step = 1; imDraw();
 }
 function imGuess(head) {   // fallback when AI is unavailable
   const used = new Set(), out = {};
-  const rules = [['email', /mail/i], ['phone', /phone|cell|mobile|tel/i], ['dob', /birth|dob|bday/i], ['parent_name', /parent|guardian|mom|dad|mother|father/i], ['waiver', /waiver|release/i], ['school', /school/i],
-    ['first_name', /first/i], ['last_name', /last|surname/i], ['lesson_daytime', /day.*time|schedule|slot/i], ['lesson_day', /^day|weekday/i], ['lesson_time', /time/i], ['level', /level|class|group/i], ['notes', /note|comment/i], ['full_name', /name|athlete|student|child/i]];
+  const rules = [['email', /mail/i], ['phone', /phone|cell|mobile|tel|text|#/i], ['dob', /birth|dob|bday/i], ['parent_name', /parent|guardian|mom|dad|mother|father/i], ['waiver', /waiver|release/i], ['school', /school/i],
+    ['first_name', /first/i], ['last_name', /last|surname/i], ['lesson_daytime', /day.*time|schedule|slot/i], ['lesson_day', /\bday\b|weekday/i], ['lesson_time', /time(?!\s*stamp)/i], ['level', /level|class|group/i], ['notes', /note|comment/i], ['full_name', /name|^(student|athlete|child|gymnast|dancer)$/i]];
   head.forEach(h => { const r = rules.find(([f, re]) => re.test(h) && !used.has(f)); out[h] = r ? (used.add(r[0]), r[0]) : 'skip'; });
   return out;
 }
