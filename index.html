@@ -264,7 +264,8 @@ button.fl-tap,a.btn.fl-tap{outline:2px solid #1D9E75;outline-offset:2px}
   <section id="commView" class="hidden">
     <div class="sec" style="margin-top:4px">Send to</div>
     <div class="card"><div id="cm_aud" style="display:flex;flex-wrap:wrap;gap:6px"></div><div id="cm_sub" style="margin-top:8px"></div></div>
-    <div class="sec">Families <span id="cm_cnt" style="font-weight:400;font-size:12px;color:#888"></span><a href="#" onclick="cmAll();return false" style="font-weight:400;font-size:12px;color:#185FA5;text-decoration:none">All / none</a></div>
+    <div class="sec">Families <span id="cm_cnt" style="font-weight:400;font-size:12px;color:#888"></span><a href="#" onclick="cmAll();return false" style="font-weight:400;font-size:12px;color:#185FA5;text-decoration:none">All / none</a><a href="#" id="cm_vlink" onclick="cmVoiceList();return false" style="font-weight:400;font-size:12px;color:#185FA5;text-decoration:none;margin-left:10px">Voice families</a></div>
+    <div id="cm_vbox" class="card hidden" style="padding:10px 12px"></div>
     <div class="card" style="padding:0;overflow:hidden" id="cm_fam"><div class="center">Loading…</div></div>
     <div id="cm_will" style="font-size:12px;color:#666;margin:-4px 2px 8px"></div>
     <div class="sec">Message <select id="cm_saved" onchange="cmUseSaved()"><option value="">Saved messages…</option></select></div>
@@ -1407,6 +1408,7 @@ function cmDefaults(keep) { const d = cmDef(); (cmFams || []).forEach(f => { con
 const cmChip = (on, dim) => `class="paybtn" style="padding:2px 9px;font-size:12px;margin:0;${dim ? 'opacity:.4;text-decoration:line-through;' : ''}${on ? 'background:var(--mint);color:#fff' : 'background:#eef0f2;color:#555'}"`;
 function cmRender() {
   const d = cmDef(), voiceOk = !HAND();
+  if ($('cm_vlink')) $('cm_vlink').style.display = voiceOk ? '' : 'none';
   $('cm_fam').innerHTML = cmFams.map((f, i) => { const no = f.key.startsWith('none:'), chg = !no && ((f.email && f.em !== d.em) || (f.phone && f.tx !== d.tx));
     const sw = no ? '' : `<div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin-top:5px">`
       + (f.email ? `<button type="button" ${cmChip(f.em)} onclick="event.preventDefault();cmEm(${i})">Email</button>` : '')
@@ -1416,6 +1418,28 @@ function cmRender() {
     return `<label class="arow" style="font-weight:400;margin:0;cursor:pointer;${chg ? 'border-left:3px solid #EF9F27;border-radius:0' : ''}"><input type="checkbox" ${cmOn.has(f.key) ? 'checked' : ''} ${no ? 'disabled' : ''} onchange="cmOn.has('${f.key}')?cmOn.delete('${f.key}'):cmOn.add('${f.key}');cmCount()" style="width:auto;margin:0"><div class="who"><b>${esc(f.parent || 'Parent')}</b><small>${esc(f.kids.join(' and '))} · ${no ? 'no phone or email' : [f.phone && esc(fmtPhone(f.phone)), f.email && esc(f.email)].filter(Boolean).join(' · ')}</small>${sw}</div></label>`; }).join('')
     + (cmSkipped ? `<div class="center" style="font-size:12px">${cmSkipped} unsubscribed left out</div>` : '') || '<div class="center">' + (cmAud === 'pick' ? 'Search above to add kids' : 'No families') + '</div>';
   cmCount();
+}
+// Voice families: everyone who ever texted the Voice number (read from Gmail by voice-send {list}). Only the last 30 days can get Voice texts.
+let cmVL = null;
+const cmVRecent = x => x.last && Date.now() - new Date(x.last) < 30 * 864e5;
+async function cmVoiceList() {
+  const box = $('cm_vbox'); box.classList.remove('hidden');
+  if (!cmVL) { box.innerHTML = '<div class="center">Reading your Voice texts from Gmail…</div>';
+    const r = await sb.functions.invoke('voice-send', { body: { list: true } }).catch(e => ({ error: e }));
+    if (!r || r.error || !r.data || !r.data.ok) { box.innerHTML = `<div class="msg err">Couldn't read Voice texts: ${esc((r && r.data && r.data.error) || (r && r.error && r.error.message) || 'unknown error')}</div>`; return; }
+    cmVL = r.data.families || []; }
+  const byPh = {}; students.forEach(s => { const p = String(s.parent_phone || '').replace(/\D/g, '').slice(-10); if (p) (byPh[p] = byPh[p] || { parent: s.parent_name, kids: [] }).kids.push(s.first_name); });
+  const rows = cmVL.map(x => ({ ...x, f: byPh[x.phone] })), known = rows.filter(x => x.f), nRec = known.filter(cmVRecent).length;
+  const inList = cmFams.filter(f => f.phone && cmVL.some(x => cmVRecent(x) && x.phone === String(f.phone).replace(/\D/g, '').slice(-10))).length;
+  box.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b style="font-size:13px">${known.length} famil${known.length === 1 ? 'y' : 'ies'} texted your Voice number · ${nRec} in the last 30 days</b><a href="#" onclick="$('cm_vbox').classList.add('hidden');return false" style="font-size:12px;color:#888;text-decoration:none">Close</a></div>`
+    + (inList ? `<button class="paybtn" style="margin:8px 0;background:var(--mint);color:#fff" onclick="cmVoiceUse()">Use Voice for the ${inList} in this list</button>` : '<small style="color:#888;display:block;margin:6px 0">None of the families below this are Voice families from the last 30 days.</small>')
+    + `<div style="max-height:260px;overflow:auto;border-top:1px solid #eee">${known.map(x => `<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid #f2f2f2;font-size:13px"><span><b style="font-weight:600">${esc(x.f.parent || 'Parent')}</b> <small style="color:#888">${esc(x.f.kids.join(' and '))}</small></span><small style="white-space:nowrap;color:${cmVRecent(x) ? '#0F6E56' : '#92400E'}">${x.last ? new Date(x.last).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '?'}${cmVRecent(x) ? '' : ' · older than 30 days'}</small></div>`).join('')}</div>`
+    + (rows.length > known.length ? `<small style="color:#888;display:block;margin-top:6px">${rows.length - known.length} other number${rows.length - known.length === 1 ? '' : 's'} not matched to a student</small>` : '');
+}
+function cmVoiceUse() {
+  const rec = new Set((cmVL || []).filter(cmVRecent).map(x => x.phone));
+  cmFams.forEach(f => { if (f.phone && rec.has(String(f.phone).replace(/\D/g, '').slice(-10))) { f.vOk = true; if (f.tx !== 'off') f.tx = 'voice'; } });
+  cmRender();
 }
 function cmEm(i) { const f = cmFams[i]; f.em = !f.em; cmRender(); }
 async function cmTx(i, t) {
