@@ -43,7 +43,7 @@ async function findVoice(user: string, pw: string, p10: string) {
   try {
     await c.cmd('EXAMINE "[Gmail]/All Mail"');
     const s = await c.cmd('UID SEARCH X-GM-RAW "from:txt.voice.google.com newer_than:30d"');
-    const uids = ((s.match(/\* SEARCH([^\r\n]*)/) || [])[1] || "").trim().split(/\s+/).filter(Boolean).map(Number).sort((a, b) => b - a).slice(0, 60);
+    const uids = ((s.match(/\* SEARCH([^\r\n]*)/) || [])[1] || "").trim().split(/\s+/).filter(Boolean).map(Number).sort((a, b) => b - a).slice(0, 500);
     if (!uids.length) return null;
     const f = await c.cmd(`UID FETCH ${uids.join(",")} (BODY.PEEK[HEADER.FIELDS (FROM SUBJECT MESSAGE-ID)])`);
     const parts = f.split(/\r\n(?=\* \d+ FETCH)/).map((x) => {
