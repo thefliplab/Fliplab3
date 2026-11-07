@@ -1636,6 +1636,21 @@ async function emDisconnect() {
   await sbInvoke('email-connect', { body: { disconnect: true } });
   SET.email_from = wz.email_from = ''; SET.email_provider = wz.email_provider = ''; stDraw();
 }
+// Settings → Parent portal. Other gyms: on/off + which tabs parents see (settings.portal_off / portal_hide, enforced in portal-act). Flip Lab: link only.
+const PT_TABS = [['lessons', 'Lessons'], ['classes', 'Classes'], ['skills', 'Skills'], ['message', 'Message'], ['account', 'Account']];
+const ptUrl = () => location.origin + '/portal.html' + (HAND() ? '?gym=' + encodeURIComponent(gymSlug) : '');
+function ptTab(t) { stKeep(); const h = wz.portal_hide = (wz.portal_hide || []).slice(); const i = h.indexOf(t); i >= 0 ? h.splice(i, 1) : h.push(t); stDraw(); }
+function ptCopy() { const u = ptUrl(); (navigator.clipboard ? navigator.clipboard.writeText(u) : Promise.reject()).then(() => alert('Link copied'), () => prompt('Copy this link:', u)); }
+function ptText() { location.href = 'sms:' + (IOS ? '&body=' : '?body=') + encodeURIComponent('Here is the link to your parent portal: ' + ptUrl()); }
+function stPortal() {
+  const on = !wz.portal_off, chip = (txt, act, sel) => `<button class="paybtn" style="margin:0 6px 6px 0;padding:8px 12px;${sel ? 'background:var(--mint-soft);color:#1c7a5a' : 'background:#eee;color:#aaa;text-decoration:line-through'}" onclick="${act}">${sel ? '✓ ' : ''}${txt}</button>`;
+  return `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Parent portal</b><div style="color:var(--muted);font-size:13px">Families log in to see lessons, cancel or move, message you and more.</div>`
+    + (HAND() ? `<label>Portal</label><div>${[[true, 'On'], [false, 'Off']].map(([v, n]) => `<button class="paybtn" style="margin:0 6px 6px 0;padding:8px 12px;${on === v ? 'background:var(--mint-soft);color:#1c7a5a' : 'background:#eee;color:#888'}" onclick="stKeep();wz.portal_off=${!v};stDraw()">${n}</button>`).join('')}</div>`
+      + (on ? `<label>Tabs parents can see (Home always shows)</label><div>${PT_TABS.map(([t, n]) => chip(n, `ptTab('${t}')`, !(wz.portal_hide || []).includes(t))).join('')}</div>` : `<div style="font-size:13px;color:var(--muted)">Portal is off. Families who open the link see "Portal is off", and the sign-up page hides the portal link.</div>`) : '')
+    + (on || !HAND() ? `<label>Portal link for families</label><div style="font-family:monospace;font-size:12px;background:#f7f8fa;border-radius:8px;padding:8px 10px;word-break:break-all">${esc(ptUrl())}</div>
+       <div style="display:flex;gap:8px;margin-top:8px"><button class="btn ghost" style="margin:0" onclick="ptCopy()">Copy link</button><button class="btn ghost" style="margin:0" onclick="ptText()">Text link</button></div>` : '')
+    + `</div>`;
+}
 function stTab(t) { stKeep(); const h = wz.hide_tabs = wz.hide_tabs || []; const i = h.indexOf(t); i >= 0 ? h.splice(i, 1) : h.push(t); stDraw(); }
 function stOpen() { wz = JSON.parse(JSON.stringify(SET)); wzSet = true; $('wzCard').innerHTML = ''; show('setupView'); stDraw(); }
 function stDraw() {
@@ -1648,6 +1663,7 @@ function stDraw() {
     + `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Skills</b><div style="color:var(--muted);font-size:13px">Every kid in a level works on these. Changes apply to everyone and save right away.</div><div id="st_skills"><div class="center">Loading…</div></div></div>`
     + `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Tabs</b><div style="color:var(--muted);font-size:13px">Tap to turn a tab off or on. Hiding a tab never deletes anything. Dashboard, Schedule and Students always show.</div>
        <div style="margin-top:8px">${ST_TABS.map(([t, n]) => { const off = (wz.hide_tabs || []).includes(t); return `<button class="paybtn" style="margin:0 6px 6px 0;padding:8px 12px;${off ? 'background:#eee;color:#aaa;text-decoration:line-through' : 'background:var(--mint-soft);color:#1c7a5a'}" onclick="stTab('${t}')">${off ? '' : '✓ '}${n}</button>`; }).join('')}</div></div>`
+    + stPortal()
     + (gymSlug === 'fliplab' ? '' : `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Your email</b>
        ${SET.email_from ? `<div style="margin-top:6px;background:#eaf6ef;border-radius:8px;padding:10px 12px;font-size:14px">✅ Emails to families come from <b>${esc(SET.email_from)}</b>. Replies land in your inbox.</div>
          <button class="btn ghost" style="margin-top:8px" onclick="emDisconnect()">Disconnect</button>`
