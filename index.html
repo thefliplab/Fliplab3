@@ -1724,7 +1724,12 @@ async function wzFinish(withSlots) {
 // ================= IMPORT STUDENTS (from another program's CSV / Excel / pasted rows) =================
 // Only headers + 3 sample rows go to the AI (edge fn import-map). Everything imported is tagged extra.ImportBatch so it can be undone.
 const IM_FIELDS = { full_name: 'Student name (whole)', first_name: 'Student first name', last_name: 'Student last name', dob: 'Birthday', parent_name: 'Parent name', phone: 'Phone', email: 'Email',
-  level: 'Level', notes: 'Notes', lesson_day: 'Lesson day', lesson_time: 'Lesson time', lesson_daytime: 'Lesson day + time', waiver: 'Waiver signed', skip: '— Skip —' };
+  level: 'Level', notes: 'Notes', lesson_day: 'Lesson day', lesson_time: 'Lesson time', lesson_daytime: 'Lesson day + time', ...Object.fromEntries(DAYS.map(d => ['t_' + d, d + ' lesson time'])), waiver: 'Waiver signed', skip: '— Skip —' };
+function imDayCols(head, map) {   // sheets with one column per weekday ("Monday Time", "Tuesday Time"…) → that day's lesson time
+  const hit = h => { const f = DAYS.filter(d => new RegExp('\\b' + d + '\\b', 'i').test(h)); return f.length === 1 ? f[0] : null; };
+  if (head.filter(hit).length >= 2) head.forEach(h => { const d = hit(h); if (d) map[h] = 't_' + d; else if (/^lesson_(day|time|daytime)$/.test(map[h])) map[h] = 'skip'; });
+  return map;
+}
 let im = null;
 function imStart() { im = { step: 0, head: [], rows: [], map: {} }; show('importView'); imDraw(); }
 function imClose() { im = null; go('students'); }
@@ -1758,6 +1763,7 @@ async function imLoad(rows) {
   m.className = 'msg'; m.textContent = 'Matching columns…';
   im.map = imGuess(im.head); im.ai = false;
   try { const r = await sb.functions.invoke('import-map', { body: { headers: im.head, samples: im.rows.slice(0, 3) } }); if (r.data && r.data.map) { im.map = r.data.map; im.ai = true; } } catch (e) {}
+  imDayCols(im.head, im.map);
   im.step = 1; imDraw();
 }
 function imGuess(head) {   // fallback when AI is unavailable
@@ -1776,24 +1782,37 @@ function imDate(v) {
 }
 function imDay(v) { const t = String(v || '').trim().toLowerCase().slice(0, 2); return DAYS.find(d => d.toLowerCase().startsWith(t)) && t.length === 2 ? DAYS.find(d => d.toLowerCase().startsWith(t)) : null; }
 function imTime(v) {
-  const m = String(v || '').trim().match(/(\d{1,2})(?::(\d{2}))?\s*([ap])?\.?m?\.?/i); if (!m) return null;
+  const m = String(v || '').trim().match(/(\d{1,2})(?::(\d{2}))?(?::\d{2})?\s*([ap])?\.?m?\.?/i); if (!m) return null;
   let h = +m[1], mm = +(m[2] || 0); if (h > 23 || mm > 59) return null;
   if (m[3]) { if (/p/i.test(m[3]) && h < 12) h += 12; if (/a/i.test(m[3]) && h === 12) h = 0; } else if (h >= 1 && h <= 9) h += 12;   // no am/pm: 1–9 → afternoon
   return ((h % 12) || 12) + ':' + String(mm).padStart(2, '0') + ' ' + (h < 12 ? 'AM' : 'PM');
 }
 function imParse() {   // rows → clean records (problems are worked out by imValidate)
   const col = f => im.head.find(h => im.map[h] === f), get = (r, f) => { const h = col(f); return h ? r[im.head.indexOf(h)] : ''; };
-  return im.rows.map((r, i) => {
+  const recs = im.rows.map((r, i) => {
     let first = get(r, 'first_name'), last = get(r, 'last_name'); const full = get(r, 'full_name');
     if (!first && full) { if (full.includes(',')) { [last, first] = full.split(',').map(x => x.trim()); } else { const p = full.trim().split(/\s+/); first = p.shift(); last = p.join(' '); } }
     const rawDob = get(r, 'dob'), dob = imDate(rawDob);
     let day = imDay(get(r, 'lesson_day')), time = imTime(get(r, 'lesson_time')); const dt = get(r, 'lesson_daytime');
     if (dt) { day = day || imDay(dt.split(/[\s,@]+/)[0]); time = time || imTime(dt.replace(/^[A-Za-z]+\.?,?\s*/, '')); }
-    const hasLesson = !!(get(r, 'lesson_day') || get(r, 'lesson_time') || dt);
+    const hasLesson = !!(get(r, 'lesson_day') || get(r, 'lesson_time') || dt), lessons = [];
+    let badLesson = hasLesson && !(day && time); if (day && time) lessons.push({ day, time });
+    DAYS.forEach(d => { const v = get(r, 't_' + d); if (!v) return; const t = imTime(v); if (t) lessons.push({ day: d, time: t }); else badLesson = true; });
     const wv = get(r, 'waiver'), wDate = imDate(wv), signed = !!wDate || /^(y|yes|true|signed|x|✓|done|complete)/i.test(wv);
     return { i, first: (first || '').trim(), last: (last || '').trim(), dob: dob || null, badDob: rawDob && !dob ? rawDob : '', parent: get(r, 'parent_name'), phone: fmtPhone(get(r, 'phone')), email: get(r, 'email').toLowerCase(),
-      level: get(r, 'level'), notes: get(r, 'notes'), day: day && time ? day : null, time: day && time ? time : null, badLesson: hasLesson && !(day && time), signed, wDate: wDate || null, issues: [], act: 'import', userAct: null };
+      level: get(r, 'level'), notes: get(r, 'notes'), lessons, badLesson, signed, wDate: wDate || null, row: i + 2, issues: [], act: 'import', userAct: null };
   });
+  // same kid on more than one row (same name + parent phone) → one student with all their lessons
+  const out = [], by = {};
+  recs.forEach(r => {
+    const k = (r.first + '|' + r.last).toLowerCase().replace(/\s+/g, '') + '|' + String(r.phone || '').replace(/\D/g, ''), o = r.first && by[k];
+    if (!o) { if (r.first) by[k] = r; return out.push(r); }
+    r.lessons.forEach(l => { if (!o.lessons.some(x => x.day === l.day && x.time === l.time)) o.lessons.push(l); });
+    ['dob', 'parent', 'email', 'level', 'notes', 'wDate'].forEach(f => { if (!o[f] && r[f]) o[f] = r[f]; });
+    o.signed = o.signed || r.signed; o.badLesson = o.badLesson || r.badLesson; o.merged = (o.merged || 1) + 1;
+  });
+  out.forEach((r, i) => r.i = i);
+  return out;
 }
 function imValidate() {   // (re)work out problems + default choice for every row; a choice the coach picked is kept
   const keyOf = (f, l, d) => (f + '|' + l).toLowerCase().replace(/\s+/g, '') + '|' + (d || '');
@@ -1803,34 +1822,40 @@ function imValidate() {   // (re)work out problems + default choice for every ro
     if (!rec.first) { rec.issues.push(['bad', 'No student name']); act = 'skip'; }
     else {
       const k = keyOf(rec.first, rec.last, rec.dob);
-      if (seen[k] != null && im.recs[seen[k]].userAct !== 'skip') { rec.issues.push(['bad', 'Same kid as row ' + (seen[k] + 2)]); act = 'skip'; } else if (seen[k] == null) seen[k] = rec.i;
+      if (seen[k] != null && im.recs[seen[k]].userAct !== 'skip') { rec.issues.push(['bad', 'Same kid as row ' + im.recs[seen[k]].row]); act = 'skip'; } else if (seen[k] == null) seen[k] = rec.i;
       if (students.some(s => keyOf(s.first_name || '', s.last_name || '', rec.dob ? s.dob : '') === keyOf(rec.first, rec.last, rec.dob || ''))) { rec.issues.push(['bad', 'Already in your students']); act = 'skip'; }
       if (!rec.phone && !rec.email) rec.issues.push(['warn', 'No phone or email']);
       if (rec.badDob) rec.issues.push(['warn', "Can't read birthday \"" + rec.badDob + '"']);
       if (rec.badLesson) rec.issues.push(['warn', "Can't read lesson time"]);
-      if (rec.day) {
-        if (im.slots && !im.slots.has(rec.day + '|' + rec.time)) rec.issues.push(['warn', 'Lesson ' + rec.day.slice(0, 3) + ' ' + rec.time + ' is not one of your slots']);
-        const tk = rec.day + '|' + rec.time, mineAct = rec.userAct || act, other = im.taken[tk] || times[tk];
-        if (other) { rec.issues.push(['bad', 'Same lesson time as ' + other]); if (act === 'import') act = 'nolesson'; }
+      rec.lessons.forEach(l => {
+        const lbl = l.day.slice(0, 3) + ' ' + l.time, tk = l.day + '|' + l.time, mineAct = rec.userAct || act, other = im.taken[tk] || times[tk];
+        if (im.slots && !im.slots.has(tk)) rec.issues.push(['warn', 'Lesson ' + lbl + ' is not one of your slots']);
+        l.clash = !!other;
+        if (other) rec.issues.push(['bad', lbl + ' is the same time as ' + other + ' — that lesson is left off']);
         else if (mineAct === 'import') times[tk] = rec.first + ' ' + rec.last;
-      }
+      });
     }
     rec.flagged = rec.flagged || rec.issues.length > 0;   // stays in the list after it's fixed
     rec.act = rec.userAct || act;
-    if (rec.act === 'nolesson' && !rec.day) rec.act = 'import';
+    if (rec.act === 'nolesson' && !rec.lessons.length) rec.act = 'import';
   });
 }
 function imOpenSlots(rec) {   // their slots not taken by a current lesson or another imported kid
-  const used = new Set(Object.keys(im.taken)); im.recs.forEach(r => { if (r !== rec && r.day && r.act === 'import') used.add(r.day + '|' + r.time); });
+  const used = new Set(Object.keys(im.taken)); im.recs.forEach(r => { if (r !== rec && r.act === 'import') r.lessons.forEach(l => { if (!l.clash) used.add(l.day + '|' + l.time); }); });
   return [...(im.slots || [])].filter(k => !used.has(k)).sort((a, b) => DAYS.indexOf(a.split('|')[0]) - DAYS.indexOf(b.split('|')[0]) || timeVal(a.split('|')[1]) - timeVal(b.split('|')[1]));
 }
 function imEdit(i) { im.edit = im.edit === i ? null : i; imDraw(); }
 function imSaveFix(i) {
-  const r = im.recs[i], ph = $('imf_phone').value.trim(), em = $('imf_email').value.trim(), dob = $('imf_dob').value, ls = $('imf_lesson').value;
+  const r = im.recs[i], ph = $('imf_phone').value.trim(), em = $('imf_email').value.trim(), dob = $('imf_dob').value;
   r.phone = fmtPhone(ph); r.email = em.toLowerCase();
   if (dob) { r.dob = dob; r.badDob = ''; }
-  if (ls === '') { r.day = r.time = null; r.badLesson = false; } else if (ls !== 'keep') { [r.day, r.time] = ls.split('|'); r.badLesson = false; }
-  if (r.userAct === 'nolesson' || r.act === 'nolesson') r.userAct = r.day ? 'import' : null;
+  const nl = [];
+  for (let k = 0; k < Math.max(r.lessons.length, 1); k++) {
+    const v = $('imf_lesson' + k).value, cur = r.lessons[k];
+    if (v === 'keep') { if (cur) nl.push(cur); } else { r.badLesson = false; if (v) { const [day, time] = v.split('|'); nl.push({ day, time }); } }
+  }
+  r.lessons = nl;
+  if (r.userAct === 'nolesson' || r.act === 'nolesson') r.userAct = r.lessons.length ? 'import' : null;
   im.edit = null; imValidate(); imDraw();
 }
 async function imCheck() {
@@ -1856,17 +1881,17 @@ function imDraw() {
       <select style="width:52%" onchange="im.map['${esc(h).replace(/'/g, '&#39;')}']=this.value">${Object.entries(IM_FIELDS).map(([k, v]) => `<option value="${k}"${im.map[h] === k ? ' selected' : ''}>${v}</option>`).join('')}</select></div>`).join('')}
     <div class="row2" style="margin-top:14px"><div><button class="btn ghost" onclick="im.step=0;imDraw()">Back</button></div><div><button class="btn" onclick="imCheck()">Next</button></div></div>`;
   if (n === 2) {
-    const R = im.recs, go_ = R.filter(r => r.act !== 'skip'), probs = R.filter(r => r.flagged), open_ = probs.filter(r => r.issues.length).length, les = go_.filter(r => r.act === 'import' && r.day).length, wv = go_.filter(r => r.signed).length;
+    const R = im.recs, go_ = R.filter(r => r.act !== 'skip'), probs = R.filter(r => r.flagged), open_ = probs.filter(r => r.issues.length).length, les = go_.reduce((n, r) => n + (r.act === 'import' ? r.lessons.filter(l => !l.clash).length : 0), 0), mg = R.filter(r => r.merged).length, wv = go_.filter(r => r.signed).length;
     const fix = r => { const sl = imOpenSlots(r); return `<div style="background:var(--bg);border-radius:8px;padding:8px 10px;margin:4px 0 8px">
       <div class="row2"><div><label>Phone</label><input id="imf_phone" type="tel" value="${esc(r.phone)}" oninput="this.value=typingPhone(this.value)"></div><div><label>Birthday</label><input id="imf_dob" type="date" value="${esc(r.dob || '')}"></div></div>
       <label>Email</label><input id="imf_email" type="email" value="${esc(r.email)}">
-      <label>Weekly lesson</label><select id="imf_lesson"><option value="keep">${r.day ? 'Keep ' + esc(r.day.slice(0, 3) + ' ' + r.time) : 'No lesson'}</option>${r.day ? '<option value="">No lesson</option>' : ''}${sl.map(k => `<option value="${esc(k)}">${esc(k.split('|')[0].slice(0, 3) + ' ' + k.split('|')[1])} (open)</option>`).join('')}</select>
+      <label>Weekly lesson${r.lessons.length > 1 ? 's' : ''}</label>${(r.lessons.length ? r.lessons : [null]).map((l, k) => `<select id="imf_lesson${k}" style="margin-bottom:4px"><option value="keep">${l ? 'Keep ' + esc(l.day.slice(0, 3) + ' ' + l.time) : 'No lesson'}</option>${l ? '<option value="">Remove this lesson</option>' : ''}${sl.map(x => `<option value="${esc(x)}">${esc(x.split('|')[0].slice(0, 3) + ' ' + x.split('|')[1])} (open)</option>`).join('')}</select>`).join('')}
       ${im.slots ? '' : '<small style="color:var(--muted)">Add slots to pick an open time here</small>'}
       <div class="row2" style="margin-top:8px"><div><button class="btn ghost" onclick="imEdit(${r.i})">Cancel</button></div><div><button class="btn" onclick="imSaveFix(${r.i})">Save</button></div></div></div>`; };
     b = `<div class="row2"><div class="card" style="margin:0;text-align:center"><small style="color:var(--muted)">Ready</small><div style="font-size:22px;font-weight:700">${go_.length}</div></div><div class="card" style="margin:0;text-align:center"><small style="color:var(--muted)">Need a look</small><div style="font-size:22px;font-weight:700;color:${open_ ? '#7A5B00' : '#3B6D11'}">${open_}</div></div></div>
-      <div style="font-size:13px;color:var(--muted);margin:8px 0">${les} weekly lessons · ${wv} waivers${im.slots ? '' : " · no slots set up yet, so times aren't checked"}<br>Tap a name to fix it here, or choose Import / Skip.</div>
+      <div style="font-size:13px;color:var(--muted);margin:8px 0">${les} weekly lessons · ${wv} waivers${mg ? ' · ' + mg + ' kids were on more than one row, combined' : ''}${im.slots ? '' : " · no slots set up yet, so times aren't checked"}<br>Tap a name to fix it here, or choose Import / Skip.</div>
       ${probs.map(r => `<div class="arow" style="padding:7px 0;align-items:flex-start"><div class="who" style="cursor:pointer" onclick="imEdit(${r.i})"><b>${esc(r.first + ' ' + r.last)} <span style="color:var(--muted);font-weight:400;font-size:12px">✎ fix</span></b>${r.issues.map(([t, x]) => `<small style="color:${t === 'bad' ? '#A32D2D' : '#7A5B00'}">${esc(x)}</small>`).join('') || '<small style="color:#3B6D11">✓ Fixed</small>'}</div>
-        <select style="width:44%" onchange="im.recs[${r.i}].userAct=this.value;imValidate();imDraw()">${[['import', 'Import'], ['nolesson', 'Import, no lesson'], ['skip', 'Skip']].filter(([k]) => k !== 'nolesson' || r.day).map(([k, v]) => `<option value="${k}"${r.act === k ? ' selected' : ''}>${v}</option>`).join('')}</select></div>${im.edit === r.i ? fix(r) : ''}`).join('') || '<div class="center">No problems found 🎉</div>'}
+        <select style="width:44%" onchange="im.recs[${r.i}].userAct=this.value;imValidate();imDraw()">${[['import', 'Import'], ['nolesson', 'Import, no lesson'], ['skip', 'Skip']].filter(([k]) => k !== 'nolesson' || r.lessons.length).map(([k, v]) => `<option value="${k}"${r.act === k ? ' selected' : ''}>${v}</option>`).join('')}</select></div>${im.edit === r.i ? fix(r) : ''}`).join('') || '<div class="center">No problems found 🎉</div>'}
       <div class="row2" style="margin-top:14px"><div><button class="btn ghost" onclick="im.step=1;imDraw()">Back</button></div><div><button class="btn" id="im_go" onclick="imRun()">Import ${go_.length}</button></div></div><div id="im_msg" class="msg"></div>`;
   }
   if (n === 3) b = `<div style="text-align:center;padding:16px 0"><div style="font-size:40px">✅</div><div style="font-weight:600;font-size:18px">${im.done.s} students in</div>
@@ -1880,8 +1905,8 @@ async function imRun() {
   const coach = mainCoach() || ((coachRows.find(c => c.active) || {}).name) || null, dur = SET.lengths.includes('30 min') ? '30 min' : SET.lengths[0];
   const S = recs.map((r, k) => ({ id: batch + '-' + k, gym_id: gymId, first_name: r.first, last_name: r.last || null, dob: r.dob, skill_level: r.level || null, parent_name: r.parent || null,
     parent_phone: r.phone || null, parent_email: r.email || null, notes: r.notes || null, status: 'Active', active: true, join_date: today, extra: { ImportBatch: batch } }));
-  const L = recs.map((r, k) => r.act === 'import' && r.day ? { gym_id: gymId, student_id: S[k].id, student_name: (r.first + ' ' + r.last).trim(), coach, day: r.day, time: r.time, duration: dur,
-    price: priceFor(dur, 'Solo'), lesson_type: 'Solo', status: 'Confirmed', booked_date: today, paid: 'Unpaid', start_date: today, extra: { ImportBatch: batch } } : null).filter(Boolean);
+  const L = recs.flatMap((r, k) => r.act !== 'import' ? [] : r.lessons.filter(l => !l.clash).map(l => ({ gym_id: gymId, student_id: S[k].id, student_name: (r.first + ' ' + r.last).trim(), coach, day: l.day, time: l.time, duration: dur,
+    price: priceFor(dur, 'Solo'), lesson_type: 'Solo', status: 'Confirmed', booked_date: today, paid: 'Unpaid', start_date: today, extra: { ImportBatch: batch } })));
   const W = recs.map((r, k) => r.signed ? { id: batch + '-W' + k, gym_id: gymId, student_id: S[k].id, parent_name: r.parent || null, signature: 'Imported',
     signed_at: r.wDate ? r.wDate + 'T12:00:00' : null, extra: { ImportBatch: batch, Imported: true } } : null).filter(Boolean);
   for (let i = 0; i < S.length; i += 500) { const r = await sb.from('students').insert(S.slice(i, i + 500)); if (r.error) { btn.disabled = false; btn.textContent = 'Try again'; m.className = 'msg err'; return m.textContent = r.error.message; } }
