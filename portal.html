@@ -282,6 +282,7 @@ const NOT_FOUND = "We don't have that number. Use the phone number you signed up
 async function lookFor(slug) {
   $('topLogo').style.display = 'none'; $('topName').style.display = 'inline'; document.title = 'Parent portal'; $('homeGym').textContent = '';
   $('phoneSub').textContent = 'Cancel or move lessons, sign up for classes, pay and message your coach.';
+  $('foot').innerHTML = ''; $('phone').placeholder = '(555) 555-1234';
   $('codeH').innerHTML = 'Check your <span>email</span>'; $('bSend').textContent = 'Email me a code'; $('bHave').style.display = 'block';
   let L = null; try { L = (await sb.rpc('signup_look', { p_slug: slug })).data; } catch (e) {}
   if (!L) return;
@@ -290,6 +291,10 @@ async function lookFor(slug) {
   document.querySelectorAll('link[rel="icon"],link[rel="apple-touch-icon"]').forEach(l => { if (L.logo_url) l.href = L.logo_url; else l.remove(); });
   if (L.logo_url) { $('topLogo').src = L.logo_url; $('topLogo').alt = L.name; $('topLogo').style.display = ''; $('topName').style.display = 'none'; }
   if (L.color) ['--blue', '--blue-light'].forEach(k => document.documentElement.style.setProperty(k, L.color));
+  // Before login: the gym's own contact (Settings → Policies and contact). After login applyGym() takes over.
+  const who = !L.coach ? 'your coach' : /^coach\b/i.test(L.coach) ? L.coach : 'Coach ' + L.coach, tx = String(L.c_text || '').replace(/\D/g, '').slice(-10);
+  if (!G) $('foot').innerHTML = tx.length === 10 ? 'Questions? Text ' + esc(who) + ' <a href="sms:+1' + tx + '">' + fmt(tx) + '</a>'
+    : L.c_email ? 'Questions? Email ' + esc(who) + ' <a href="mailto:' + esc(L.c_email) + '">' + esc(L.c_email) + '</a>' : '';
 }
 if (!FL) lookFor(GYM);
 // Other gyms (after login): their coach's name + contact instead of Coach Steve / 513, and tabs the coach turned off
