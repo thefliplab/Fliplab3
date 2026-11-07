@@ -103,6 +103,12 @@
   .schip small { font-size:11px; max-width:150px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .paid { font-size:11px; padding:3px 8px; border-radius:10px; background:#EAF3DE; color:#3B6D11; font-weight:600; } .btn.red { background:var(--danger); }
 </style>
+<style>/* Button feedback: hover darker + small shadow, press in, short ring after a tap */
+button,.btn{transition:transform .08s,filter .12s,box-shadow .12s}
+@media (hover:hover){button:hover:not(:disabled),a.btn:hover{filter:brightness(.92);box-shadow:0 2px 0 rgba(0,0,0,.15)}}
+button:active:not(:disabled),a.btn:active{transform:scale(.96);filter:brightness(.85);box-shadow:none}
+button.fl-tap,a.btn.fl-tap{outline:2px solid #1D9E75;outline-offset:2px}
+</style>
 </head>
 <body>
 <nav><b id="brand">Flip<span>Lab</span> 3.0</b>
@@ -3860,5 +3866,6 @@ document.addEventListener('visibilitychange', () => {
 
 boot();
 </script>
+<script>document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('button,a.btn'); if (!b || b.disabled) return; b.classList.add('fl-tap'); setTimeout(() => b.classList.remove('fl-tap'), 350); }, true);</script>
 </body>
 </html>
