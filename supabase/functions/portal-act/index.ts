@@ -54,10 +54,20 @@ Deno.serve(async (req) => {
   const { data: u } = await userC.auth.getUser();
   if (!u?.user) return json({ error: "Please log in again." }, 401);
   const db = createClient(URL_, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-  const { data: acct } = await db.from("parent_accounts").select("gym_id,phone").eq("user_id", u.user.id).maybeSingle();
+  const b = await req.json().catch(() => ({}));
+  let { data: acct } = await db.from("parent_accounts").select("gym_id,phone").eq("user_id", u.user.id).maybeSingle();
+  // Admin view (look only): Flip Lab owner, logged in to admin, viewing one family by phone
+  let VIEW = false;
+  if (!acct && b.view_phone) {
+    const { data: own } = await userC.rpc("is_platform_owner");
+    const { data: g } = await db.from("gyms").select("id").eq("slug", "fliplab").maybeSingle();
+    if (own !== true || !g) return json({ error: "Please log in again." }, 401);
+    acct = { gym_id: g.id, phone: p10(b.view_phone) };
+    VIEW = true;
+    if (!["load", "options", "extra_options", "classes", "messages", "account"].includes(b.action)) return json({ error: "Look only in admin view." });
+  }
   if (!acct) return json({ error: "Please log in again." }, 401);
   const gym = acct.gym_id;
-  const b = await req.json().catch(() => ({}));
 
   // The parent's kids
   const { data: st } = await db.from("students").select("id,first_name,last_name,parent_phone,parent_name,parent_email,active,dob,emergency_name,emergency_phone,skill_level,extra").eq("gym_id", gym).ilike("parent_phone", `%${acct.phone.slice(-4)}%`);

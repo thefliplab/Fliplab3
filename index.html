@@ -2066,7 +2066,7 @@ function renderSdTop(s) {
     if (live.length) qa.push(`<button class="warn" onclick="sdCancelWeek()">✕ Cancel ${weekOffset === 0 ? 'this week' : 'that week'}</button>`);
     qa.push(`<button class="dang" onclick="sdStatus('Dropped')">Drop student</button>`);
   }
-  if (s.parent_phone && (!gymSlug || gymSlug === 'fliplab')) qa.push(`<button class="dang" onclick="sdResetCode()">Reset portal code</button>`);
+  if (s.parent_phone && (!gymSlug || gymSlug === 'fliplab')) qa.push(`<button onclick="sdViewPortal()">View as parent</button>`, `<button class="dang" onclick="sdResetCode()">Reset portal code</button>`);
   $('sdTop').innerHTML = `<div class="shead"><div class="av">${esc((s.first_name || '?')[0])}${esc((s.last_name || '')[0] || '')}</div>
     <div><b>${esc(s.first_name)} ${esc(s.last_name)}</b> <span class="pill ${isOn(s) ? '' : 'off'}">${esc(s.status || 'Active')}</span>${s.skill_level ? ` <span class="pill">${esc(s.skill_level)}</span>` : ''}${x.PhotoPermission === 'No' ? ' <span class="tag t-nophoto">No Photo</span>' : ''}
     <small>${age !== '' ? 'Age ' + age + ' · ' : ''}${esc(s.parent_name || '')}${s.parent_phone ? ` · <a href="${smsHref(s.parent_phone)}">${esc(s.parent_phone)}</a>` : ''}</small></div></div>
@@ -2086,6 +2086,12 @@ async function sdCancelWeek() {
     if (res.error) return alert(res.error.message);
   }
   await loadWeek(); renderSdTop(s);
+}
+// Opens the parent portal for this family in a new tab, look only (uses this admin login; portal.html?view=PHONE)
+function sdViewPortal() {
+  const s = sd.s, ph = String((s && s.parent_phone) || '').replace(/\D/g, '').slice(-10);
+  if (ph.length !== 10) return alert('No 10-digit parent phone for this student.');
+  window.open('portal.html?view=' + ph, '_blank');
 }
 async function sdResetCode() {
   const s = sd.s;
@@ -3161,8 +3167,22 @@ function renderOpen() {
   const prev = new Set([...document.querySelectorAll('#mkPick input:checked')].map(x => x.value));
   $('mkPick').innerHTML = openSlots.length ? openSlots.map(o => { const k = o.day + '|' + o.time; return `<label><input type="checkbox" value="${esc(k)}"${prev.has(k) ? ' checked' : ''}>${SHORT[o.day]} ${esc(o.time)}</label>`; }).join('') : '<span style="color:#aaa;font-size:13px">No openings this week.</span>';
   // Waitlist / Drop-In cards
+  // Preferred times as one chip per day, back-to-back half-hours joined ("Tue 4:00–5:30"). Display only; falls back to the raw text if it isn't "Day time" pairs.
+  const wlTimes = w => {
+    const raw = String(w.preferred_times || '').split(',').map(x => x.trim()).filter(Boolean), by = {};
+    const ok = raw.length && raw.every(x => { const m = x.match(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s+(.+)$/i); if (!m) return false; const d = m[1][0].toUpperCase() + m[1].slice(1).toLowerCase(); (by[d] = by[d] || []).push(m[2]); return true; });
+    if (!ok) return `<small>${esc(w.preferred_times || w.preferred_days)}</small>`;
+    const allPM = raw.every(x => /pm$/i.test(x));
+    const f = v => { let h = Math.floor(v / 60) % 12 || 12; return h + ':' + String(v % 60).padStart(2, '0') + (allPM ? '' : (v >= 720 ? ' PM' : ' AM')); };
+    const chip = 'display:inline-block;font-size:12px;background:#f4f4f2;border:1px solid #e5e5e0;border-radius:6px;padding:2px 8px;margin:4px 4px 0 0';
+    return '<div>' + DAYS.filter(d => by[d]).map(d => {
+      const v = [...new Set(by[d].map(timeVal))].sort((a, c) => a - c), rs = [];
+      v.forEach(t => { const r = rs[rs.length - 1]; if (r && t - r[1] === 30) r[1] = t; else rs.push([t, t]); });
+      return `<span style="${chip}"><b style="font-weight:600;margin-right:4px">${SHORT[d]}</b>${rs.map(r => r[0] === r[1] ? f(r[0]) : f(r[0]) + '–' + f(r[1])).join(', ')}</span>`;
+    }).join('') + '</div>';
+  };
   const row = (w, i) => {
-    const prefs = w.open_to_anything ? '<span class="tag t-ex">Open to anything</span>' : (w.preferred_times || w.preferred_days ? `<small>${esc(w.preferred_times || w.preferred_days)}</small>` : '<small>No preference set</small>');
+    const prefs = w.open_to_anything ? '<span class="tag t-ex">Open to anything</span>' : (w.preferred_times || w.preferred_days ? wlTimes(w) : '<small>No preference set</small>');
     const age = ageOf(w.dob);
     return `<div class="arow"><div class="who"><b>${i + 1}. ${esc(w.student_name || '—')}</b> <span style="font-size:11px;color:#888">${age !== '' ? 'Age ' + age : ''}${w.skill_level ? ' · ' + esc(w.skill_level) : ''}</span>
       ${prefs}<small>${esc(w.parent_name || '')}${w.parent_phone ? ` · <a href="${smsHref(w.parent_phone)}">${esc(w.parent_phone)}</a>` : ''}${w.signup_date ? ' · signed up ' + esc(w.signup_date) : ''}</small></div>
