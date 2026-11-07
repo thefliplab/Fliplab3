@@ -781,8 +781,9 @@ function hsAdd(kind, list) {
   else sb.from('email_log').insert(list.map(m => ({ gym_id: gymId, to_email: m.to || '(none)', student_id: m.student_id || null, family_name: m.family || null, subject: m.subject || gymTitle, body: m.text || '', status: 'Sent by hand' }))).then(() => {}, () => {});
   hsDraw();
 }
+const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
 function hsHref(x) {
-  return x.kind === 'text' ? 'sms:' + x.to.replace(/\D/g, '') + '?&body=' + encodeURIComponent(x.text)
+  return x.kind === 'text' ? 'sms:' + x.to.replace(/\D/g, '') + (IOS ? '&body=' : '?body=') + encodeURIComponent(x.text)
     : 'mailto:' + encodeURIComponent(x.to) + '?subject=' + encodeURIComponent(x.subject) + '&body=' + encodeURIComponent(x.text);
 }
 function hsDraw() {
