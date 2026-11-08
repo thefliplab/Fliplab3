@@ -2131,7 +2131,7 @@ async function changePw() {
   if (error) { m.className = 'msg err'; m.textContent = error.message; return; }
   m.textContent = '✓ Password changed. Use it next time you sign in.'; $('pw1').value = $('pw2').value = '';
 }
-async function signOut() { await sb.auth.signOut(); show('loginView'); }
+async function signOut() { await sb.auth.signOut(); location.reload(); }   // full reload: no tabs, badges or the last gym's data left behind
 
 async function boot() {
   const { data: { session } } = await sb.auth.getSession();
