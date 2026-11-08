@@ -239,7 +239,7 @@ button.fl-tap,a.btn.fl-tap{outline:2px solid #1e8cff;outline-offset:2px}
 <script>
 // Birthday boxes = Month / Day / Year dropdowns (the phone date picker opens on today and saved wrong years).
 // The original input stays (hidden, same id), so existing .value code keeps working. Partly picked → value '' and data-part="1".
-function dobPick(inp, oldest) {
+function dobPick(inp, oldest, lock) {
   if (!inp || inp.dataset.dob) return; inp.dataset.dob = '1';
   const P = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value'), start = inp.value, now = new Date().getFullYear();
   const MO = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -250,15 +250,33 @@ function dobPick(inp, oldest) {
   let ys = '<option value="">Year</option>'; for (let i = now - 1; i >= oldest; i--) ys += `<option>${i}</option>`; y.innerHTML = ys;
   const days = () => { const cur = d.value, n = new Date(+y.value || 2000, +m.value || 1, 0).getDate(); let s = '<option value="">Day</option>'; for (let i = 1; i <= n; i++) s += `<option>${i}</option>`; d.innerHTML = s; if (cur && +cur <= n) d.value = cur; };
   const p2 = v => String(v).padStart(2, '0');
+
+  // Locked view (Steve, Nov 8): saved birthday shows as text + age + red Edit; Edit opens the dropdowns, Cancel puts the saved one back.
+  let saved = '', lk = null, cx = null;
+  const draw = open => {
+    if (!lk) return;
+    const v = P.get.call(inp), show = open || !v || inp.dataset.part;
+    wrap.style.display = show ? 'grid' : 'none'; lk.style.display = show ? 'none' : ''; cx.style.display = show && saved ? '' : 'none';
+    if (show || !v) return;
+    const b = new Date(v + 'T00:00:00'), n = new Date(); let a = n.getFullYear() - b.getFullYear(); if (n < new Date(n.getFullYear(), b.getMonth(), b.getDate())) a--;
+    lk.firstChild.textContent = b.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' · Age ' + a;
+  };
+  if (lock) {
+    lk = document.createElement('div'); lk.style.cssText = 'display:flex;align-items:center;gap:14px;padding:10px 0;';
+    lk.innerHTML = '<span></span><a href="#" style="color:#E24B4A;font-weight:700;text-decoration:none">Edit</a>';
+    lk.lastChild.onclick = e => { e.preventDefault(); draw(true); };
+    cx = document.createElement('a'); cx.href = '#'; cx.textContent = 'Cancel'; cx.style.cssText = 'display:none;color:#E24B4A;font-weight:700;text-decoration:none;font-size:14px;margin-top:6px';
+    cx.onclick = e => { e.preventDefault(); inp.value = saved; };
+  }
   const sync = () => { days(); const all = m.value && d.value && y.value; P.set.call(inp, all ? `${y.value}-${p2(m.value)}-${p2(d.value)}` : ''); inp.dataset.part = !all && (m.value || d.value || y.value) ? '1' : ''; };
   m.onchange = y.onchange = d.onchange = sync;
   Object.defineProperty(inp, 'value', { get() { return P.get.call(inp); }, set(v) {
     const t = /^(\d{4})-(\d{2})-(\d{2})/.exec(v || ''); P.set.call(inp, t ? t[0] : ''); inp.dataset.part = '';
     if (t && ![...y.options].some(o => o.value === String(+t[1]))) y.add(new Option(String(+t[1]), String(+t[1])), +t[1] > now - 1 ? 1 : undefined);
-    y.value = t ? String(+t[1]) : ''; m.value = t ? String(+t[2]) : ''; days(); d.value = t ? String(+t[3]) : ''; } });
-  inp.type = 'hidden'; inp.after(wrap); inp.value = start;
+    y.value = t ? String(+t[1]) : ''; m.value = t ? String(+t[2]) : ''; days(); d.value = t ? String(+t[3]) : ''; saved = t ? t[0] : ''; draw(); } });
+  inp.type = 'hidden'; inp.after(wrap); if (lk) { wrap.before(lk); wrap.after(cx); } inp.value = start;
 }
-const dobAll = () => document.querySelectorAll('input#fDob').forEach(i => dobPick(i, new Date().getFullYear() - 25));
+const dobAll = () => document.querySelectorAll('input#fDob').forEach(i => dobPick(i, new Date().getFullYear() - 25, true));
 new MutationObserver(dobAll).observe(document.body, { childList: true, subtree: true }); dobAll();
 const GYM = new URLSearchParams(location.search).get('gym') || 'fliplab';
 const SB_URL = 'https://angmtyojkwlrefxpcgoa.supabase.co';
@@ -763,7 +781,7 @@ function drawAcct() {
   // Family info
   const ph = p => p && p.length === 10 ? fmt(p) : '';
   h.push(`<div class="card"><div class="ahd"><label>Family info</label><button class="link" id="bFamEdit" style="padding:0">Edit</button></div>
-    <div>${esc(k.first_name)} ${esc(k.last_name || '')}${k.dob ? ' · born ' + esc(fmtD(k.dob)) : ''}</div>
+    <div>${esc(k.first_name)} ${esc(k.last_name || '')}${k.dob ? ' · born ' + esc(fmtD(k.dob)) + ' · Age ' + kidAge(k.dob) : ''}</div>
     <div style="margin-top:6px">${esc(k.parent_name || '')}${ph(k.parent_phone) ? ' · ' + ph(k.parent_phone) : ''}</div>
     <div class="tip" style="font-size:14px">${esc(k.parent_email || 'No email')}</div>
     <div class="tip" style="font-size:14px">Emergency: ${k.emergency_name ? esc(k.emergency_name) + (ph(k.emergency_phone) ? ' ' + ph(k.emergency_phone) : '') : 'none'}</div></div>`);
@@ -827,6 +845,7 @@ function drawHomeSkill(k) {
     <div class="bar"><div style="width:${Math.round(done / l.skills.length * 100)}%"></div></div></div>`;
   $('bHomeSkill').onclick = () => goTab('tSkills');
 }
+function kidAge(v) { const b = new Date(v + 'T00:00:00'), n = new Date(); let a = n.getFullYear() - b.getFullYear(); if (n < new Date(n.getFullYear(), b.getMonth(), b.getDate())) a--; return a; }
 function goTab(t) { const b = document.querySelector(`#nav button[data-t="${t}"]`); if (b) b.click(); }
 function openFam(k) {
   const f = (id, lb, v, t) => `<div class="fld"><label for="${id}">${lb}</label><input id="${id}" ${t || ''} value="${esc(v || '')}"></div>`;
