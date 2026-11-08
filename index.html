@@ -275,7 +275,7 @@ button.fl-tap,a.btn.fl-tap{outline:2px solid #1D9E75;outline-offset:2px}
       <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin:4px 0"><button class="paybtn" style="background:#EEEDFE;color:#3C3489" onclick="cmAI('shorter')">Shorter</button><button class="paybtn" style="background:#EEEDFE;color:#3C3489" onclick="cmAI('friendlier')">Friendlier</button><button class="paybtn" style="background:#EEEDFE;color:#3C3489" onclick="cmAI('professional')">More professional</button><button class="paybtn" style="background:#EEEDFE;color:#3C3489" onclick="cmAI('onetext')">Fit in 1 text</button><small id="cm_len" style="margin-left:auto;color:#888"></small></div><div id="cm_ai" class="msg"></div>
       <small style="color:#888;display:block;margin:4px 0 8px">{parent} and {kid} fill in for each family. A family with two kids gets one text. <a href="#" onclick="cmSaveMsg();return false" style="color:#185FA5">Save this message</a> · <a href="#" onclick="cmDelSaved();return false" style="color:#A32D2D">Delete saved</a></small>
       <input id="cm_subj" placeholder="Email subject (default: your gym name)" style="margin:0 0 4px">
-      <div id="cm_viaBox"></div>
+      <div id="cm_vwarn"></div><div id="cm_viaBox"></div>
       <label style="display:flex;gap:6px;align-items:center;font-size:13px;margin:0 0 6px;font-weight:400;color:#92400E"><input type="checkbox" id="cm_test" onchange="ss.set('prTest',this.checked);cmCount()" style="width:auto;margin:0">Test mode: texts go to this number, emails to your Yahoo</label>
       <input id="cm_testTo" placeholder="Test phone, e.g. (513) 555-1234" onchange="this.value=fmtPhone(this.value);ss.set('prTestTo',this.value)" style="margin:0 0 10px;max-width:260px">
       <button class="btn" id="cm_send" onclick="cmSend()">Send</button><div id="cm_res" class="msg"></div>
@@ -1452,11 +1452,18 @@ async function cmTx(i, t) {
   f.tx = t; cmRender();
 }
 function cmCount() { const n = cmOn.size, pk = cmFams.filter(f => cmOn.has(f.key)), c = x => pk.filter(x).length; $('cm_cnt').textContent = '(' + n + ' of ' + cmFams.length + ')';
+  const tpl = ($('cm_msg') || {}).value || '', vf = pk.filter(f => f.phone && f.tx === 'voice'), long = tpl.trim() && vf.length ? vf.map(f => cmFill(tpl, f)).sort((a, b) => b.length - a.length)[0] : '';
+  if ($('cm_vwarn')) $('cm_vwarn').innerHTML = long && vOver(long) ? `<div class="msg err" style="margin:4px 0">Too long for Voice: ${long.length} of ${vLim(long)} characters${vLim(long) === 70 ? ' (an emoji, curly quote or long dash drops the limit to 70)' : ''}. Google Voice would cut it off. Shorten it, or <a href="#" onclick="cmVoiceToCell();return false" style="color:#A32D2D;font-weight:600">send the ${vf.length} Voice famil${vf.length === 1 ? 'y' : 'ies'} from Cell</a>.</div>` : '';
   if ($('cm_will')) $('cm_will').textContent = n ? 'Will send: ' + c(f => f.email && f.em) + ' emails · ' + c(f => f.phone && f.tx === 'cell') + ' texts from cell' + (HAND() ? '' : ' · ' + c(f => f.phone && f.tx === 'voice') + ' from Voice') : ''; $('cm_send').textContent = ($('cm_test').checked ? 'Test send (' + n + ')' : 'Send to ' + n + ' famil' + (n === 1 ? 'y' : 'ies')); }
 function cmAll() { const all = cmFams.filter(f => !f.key.startsWith('none:')); cmOn = cmOn.size === all.length ? new Set() : new Set(all.map(f => f.key)); cmRender(); }
 function cmUseSaved() { const m = cmSaved.find(x => x.id === $('cm_saved').value); if (m) { $('cm_msg').value = m.body; cmLen(); } }
 // Length with {parent}/{kid} counted as ~8 letters; 160 fits in one text
-function cmLen() { const n = $('cm_msg').value.replace(/\{parent\}|\{kid\}/g, 'xxxxxxxx').length; $('cm_len').textContent = n ? n + ' chars · ' + (n <= 160 ? '1 text' : Math.ceil(n / 153) + ' texts') : ''; }
+// Voice safety net: Google Voice cuts long texts. 160 characters, or 70 if the text has an emoji / curly quote / long dash.
+const vLim = t => /[^\n\r\x20-\x7E]/.test(t) ? 70 : 160;
+const vOver = t => t.length > vLim(t);
+const cmFill = (tpl, f) => tpl.replace(/\{parent\}/g, (f.parent || '').split(' ')[0] || 'there').replace(/\{kid\}/g, f.kids.join(' and '));
+function cmVoiceToCell() { cmFams.forEach(f => { if (f.tx === 'voice') f.tx = 'cell'; }); cmRender(); }
+function cmLen() { setTimeout(cmCount); const n = $('cm_msg').value.replace(/\{parent\}|\{kid\}/g, 'xxxxxxxx').length; $('cm_len').textContent = n ? n + ' chars · ' + (n <= 160 ? '1 text' : Math.ceil(n / 153) + ' texts') : ''; }
 let cmPrev = '';
 function cmUndo() { $('cm_msg').value = cmPrev; cmLen(); $('cm_ai').textContent = ''; }
 async function cmAI(mode) {
@@ -1494,6 +1501,8 @@ async function cmSend() {
   if (test) { tl = tl.slice(0, 3); el = el.slice(0, 3); }
   if (!tl.length && !el.length) return r.textContent = 'Nothing to send. These families have texts and email turned off, or no phone or email on file.';
   const vl = test ? [] : tl.filter(f => f.tx === 'voice'), cl = test ? tl : tl.filter(f => f.tx !== 'voice');
+  const vBad = vl.filter(f => vOver(fill(f)));
+  if (vBad.length) return r.textContent = 'Too long for Voice (' + fill(vBad[0]).length + ' of ' + vLim(fill(vBad[0])) + ' characters). Shorten it, or send the Voice families from Cell.';
   if (test && tl.length && !to) return r.textContent = 'Test mode is on. Type a test phone number first.';
   const what = [tl.length && tl.length + ' text' + (tl.length === 1 ? '' : 's') + (vl.length ? ' (' + vl.length + ' from Voice)' : ''), el.length && el.length + ' email' + (el.length === 1 ? '' : 's')].filter(Boolean).join(' + ');
   if (!confirm(test ? 'TEST: send ' + what + ' as samples (' + [tl.length && 'texts to ' + to, el.length && 'emails to ' + myEmail].filter(Boolean).join(', ') + ')?' : 'Send ' + what + ' for real?')) return;
@@ -3766,6 +3775,7 @@ async function msSend() {
     }
   }
   let voice = $('ms_line').value === 'Voice';
+  if (voice && vOver(text)) { if (!confirm('Too long for Voice: ' + text.length + ' of ' + vLim(text) + ' characters. Google Voice would cut it off.\n\nSend from your cell instead?')) return; voice = false; }
   if (!confirm('Text this to ' + x.name + ' at ' + fmtPhone(x.phone) + ' from your ' + (voice ? 'Google Voice number' : 'cell') + '?\n\n' + text)) return;
   const b = $('ms_send'); b.disabled = true; b.textContent = 'Sending…';
   const sid = [...x.list].reverse().find(r => r.student_id)?.student_id || null;
