@@ -38,9 +38,15 @@ Deno.serve(async (req) => {
   if (!gym) return json({ error: "Gym not found." });
   const FL = gym.slug === "fliplab", WHO = FL ? "text Coach Steve" : "contact your coach";
 
-  // Is this phone a parent of an active student?
+  // Is this phone a parent of an active student? (or, with wl:1, of a kid on the waitlist)
   const { data: kids } = await db.from("students").select("id,parent_phone,parent_email,active").eq("gym_id", gym.id).ilike("parent_phone", `%${phone.slice(-4)}%`).limit(200);
-  const mine = (kids || []).filter(k => p10(k.parent_phone) === phone && k.active !== false);
+  let mine = (kids || []).filter(k => p10(k.parent_phone) === phone && k.active !== false);
+  if (b.wl && !mine.length) {   // newer portal (wl:1): waitlist families can log in too (inactive kid with an open waitlist row)
+    const ids = (kids || []).filter(k => p10(k.parent_phone) === phone).map(k => k.id);
+    const { data: w } = ids.length ? await db.from("waitlist").select("student_id").eq("gym_id", gym.id).in("student_id", ids).in("status", ["Waitlist", "Drop-In"]) : { data: [] };
+    const ok = new Set((w || []).map(x => x.student_id));
+    mine = (kids || []).filter(k => ok.has(k.id));
+  }
   const found = mine.length > 0;
   if (!found) return json({ error: "not_found" });
   const { data: acct } = await db.from("parent_accounts").select("*").eq("gym_id", gym.id).eq("phone", phone).maybeSingle();

@@ -2471,9 +2471,10 @@ function renderWeek() {
   const photo = {}; students.forEach(s => photo[s.id] = (s.extra || {}).PhotoPermission || '');
   const mc = mainCoach();
   const portalAdd = p => weekEx.some(e => e.type === 'Add' && 'EX_ONLY_' + e.id === p.id && (e.extra || {}).by === 'parent');
+  const wlAdd = p => weekEx.some(e => e.type === 'Add' && 'EX_ONLY_' + e.id === p.id && (e.extra || {}).waitlist);   // booked from the waitlist portal
   const pills = p => (p.lesson_type === 'Shared' && !p.pair_id ? '<span class="tag t-shared">Shared</span>' : '')
     + (photo[p.student_id] === 'No' ? '<span class="tag t-nophoto">No Photo</span>' : photo[p.student_id] === 'Yes' ? '<span class="tag t-photo">Photo OK</span>' : '')
-    + (p.exType === 'Move' ? '<span class="tag t-ex">Moved</span>' : p.exType === 'Add' ? '<span class="tag t-ex">This week</span>' + (portalAdd(p) ? '<span class="tag t-ex">Portal</span>' : '') : '');
+    + (p.exType === 'Move' ? '<span class="tag t-ex">Moved</span>' : p.exType === 'Add' ? '<span class="tag t-ex">This week</span>' + (portalAdd(p) ? '<span class="tag t-ex">Portal</span>' : '') + (wlAdd(p) ? '<span class="tag t-ex">Waitlist</span>' : '') : '');
   // Fill counts (main coach's slots only) + waitlist matches on open rows
   const wlOn = waitlist.filter(w => (w.extra || {}).Unsubscribed !== 'Yes'), fill = {};
   const mine = slot => slot.coach && (!mc || slot.coach === mc);

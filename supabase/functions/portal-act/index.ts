@@ -19,6 +19,10 @@
 //   { action: 'account' }                                → { since, kids: [{ id, ..., owed, owed_items, payments, levels, waiver }], policy_text, waiver_text, cancel_hrs, contact }
 //   { action: 'family_save', student_id, ...fields }     → { ok, relogin? }  parent fields go to every kid; kid fields to that kid; texts Steve
 //   { action: 'waiver_sign', student_id, signature, photo } → { ok }  adds a waivers row; texts Steve
+//   { action: 'wl_save', student_id, open, times: ['Monday 5:30 PM', …] } → { ok }  waitlist families: edit preferred days/times; texts Steve
+// Waitlist portal (newer portal sends wl:1): kids on the waitlist (inactive sign-ups too) can log in. When EVERY kid is a waitlist kid
+// (open waitlist row, no weekly lesson) load returns mode 'waitlist' + wl info; they can only book one-time lessons from cancellations
+// (extra_options / extra_book, same limit 1 per kid per week), edit their waitlist days/times, message, and use Account.
 // Every change texts gym_settings 'portal_notify' (Steve's 214 phone) through SMSGate and is saved in schedule_exceptions
 // with extra.by = 'parent' (Dashboard shows them).
 // Other gyms: alerts are emailed to the coach's OWN connected email (never Steve's phone); "Coach Steve" in replies → their coach;
@@ -78,7 +82,11 @@ Deno.serve(async (req) => {
 
   // The parent's kids
   const { data: st } = await db.from("students").select("id,first_name,last_name,parent_phone,parent_name,parent_email,active,dob,emergency_name,emergency_phone,skill_level,extra").eq("gym_id", gym).ilike("parent_phone", `%${acct.phone.slice(-4)}%`);
-  const kids = (st || []).filter(s => p10(s.parent_phone) === acct.phone && s.active !== false);
+  const famAll = (st || []).filter(s => p10(s.parent_phone) === acct!.phone);
+  const { data: wlRows } = famAll.length ? await db.from("waitlist").select("id,student_id,status,signup_date,preferred_days,preferred_times,open_to_anything,extra")
+    .eq("gym_id", gym).in("student_id", famAll.map(k => k.id)).in("status", ["Waitlist", "Drop-In"]) : { data: [] };
+  const onWl = new Set((wlRows || []).map(w => w.student_id));
+  const kids = famAll.filter(s => s.active !== false || (b.wl && onWl.has(s.id)));
   const kidIds = new Set(kids.map(k => k.id));
   if (!kids.length) return json({ error: "No students found for this phone." });
   const isTest = [...kidIds].every(id => id.startsWith("TEST-"));
@@ -107,6 +115,12 @@ Deno.serve(async (req) => {
 
   // All lessons (needed for Shared counting + who holds a slot) and one week's changes
   const { data: lessons } = await db.from("private_lessons").select("*").eq("gym_id", gym).not("status", "in", '("Cancelled","Dropped")');
+  // Waitlist mode: every kid is on the waitlist and has no weekly lesson that's still running
+  const today = nyNow().ymd;
+  const weekly = (id: string) => (lessons || []).some(l => l.student_id === id && (!l.end_date || String(l.end_date) > today));
+  const WL = !!b.wl && kids.every(k => onWl.has(k.id) && !weekly(k.id));
+  if (WL && !["load", "extra_options", "extra_book", "undo", "messages", "message", "clear_msgs", "account", "family_save", "waiver_sign", "wl_save"].includes(b.action))
+    return J({ error: "That isn't open for waitlist families. Text Coach Steve." });
   async function week(ws: string) {
     const { data: exs } = await db.from("schedule_exceptions").select("*").eq("gym_id", gym).eq("week_start", ws).not("status", "in", '("Deleted","Expired")');
     const rows = buildWeek(lessons || [], exs || [], ws, addDays(ws, 6)) as any[];
@@ -181,7 +195,19 @@ Deno.serve(async (req) => {
       weeks.push({ ws, items });
     }
     const S0 = setRow?.value || {};
-    return J({ kids: kids.map(k => ({ id: k.id, first_name: k.first_name, last_name: k.last_name })), cancel_hrs: cancelHrs, weeks,
+    let wl = null;
+    if (WL) {   // waitlist info per kid + every slot time per day (for editing their days/times)
+      const { data: slots } = await db.from("available_slots").select("day,time,extra").eq("gym_id", gym).eq("active", true);
+      const byDay: Record<string, string[]> = {};
+      (slots || []).filter(x => !(x.extra?.test) || isTest).forEach(x => { (byDay[x.day] ||= []); if (!byDay[x.day].includes(x.time)) byDay[x.day].push(x.time); });
+      Object.values(byDay).forEach(a => a.sort((x, y) => timeVal(x) - timeVal(y)));
+      wl = { slot_times: Object.fromEntries(DAYS.filter(d => byDay[d]).map(d => [d, byDay[d]])),
+        kids: kids.map(k => { const w = (wlRows || []).filter(x => x.student_id === k.id).sort((a, c) => String(a.signup_date || "").localeCompare(String(c.signup_date || "")))[0] || {} as any;
+          return { student_id: k.id, since: w.signup_date || null, open: !!w.open_to_anything,
+            times: String(w.preferred_times || "").split(",").map((x: string) => x.trim()).filter(Boolean),
+            looking: w.extra?.LessonFormat ? String(w.extra.LessonFormat) : "" }; }) };
+    }
+    return J({ mode: WL ? "waitlist" : "", wl, kids: kids.map(k => ({ id: k.id, first_name: k.first_name, last_name: k.last_name })), cancel_hrs: cancelHrs, weeks,
       gym: FL ? null : { coach: COACH, hide: HIDE, text: String(S0.c_text || "").replace(/\D/g, "").slice(-10), email: S0.c_email || "" } });
   }
 
@@ -255,9 +281,11 @@ Deno.serve(async (req) => {
     const { error } = await db.from("schedule_exceptions").insert({ gym_id: gym, id: crypto.randomUUID(), type: "Add", lesson_id: null,
       student_id: sid, student_name: kidName(sid), coach: main, base_day: day, base_time: time, new_day: day, new_time: time, new_coach: main,
       week_start: ws, original_date: dateOf(ws, day), status: "Active", lesson_type: "Solo", created_at: new Date().toISOString(),
-      notes: "One-time extra lesson booked by parent (portal)", extra: { by: "parent", extra_lesson: true, phone: acct.phone } });
+      notes: WL ? "One-time lesson booked by waitlist parent (portal)" : "One-time extra lesson booked by parent (portal)",
+      extra: { by: "parent", extra_lesson: true, phone: acct.phone, ...(WL ? { waitlist: true } : {}) } });
     if (error) return J({ error: "Couldn't save. Try again." }, 500);
-    await notify(`Parent portal: ${kidName(sid)} BOOKED A ONE-TIME extra lesson ${nice(ws, day, time)} (30 min)`);
+    await notify(WL ? `Parent portal (waitlist): ${kidName(sid)} BOOKED A ONE-TIME lesson ${nice(ws, day, time)} (30 min)`
+      : `Parent portal: ${kidName(sid)} BOOKED A ONE-TIME extra lesson ${nice(ws, day, time)} (30 min)`);
     return J({ ok: true });
   }
 
@@ -515,6 +543,22 @@ Deno.serve(async (req) => {
     }
     await notify(`Parent portal: ${kidName(sid)} family info changed — ${diff.join("; ")}`.slice(0, 600));
     return J({ ok: true, relogin });
+  }
+
+  if (b.action === "wl_save") {
+    const sid = String(b.student_id || "");
+    const w = (wlRows || []).filter(x => x.student_id === sid).sort((a, c) => String(a.signup_date || "").localeCompare(String(c.signup_date || "")))[0];
+    if (!kidIds.has(sid) || !w) return J({ error: "That can't be changed here. Text Coach Steve." });
+    const open = !!b.open;
+    const times = open ? [] : [...new Set((Array.isArray(b.times) ? b.times : []).map((x: unknown) => String(x).trim()).filter((x: string) => /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday) \d{1,2}:\d{2} [AP]M$/.test(x)))].slice(0, 80) as string[];
+    if (!open && !times.length) return J({ error: "Pick at least one time, or tick \"Open to any day and time\"." });
+    times.sort((a, c) => DAYS.indexOf(a.split(" ")[0]) - DAYS.indexOf(c.split(" ")[0]) || timeVal(a.split(" ").slice(1).join(" ")) - timeVal(c.split(" ").slice(1).join(" ")));
+    const days = [...new Set(times.map(x => x.split(" ")[0]))].join(", ");
+    const { error } = await db.from("waitlist").update({ open_to_anything: open, preferred_days: open ? null : days, preferred_times: open ? null : times.join(", "),
+      extra: { ...(w.extra || {}), portal_edit: new Date().toISOString() } }).eq("id", w.id);
+    if (error) return J({ error: "Couldn't save. Try again." }, 500);
+    await notify(`Parent portal (waitlist): ${kidName(sid)} changed waitlist times → ${open ? "open to any day and time" : days}`);
+    return J({ ok: true });
   }
 
   if (b.action === "waiver_sign") {
