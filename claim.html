@@ -36,6 +36,7 @@ function show(i) {
   if (i.state === 'open') body = `<div style="margin-top:14px">A spot opened for <b>${esc(i.first)}</b></div>${when}<button id="go" onclick="claim()">Claim this spot</button>`;
   else if (i.state === 'won') body = `${when}<div class="box ok"><b>You got it!</b><br>${esc(i.first)} is booked. See you then.</div>`;
   else if (i.state === 'taken') body = `${when}<div class="box no"><b>Sorry, just taken</b><br>Another family claimed it first. You're still on the list for the next one.</div>`;
+  else if (i.state === 'used') body = `${when}<div class="box no"><b>Already booked</b><br>${esc(i.first)} is already booked for another time from this message. Text ${esc(i.coach || 'your coach')} if you need to change it.</div>`;
   else if (i.state === 'expired') body = `${when}<div class="box no">This opening has passed. You're still on the list for the next one.</div>`;
   else body = `<div class="box no">This link isn't valid.</div>`;
   document.getElementById('c').innerHTML = head + body;

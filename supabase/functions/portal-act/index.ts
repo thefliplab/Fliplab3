@@ -19,10 +19,21 @@
 //   { action: 'account' }                                → { since, kids: [{ id, ..., owed, owed_items, payments, levels, waiver }], policy_text, waiver_text, cancel_hrs, contact }
 //   { action: 'family_save', student_id, ...fields }     → { ok, relogin? }  parent fields go to every kid; kid fields to that kid; texts Steve
 //   { action: 'waiver_sign', student_id, signature, photo } → { ok }  adds a waivers row; texts Steve
+//   { action: 'wl_save', student_id, open, times: ['Monday 5:30 PM', …] } → { ok }  waitlist families: edit preferred days/times; texts Steve
+// Waitlist portal (newer portal sends wl:1): kids on the waitlist (inactive sign-ups too) can log in. When EVERY kid is a waitlist kid
+// (open waitlist row, no weekly lesson) load returns mode 'waitlist' + wl info; they can only book one-time lessons from cancellations
+// (extra_options / extra_book, same limit 1 per kid per week), edit their waitlist days/times, message, and use Account.
 // Every change texts gym_settings 'portal_notify' (Steve's 214 phone) through SMSGate and is saved in schedule_exceptions
 // with extra.by = 'parent' (Dashboard shows them).
+// Other gyms: alerts are emailed to the coach's OWN connected email (never Steve's phone); "Coach Steve" in replies → their coach;
+// settings.portal_off / settings.portal_hide (tabs: lessons, classes, skills, message, account) turn the portal or tabs off.
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { buildWeek, timeVal, DAYS, priceFor } from "./week.ts";
+const HOSTS: Record<string, string> = { gmail: "smtp.gmail.com", yahoo: "smtp.mail.yahoo.com", aol: "smtp.aol.com" };
+const TAB_OF: Record<string, string> = { options: "lessons", cancel: "lessons", move: "lessons", undo: "lessons", extra_options: "lessons", extra_book: "lessons",
+  classes: "classes", rsvp: "classes", class_enroll: "classes", waitlist_leave: "classes", clinic_signup: "classes",
+  messages: "message", message: "message", clear_msgs: "message", skill_request: "skills", family_save: "account", waiver_sign: "account" };
 
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 const json = (o: unknown, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { ...cors, "Content-Type": "application/json" } });
@@ -71,19 +82,54 @@ Deno.serve(async (req) => {
 
   // The parent's kids
   const { data: st } = await db.from("students").select("id,first_name,last_name,parent_phone,parent_name,parent_email,active,dob,emergency_name,emergency_phone,skill_level,extra").eq("gym_id", gym).ilike("parent_phone", `%${acct.phone.slice(-4)}%`);
-  const kids = (st || []).filter(s => p10(s.parent_phone) === acct.phone && s.active !== false);
+  const famAll = (st || []).filter(s => p10(s.parent_phone) === acct!.phone);
+  const { data: wlRows } = famAll.length ? await db.from("waitlist").select("id,student_id,status,signup_date,preferred_days,preferred_times,open_to_anything,extra")
+    .eq("gym_id", gym).in("student_id", famAll.map(k => k.id)).in("status", ["Waitlist", "Drop-In"]) : { data: [] };
+  const onWl = new Set((wlRows || []).map(w => w.student_id));
+  const kids = famAll.filter(s => s.active !== false || (b.wl && onWl.has(s.id)));
   const kidIds = new Set(kids.map(k => k.id));
   if (!kids.length) return json({ error: "No students found for this phone." });
   const isTest = [...kidIds].every(id => id.startsWith("TEST-"));
 
   const { data: setRow } = await db.from("gym_settings").select("value").eq("gym_id", gym).eq("key", "settings").maybeSingle();
   const cancelHrs = +(setRow?.value?.cancel_hrs) || 24;
+  // Flip Lab vs other gyms
+  const { data: gymRow } = await db.from("gyms").select("slug,name").eq("id", gym).maybeSingle();
+  const FL = gymRow?.slug === "fliplab";
+  let COACH = "Coach Steve", COACH_RAW = "";
+  if (!FL) {
+    const { data: co } = await db.from("coaches").select("name").eq("gym_id", gym).eq("active", true).order("created_at").limit(1).maybeSingle();
+    COACH_RAW = String(co?.name || "");
+    COACH = co?.name ? (/^coach\b/i.test(co.name) ? co.name : "Coach " + co.name) : "your coach";
+  }
+  const J = (o: any, st = 200) => {
+    if (!FL && o && typeof o.error === "string") o = { ...o, error: o.error.replace(/Text Coach Steve/g, "Contact " + COACH).replace(/text Coach Steve/g, "contact " + COACH).replace(/Coach Steve/g, COACH) };
+    return json(o, st);
+  };
+  const HIDE: string[] = FL ? [] : (Array.isArray(setRow?.value?.portal_hide) ? setRow.value.portal_hide : []);
+  if (!FL && setRow?.value?.portal_off) return J({ error: "portal_off" });
+  if (TAB_OF[b.action] && HIDE.includes(TAB_OF[b.action])) return J({ error: "That part of the portal is turned off." });
+  // Prices: Flip Lab = week.ts defaults; other gyms = their own Settings prices (never Flip Lab's)
+  const GP = FL ? null : (setRow?.value?.prices || null);
+  const pf = (dur: string, type: string) => { const t = type === "Shared" ? "Shared" : "Solo"; return (GP && GP[t] && (GP[t][dur] || GP[t]["30 min"])) || priceFor(dur, t); };
 
   // All lessons (needed for Shared counting + who holds a slot) and one week's changes
   const { data: lessons } = await db.from("private_lessons").select("*").eq("gym_id", gym).not("status", "in", '("Cancelled","Dropped")');
+  // Waitlist mode: every kid is on the waitlist and has no weekly lesson that's still running
+  const today = nyNow().ymd;
+  const weekly = (id: string) => (lessons || []).some(l => l.student_id === id && (!l.end_date || String(l.end_date) > today));
+  const WL = !!b.wl && kids.every(k => onWl.has(k.id) && !weekly(k.id));
+  if (WL && !["load", "extra_options", "extra_book", "undo", "messages", "message", "clear_msgs", "account", "family_save", "waiver_sign", "wl_save"].includes(b.action))
+    return J({ error: "That isn't open for waitlist families. Text Coach Steve." });
   async function week(ws: string) {
     const { data: exs } = await db.from("schedule_exceptions").select("*").eq("gym_id", gym).eq("week_start", ws).not("status", "in", '("Deleted","Expired")');
-    return { exs: exs || [], rows: buildWeek(lessons || [], exs || [], ws, addDays(ws, 6)) as any[] };
+    const rows = buildWeek(lessons || [], exs || [], ws, addDays(ws, 6)) as any[];
+    if (GP) rows.forEach(p => {   // re-price automatic Solo/Shared prices with the gym's own prices
+      if (p.extra?.SpecialPrice === "Yes" || !p.price) return;
+      const t = p.lesson_type === "Shared" ? "Shared" : "Solo", d = p.duration || "30 min";
+      if (p.price === priceFor(d, t)) p.price = pf(d, t);
+    });
+    return { exs: exs || [], rows };
   }
   const thisMon = mondayOf(nyNow().ymd);
   const validWs = (ws: string) => typeof ws === "string" && /^\d{4}-\d{2}-\d{2}$/.test(ws) && ws >= thisMon && ws <= addDays(thisMon, 21) && mondayOf(ws) === ws;
@@ -110,6 +156,17 @@ Deno.serve(async (req) => {
   }
 
   async function notify(text: string) {
+    if (!FL) {   // other gyms: email the coach from their own connected email
+      const { data: cr } = await db.rpc("gym_email_get", { p_gym: gym });
+      const c = (cr || [])[0];
+      if (!c || !HOSTS[c.provider]) return;
+      try {
+        const client = new SMTPClient({ connection: { hostname: HOSTS[c.provider], port: 465, tls: true, auth: { username: c.address, password: c.pw } } });
+        await client.send({ from: `${gymRow?.name || "Parent portal"} <${c.address}>`, to: c.address, subject: text.slice(0, 90), content: text });
+        await client.close();
+      } catch (_e) { /* alert email is best effort; the change still shows on Dashboard / Messages */ }
+      return;
+    }
     const { data: n } = await db.from("gym_settings").select("value").eq("gym_id", gym).eq("key", "portal_notify").maybeSingle();
     const to = p10(typeof n?.value === "string" ? n.value : n?.value?.phone);
     const usr = Deno.env.get("SMSGATE_USER"), pw = Deno.env.get("SMSGATE_PASS");
@@ -137,56 +194,70 @@ Deno.serve(async (req) => {
       }).filter(it => it.kind !== "MoveOrigin").sort((a, c) => a.date.localeCompare(c.date) || timeVal(a.time) - timeVal(c.time));
       weeks.push({ ws, items });
     }
-    return json({ kids: kids.map(k => ({ id: k.id, first_name: k.first_name, last_name: k.last_name })), cancel_hrs: cancelHrs, weeks });
+    const S0 = setRow?.value || {};
+    let wl = null;
+    if (WL) {   // waitlist info per kid + every slot time per day (for editing their days/times)
+      const { data: slots } = await db.from("available_slots").select("day,time,extra").eq("gym_id", gym).eq("active", true);
+      const byDay: Record<string, string[]> = {};
+      (slots || []).filter(x => !(x.extra?.test) || isTest).forEach(x => { (byDay[x.day] ||= []); if (!byDay[x.day].includes(x.time)) byDay[x.day].push(x.time); });
+      Object.values(byDay).forEach(a => a.sort((x, y) => timeVal(x) - timeVal(y)));
+      wl = { slot_times: Object.fromEntries(DAYS.filter(d => byDay[d]).map(d => [d, byDay[d]])),
+        kids: kids.map(k => { const w = (wlRows || []).filter(x => x.student_id === k.id).sort((a, c) => String(a.signup_date || "").localeCompare(String(c.signup_date || "")))[0] || {} as any;
+          return { student_id: k.id, since: w.signup_date || null, open: !!w.open_to_anything,
+            times: String(w.preferred_times || "").split(",").map((x: string) => x.trim()).filter(Boolean),
+            looking: w.extra?.LessonFormat ? String(w.extra.LessonFormat) : "" }; }) };
+    }
+    return J({ mode: WL ? "waitlist" : "", wl, kids: kids.map(k => ({ id: k.id, first_name: k.first_name, last_name: k.last_name })), cancel_hrs: cancelHrs, weeks,
+      gym: FL ? null : { coach: COACH, hide: HIDE, text: String(S0.c_text || "").replace(/\D/g, "").slice(-10), email: S0.c_email || "" } });
   }
 
   // ---------- options / cancel / move: one of the parent's weekly lessons in one week ----------
   if (["options", "cancel", "move"].includes(b.action)) {
     const L = myLesson(String(b.lesson_id || "")), ws = String(b.ws || "");
-    if (!L || !validWs(ws)) return json({ error: "That lesson can't be changed here. Text Coach Steve." });
+    if (!L || !validWs(ws)) return J({ error: "That lesson can't be changed here. Text Coach Steve." });
     const { exs, rows } = await week(ws);
     const p = rows.find(r => r.id === L.id);
-    if (!p || p.status === "Cancelled") return json({ error: "That lesson isn't on for that week." });
+    if (!p || p.status === "Cancelled") return J({ error: "That lesson isn't on for that week." });
     const old = exs.find(e => e.lesson_id === L.id && e.type !== "Add");
-    if (old && old.type !== "PriceOverride") return json({ error: "That week was already changed. Text Coach Steve." });
+    if (old && old.type !== "PriceOverride") return J({ error: "That week was already changed. Text Coach Steve." });
     const mins = minsUntil(ws, p.day, p.time);
-    if (mins <= 0) return json({ error: "That lesson already started." });
+    if (mins <= 0) return J({ error: "That lesson already started." });
     const late = mins < cancelHrs * 60;
 
-    if (b.action === "options") return json({ slots: await openSlots(ws, p.coach, rows), late, cancel_hrs: cancelHrs });
+    if (b.action === "options") return J({ slots: await openSlots(ws, p.coach, rows), late, cancel_hrs: cancelHrs });
 
     const base = { gym_id: gym, lesson_id: L.id, student_id: L.student_id, student_name: L.student_name, coach: p.coach, base_day: p.day, base_time: p.time,
       week_start: ws, original_date: dateOf(ws, p.day), status: "Active", created_at: new Date().toISOString() };
     if (b.action === "cancel") {
-      if (late && !b.ok_late) return json({ late: true, cancel_hrs: cancelHrs });
+      if (late && !b.ok_late) return J({ late: true, cancel_hrs: cancelHrs });
       if (old) {   // a price change doesn't matter once cancelled
         const { error: oe } = await db.from("schedule_exceptions").update({ status: "Deleted" }).eq("id", old.id);
-        if (oe) return json({ error: "Couldn't save. Try again." }, 500);
+        if (oe) return J({ error: "Couldn't save. Try again." }, 500);
       }
       const { error } = await db.from("schedule_exceptions").insert({ ...base, id: crypto.randomUUID(), type: "Cancel", notes: "Cancelled by parent (portal)" + (late ? " — LATE" : ""),
         extra: { by: "parent", late, phone: acct.phone } });
-      if (error) return json({ error: "Couldn't save. Try again." }, 500);
+      if (error) return J({ error: "Couldn't save. Try again." }, 500);
       await notify(`Parent portal: ${kidName(L.student_id)} CANCELLED ${nice(ws, p.day, p.time)}${late ? ` — LATE (under ${cancelHrs} hrs)` : ""}`);
-      return json({ ok: true });
+      return J({ ok: true });
     }
     // move
     const day = String(b.day || ""), time = String(b.time || "");
-    if (old) return json({ error: "That week has a special price. Text Coach Steve to move it." });
+    if (old) return J({ error: "That week has a special price. Text Coach Steve to move it." });
     const ok = (await openSlots(ws, p.coach, rows)).some(s => s.day === day && s.time === time);
-    if (!ok) return json({ error: "That time was just taken. Pick another." });
+    if (!ok) return J({ error: "That time was just taken. Pick another." });
     const { error } = await db.from("schedule_exceptions").insert({ ...base, id: crypto.randomUUID(), type: "Move", new_day: day, new_time: time, new_coach: p.coach,
       notes: "Moved by parent (portal)" + (late ? " — LATE" : ""), extra: { by: "parent", late, phone: acct.phone } });
-    if (error) return json({ error: "Couldn't save. Try again." }, 500);
+    if (error) return J({ error: "Couldn't save. Try again." }, 500);
     await notify(`Parent portal: ${kidName(L.student_id)} MOVED ${nice(ws, p.day, p.time)} → ${nice(ws, day, time)}${late ? " (late notice)" : ""}`);
-    return json({ ok: true });
+    return J({ ok: true });
   }
 
   // ---------- extra one-time lesson (30 min, main coach only, this week + next) ----------
   if (["extra_options", "extra_book"].includes(b.action)) {
     const { data: cs } = await db.from("cal_settings").select("main_coach").eq("gym_id", gym).maybeSingle();
-    const main = String(cs?.main_coach || "Coach Steve");
+    const main = FL ? String(cs?.main_coach || "Coach Steve") : COACH_RAW;
     const sid = String(b.student_id || "");
-    if (!kidIds.has(sid)) return json({ error: "Pick a student." });
+    if (!kidIds.has(sid)) return J({ error: "Pick a student." });
     const wk2 = [thisMon, addDays(thisMon, 7)];
     // Limit: 1 portal extra lesson per kid per week (cancelled ones don't count)
     const { data: had } = await db.from("schedule_exceptions").select("week_start").eq("gym_id", gym).eq("student_id", sid)
@@ -199,21 +270,23 @@ Deno.serve(async (req) => {
         const { rows } = await week(ws);
         weeks.push({ ws, slots: (await openSlots(ws, main, rows)).map(s => ({ ...s, date: dateOf(ws, s.day) })) });
       }
-      return json({ weeks, price: priceFor("30 min", "Solo"), coach: main, cancel_hrs: cancelHrs });
+      return J({ weeks, price: pf("30 min", "Solo"), coach: main, cancel_hrs: cancelHrs });
     }
     const ws = String(b.ws || ""), day = String(b.day || ""), time = String(b.time || "");
-    if (!wk2.includes(ws)) return json({ error: "Pick this week or next week." });
-    if (!b.ok_once) return json({ error: "Check the box to confirm this is one time only." });
-    if (usedWk.has(ws)) return json({ error: "Already booked an extra lesson that week. Text Coach Steve if you need another." });
+    if (!wk2.includes(ws)) return J({ error: "Pick this week or next week." });
+    if (!b.ok_once) return J({ error: "Check the box to confirm this is one time only." });
+    if (usedWk.has(ws)) return J({ error: "Already booked an extra lesson that week. Text Coach Steve if you need another." });
     const { rows } = await week(ws);
-    if (!(await openSlots(ws, main, rows)).some(s => s.day === day && s.time === time)) return json({ error: "That time was just taken. Pick another." });
+    if (!(await openSlots(ws, main, rows)).some(s => s.day === day && s.time === time)) return J({ error: "That time was just taken. Pick another." });
     const { error } = await db.from("schedule_exceptions").insert({ gym_id: gym, id: crypto.randomUUID(), type: "Add", lesson_id: null,
       student_id: sid, student_name: kidName(sid), coach: main, base_day: day, base_time: time, new_day: day, new_time: time, new_coach: main,
       week_start: ws, original_date: dateOf(ws, day), status: "Active", lesson_type: "Solo", created_at: new Date().toISOString(),
-      notes: "One-time extra lesson booked by parent (portal)", extra: { by: "parent", extra_lesson: true, phone: acct.phone } });
-    if (error) return json({ error: "Couldn't save. Try again." }, 500);
-    await notify(`Parent portal: ${kidName(sid)} BOOKED A ONE-TIME extra lesson ${nice(ws, day, time)} (30 min)`);
-    return json({ ok: true });
+      notes: WL ? "One-time lesson booked by waitlist parent (portal)" : "One-time extra lesson booked by parent (portal)",
+      extra: { by: "parent", extra_lesson: true, phone: acct.phone, ...(WL ? { waitlist: true } : {}) } });
+    if (error) return J({ error: "Couldn't save. Try again." }, 500);
+    await notify(WL ? `Parent portal (waitlist): ${kidName(sid)} BOOKED A ONE-TIME lesson ${nice(ws, day, time)} (30 min)`
+      : `Parent portal: ${kidName(sid)} BOOKED A ONE-TIME extra lesson ${nice(ws, day, time)} (30 min)`);
+    return J({ ok: true });
   }
 
   // ---------- classes + clinics ----------
@@ -256,79 +329,79 @@ Deno.serve(async (req) => {
     const clinics = up.map(c => { const max = +c.max_students || 0, n = (ck || []).filter(k => k.schedule_id === c.id).length;
       return { id: c.id, name: c.class_name, date: c.clinic_date, time: c.time, duration: c.duration, coach: c.coach, ages: c.age_group, price: money(c),
         spots: max ? Math.max(0, max - n) : null, signed: (ck || []).filter(k => k.schedule_id === c.id && kidIds.has(k.student_id)).map(k => ({ student_id: k.student_id, paid: !!k.paid })) }; });
-    return json({ classes, clinics });
+    return J({ classes, clinics });
   }
 
   if (["rsvp", "class_enroll", "waitlist_leave", "clinic_signup"].includes(b.action)) {
     const sid = String(b.student_id || ""), cid = String(b.schedule_id || "");
-    if (!kidIds.has(sid)) return json({ error: "That can't be changed here. Text Coach Steve." });
+    if (!kidIds.has(sid)) return J({ error: "That can't be changed here. Text Coach Steve." });
     const I = await classInfo(), kid = kids.find(k => k.id === sid)!;
     const nm = kidName(sid);
 
     if (b.action === "clinic_signup") {
       const c = I.clin.find(x => x.id === cid);
-      if (!c || !c.clinic_date || minsUntilDate(c.clinic_date, c.time) <= 0) return json({ error: "That clinic isn't open for sign-up. Text Coach Steve." });
+      if (!c || !c.clinic_date || minsUntilDate(c.clinic_date, c.time) <= 0) return J({ error: "That clinic isn't open for sign-up. Text Coach Steve." });
       const { data: ck } = await db.from("clinic_kids").select("student_id").eq("gym_id", gym).eq("schedule_id", c.id);
-      if ((ck || []).some(k => k.student_id === sid)) return json({ ok: true });
+      if ((ck || []).some(k => k.student_id === sid)) return J({ ok: true });
       const max = +c.max_students || 0;
-      if (max && (ck || []).length >= max) return json({ error: "Sorry, that clinic just filled up. Text Coach Steve." });
+      if (max && (ck || []).length >= max) return J({ error: "Sorry, that clinic just filled up. Text Coach Steve." });
       const { error } = await db.from("clinic_kids").insert({ gym_id: gym, schedule_id: c.id, kid_name: nm, student_id: sid, parent_name: kid.parent_name || null,
         phone: fmtP(acct.phone), email: kid.parent_email || null, amount: money(c), paid: false, notes: "Signed up in parent portal" });
-      if (error) return json({ error: "Couldn't save. Try again." }, 500);
+      if (error) return J({ error: "Couldn't save. Try again." }, 500);
       const d = new Date(c.clinic_date + "T12:00:00Z");
       await notify(`Parent portal: ${nm} SIGNED UP for ${c.class_name} clinic (${d.getUTCMonth() + 1}/${d.getUTCDate()}) — ${(ck || []).length + 1}${max ? "/" + max : ""} kids`);
-      return json({ ok: true });
+      return J({ ok: true });
     }
 
     const c = I.cs.find(x => x.id === cid), e = I.enr.find(x => x.schedule_id === cid && x.student_id === sid);
-    if (!c || !e) return json({ error: "That can't be changed here. Text Coach Steve." });
+    if (!c || !e) return J({ error: "That can't be changed here. Text Coach Steve." });
     const when = `${SHORT[c.day] || c.day} ${c.time}`;
 
     if (b.action === "rsvp") {
       const ws = String(b.ws || ""), ans = b.answer === "yes" || b.answer === "no" ? b.answer : null;
-      if (e.status === "Waitlisted" || !classWeeks(c).includes(ws)) return json({ error: "That class can't be changed now. Text Coach Steve." });
+      if (e.status === "Waitlisted" || !classWeeks(c).includes(ws)) return J({ error: "That class can't be changed now. Text Coach Steve." });
       const { data: off } = await db.from("class_week_off").select("schedule_id").eq("gym_id", gym).eq("schedule_id", cid).eq("week_start", ws);
-      if ((off || []).length) return json({ error: "There's no class that week." });
+      if ((off || []).length) return J({ error: "There's no class that week." });
       const { data: cur } = await db.from("class_rsvp").select("once").eq("gym_id", gym).eq("schedule_id", cid).eq("student_id", sid).eq("week_start", ws).maybeSingle();
       const { error } = await db.from("class_rsvp").upsert({ gym_id: gym, schedule_id: cid, student_id: sid, student_name: nm, week_start: ws, answer: ans,
         once: cur?.once || false, source: "portal", updated_at: new Date().toISOString() }, { onConflict: "gym_id,schedule_id,student_id,week_start" });
-      if (error) return json({ error: "Couldn't save. Try again." }, 500);
-      return json({ ok: true });
+      if (error) return J({ error: "Couldn't save. Try again." }, 500);
+      return J({ ok: true });
     }
     if (b.action === "class_enroll") {
-      if (e.status !== "Waitlisted") return json({ ok: true });
-      if (!I.canEnroll(c, sid)) return json({ error: "Sorry, that spot was just taken." });
+      if (e.status !== "Waitlisted") return J({ ok: true });
+      if (!I.canEnroll(c, sid)) return J({ error: "Sorry, that spot was just taken." });
       const { error } = await db.from("class_enrollments").update({ status: "Enrolled", enroll_date: nyNow().ymd }).eq("id", e.id);
-      if (error) return json({ error: "Couldn't save. Try again." }, 500);
+      if (error) return J({ error: "Couldn't save. Try again." }, 500);
       const max = +c.max_students || 0;
       await notify(`Parent portal: ${nm} ENROLLED in ${c.class_name} (${when}) from the waitlist — ${I.roster(cid).length + 1}${max ? "/" + max : ""} kids`);
-      return json({ ok: true });
+      return J({ ok: true });
     }
     // waitlist_leave
-    if (e.status !== "Waitlisted") return json({ error: "To stop the class, text Coach Steve." });
+    if (e.status !== "Waitlisted") return J({ error: "To stop the class, text Coach Steve." });
     const { error } = await db.from("class_enrollments").update({ status: "Dropped", notes: "Left waitlist (parent portal)" }).eq("id", e.id);
-    if (error) return json({ error: "Couldn't save. Try again." }, 500);
+    if (error) return J({ error: "Couldn't save. Try again." }, 500);
     await notify(`Parent portal: ${nm} LEFT the waitlist for ${c.class_name} (${when})`);
-    return json({ ok: true });
+    return J({ ok: true });
   }
 
   // ---------- undo the parent's own change ----------
   if (b.action === "undo") {
     const { data: ex } = await db.from("schedule_exceptions").select("*").eq("gym_id", gym).eq("id", String(b.ex_id || "")).eq("status", "Active").maybeSingle();
-    if (!ex || ex.extra?.by !== "parent" || !kidIds.has(ex.student_id)) return json({ error: "That can't be undone here. Text Coach Steve." });
-    if (minsUntil(ex.week_start, ex.base_day, ex.base_time) <= 0 || (ex.type === "Move" && minsUntil(ex.week_start, ex.new_day, ex.new_time) <= 0)) return json({ error: "Too late to undo. Text Coach Steve." });
-    if (ex.type === "Add" && minsUntil(ex.week_start, ex.new_day, ex.new_time) < cancelHrs * 60) return json({ error: `Under ${cancelHrs} hours away. Text Coach Steve to cancel.` });
+    if (!ex || ex.extra?.by !== "parent" || !kidIds.has(ex.student_id)) return J({ error: "That can't be undone here. Text Coach Steve." });
+    if (minsUntil(ex.week_start, ex.base_day, ex.base_time) <= 0 || (ex.type === "Move" && minsUntil(ex.week_start, ex.new_day, ex.new_time) <= 0)) return J({ error: "Too late to undo. Text Coach Steve." });
+    if (ex.type === "Add" && minsUntil(ex.week_start, ex.new_day, ex.new_time) < cancelHrs * 60) return J({ error: `Under ${cancelHrs} hours away. Text Coach Steve to cancel.` });
     // Getting the old spot back: make sure nobody took it meanwhile (Openings / drop-in)
     if (ex.type === "Cancel" || ex.type === "Move") {
       // taken = another kid was dropped in / moved into the old spot that week (regular shared partners were there already)
       const { rows } = await week(ex.week_start);
       const taken = rows.some(p => p.status !== "Cancelled" && p.day === ex.base_day && p.time === ex.base_time && p.student_id !== ex.student_id && (p.exType === "Add" || p.exType === "Move"));
-      if (taken) return json({ error: "Someone already took that spot. Text Coach Steve." });
+      if (taken) return J({ error: "Someone already took that spot. Text Coach Steve." });
     }
     const { error: ue } = await db.from("schedule_exceptions").update({ status: "Deleted" }).eq("id", ex.id);
-    if (ue) return json({ error: "Couldn't undo. Try again or text Coach Steve." }, 500);
+    if (ue) return J({ error: "Couldn't undo. Try again or text Coach Steve." }, 500);
     await notify(`Parent portal: ${kidName(ex.student_id)} UNDID their ${ex.type === "Cancel" ? "cancel" : ex.type === "Add" ? "one-time extra lesson" : "move"} — back on ${nice(ex.week_start, ex.base_day, ex.base_time)}`);
-    return json({ ok: true });
+    return J({ ok: true });
   }
 
   // ---------- messages (thread with Coach Steve = text_log rows for this phone) ----------
@@ -340,24 +413,24 @@ Deno.serve(async (req) => {
     if (b.before) q = q.lt("received_at", String(b.before));
     const { data: m } = await q;
     const rows = m || [];
-    return json({ more: rows.length > 20, list: rows.slice(0, 20).map(r => ({ me: r.direction === "IN", body: r.body, at: r.received_at, portal: r.extra?.via === "Portal" })) });
+    return J({ more: rows.length > 20, list: rows.slice(0, 20).map(r => ({ me: r.direction === "IN", body: r.body, at: r.received_at, portal: r.extra?.via === "Portal" })) });
   }
   if (b.action === "clear_msgs") {   // hides them in the portal only; Steve's Messages tab keeps everything
     const { error } = await db.from("parent_accounts").update({ msgs_cleared_at: new Date().toISOString() }).eq("user_id", u.user.id);
-    return json(error ? { error: "Couldn't clear. Try again." } : { ok: true });
+    return J(error ? { error: "Couldn't clear. Try again." } : { ok: true });
   }
   if (b.action === "message") {
     const body = String(b.body || "").trim().slice(0, 1000);
-    if (!body) return json({ error: "Type a message first." });
+    if (!body) return J({ error: "Type a message first." });
     const { count } = await db.from("text_log").select("id", { count: "exact", head: true }).eq("gym_id", gym).eq("phone", acct.phone).eq("direction", "IN")
       .eq("extra->>via", "Portal").gte("received_at", new Date(Date.now() - 3600e3).toISOString());
-    if ((count || 0) >= 10) return json({ error: "That's a lot of messages this hour. Please text Coach Steve instead." });
+    if ((count || 0) >= 10) return J({ error: "That's a lot of messages this hour. Please text Coach Steve instead." });
     const first = kids[0];
     const { error } = await db.from("text_log").insert({ gym_id: gym, direction: "IN", phone: acct.phone, body, status: "Unread", student_id: first.id,
       family_name: first.parent_name, received_at: new Date().toISOString(), extra: { line: "Portal", via: "Portal", kids: kids.map(k => k.first_name) } });
-    if (error) return json({ error: "Couldn't send. Try again." });
+    if (error) return J({ error: "Couldn't send. Try again." });
     await notify(`Parent portal message from ${first.parent_name || "a parent"} (${kids.map(k => k.first_name).join(" & ")}): ${body}`.slice(0, 600));
-    return json({ ok: true });
+    return J({ ok: true });
   }
 
   // ---------- account: balance owed, payments, skills, family info, waiver ----------
@@ -376,9 +449,9 @@ Deno.serve(async (req) => {
       db.from("student_skills").select("student_id,skill_id,checked_at").eq("gym_id", gym).in("student_id", ids),
       db.from("waivers").select("student_id,parent_name,signature,signed_at,photo_permission").eq("gym_id", gym).in("student_id", ids).order("signed_at", { ascending: false })]);
     const { data: xs } = await db.from("student_extra_skills").select("student_id,name,tag,status,created_at").eq("gym_id", gym).in("student_id", ids).neq("status", "Not now").order("created_at");
-    const main = String(cal?.main_coach || "");
+    const main = FL ? String(cal?.main_coach || "") : "";
     const allPay = pays || [];
-    const priceNum = (p: any) => parseFloat(String(p.price || "").replace(/[^0-9.]/g, "")) || +priceFor(p.duration || "30 min", p.lesson_type === "Shared" ? "Shared" : "Solo").slice(1);
+    const priceNum = (p: any) => parseFloat(String(p.price || "").replace(/[^0-9.]/g, "")) || +String(pf(p.duration || "30 min", p.lesson_type === "Shared" ? "Shared" : "Solo")).replace(/[^0-9.]/g, "");
     const paidOf = (id: string, ws: string) => allPay.filter(x => x.lesson_id === id && x.week_start === ws)
       .reduce((t, x) => ({ amt: t.amt + (+x.amount || 0), adj: t.adj || x.extra?.Adjusted === "Yes" }), { amt: 0, adj: false });
     const owedBy: Record<string, { label: string; amt: number }[]> = {}; ids.forEach(id => owedBy[id] = []);
@@ -421,47 +494,47 @@ Deno.serve(async (req) => {
         extras: (xs || []).filter(x => x.student_id === k.id).map(x => ({ name: x.name, tag: x.tag, status: x.status })),
         waiver: w ? { parent_name: w.parent_name, signature: w.signature, signed_at: w.signed_at, photo: w.photo_permission } : null };
     });
-    return json({ since: SINCE, kids: out, cancel_hrs: cancelHrs, policy_text: S.policy_text || "", waiver_text: S.waiver_text || "",
+    return J({ since: SINCE, kids: out, cancel_hrs: cancelHrs, policy_text: S.policy_text || "", waiver_text: S.waiver_text || "",
       contact: { text: S.c_text || "", email: S.c_email || "", venmo: S.c_venmo || "", zelle: S.c_zelle || "" } });
   }
 
   // ---------- parent asks Coach to work on an extra skill (shows in admin only, no text) ----------
   if (b.action === "skill_request") {
     const sid = String(b.student_id || ""), kid = kids.find(k => k.id === sid);
-    if (!kid) return json({ error: "That can't be done here. Text Coach Steve." });
+    if (!kid) return J({ error: "That can't be done here. Text Coach Steve." });
     const name = String(b.name ?? "").trim().slice(0, 80), note = String(b.note ?? "").trim().slice(0, 200);
     const tag = ["Cheer", "Dance"].includes(String(b.tag)) ? String(b.tag) : null;
-    if (!name) return json({ error: "Enter a skill name first." });
+    if (!name) return J({ error: "Enter a skill name first." });
     const { count } = await db.from("student_extra_skills").select("id", { count: "exact", head: true }).eq("gym_id", gym).eq("student_id", sid).eq("status", "Requested");
-    if ((count || 0) >= 3) return json({ error: `${kid.first_name} has 3 open requests. Wait for Coach Steve to answer them first.` });
+    if ((count || 0) >= 3) return J({ error: `${kid.first_name} has 3 open requests. Wait for Coach Steve to answer them first.` });
     const { error } = await db.from("student_extra_skills").insert({ gym_id: gym, student_id: sid, name, note: note || null, tag, status: "Requested", source: "parent" });
-    if (error) return json({ error: "Couldn't send. Try again." });
-    return json({ ok: true });
+    if (error) return J({ error: "Couldn't send. Try again." });
+    return J({ ok: true });
   }
 
   if (b.action === "family_save") {
     const sid = String(b.student_id || "");
     const kid = kids.find(k => k.id === sid);
-    if (!kid) return json({ error: "That can't be changed here. Text Coach Steve." });
+    if (!kid) return J({ error: "That can't be changed here. Text Coach Steve." });
     const t = (v: unknown, n = 120) => String(v ?? "").trim().slice(0, n);
     const phone = p10(b.parent_phone), ePhone = p10(b.emergency_phone);
-    if (phone.length !== 10) return json({ error: "Enter a 10-digit phone number." });
-    if (b.emergency_phone && ePhone.length !== 10) return json({ error: "Enter a 10-digit emergency phone, or leave it blank." });
+    if (phone.length !== 10) return J({ error: "Enter a 10-digit phone number." });
+    if (b.emergency_phone && ePhone.length !== 10) return J({ error: "Enter a 10-digit emergency phone, or leave it blank." });
     const email = t(b.parent_email);
-    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ error: "That email doesn't look right." });
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return J({ error: "That email doesn't look right." });
     const dob = t(b.dob, 10);
-    if (dob && (!/^\d{4}-\d{2}-\d{2}$/.test(dob) || dob > nyNow().ymd || dob < "1990-01-01")) return json({ error: "Check the birthday." });
-    if (!t(b.first_name) || !t(b.parent_name)) return json({ error: "Names can't be blank." });
+    if (dob && (!/^\d{4}-\d{2}-\d{2}$/.test(dob) || dob > nyNow().ymd || dob < "1990-01-01")) return J({ error: "Check the birthday." });
+    if (!t(b.first_name) || !t(b.parent_name)) return J({ error: "Names can't be blank." });
     const fam = { parent_name: t(b.parent_name), parent_phone: fmtP(phone), parent_email: email || null, emergency_name: t(b.emergency_name) || null, emergency_phone: ePhone ? fmtP(ePhone) : null };
     const me = { first_name: t(b.first_name), last_name: t(b.last_name) || null, dob: dob || null };
     // what changed (for the text to Steve)
     const was: Record<string, unknown> = { ...kid, parent_phone: fmtP(p10(kid.parent_phone)), emergency_phone: kid.emergency_phone ? fmtP(p10(kid.emergency_phone)) : null };
     const LBL: Record<string, string> = { parent_name: "parent", parent_phone: "phone", parent_email: "email", emergency_name: "emergency name", emergency_phone: "emergency phone", first_name: "first name", last_name: "last name", dob: "birthday" };
     const diff = Object.entries({ ...fam, ...me }).filter(([k, v]) => String(was[k] ?? "") !== String(v ?? "")).map(([k, v]) => `${LBL[k]} ${was[k] || "(blank)"} → ${v || "(blank)"}`);
-    if (!diff.length) return json({ ok: true });
+    if (!diff.length) return J({ ok: true });
     const { error: e1 } = await db.from("students").update(me).eq("gym_id", gym).eq("id", sid);
     const { error: e2 } = await db.from("students").update(fam).eq("gym_id", gym).in("id", [...kidIds]);
-    if (e1 || e2) return json({ error: "Couldn't save. Try again." }, 500);
+    if (e1 || e2) return J({ error: "Couldn't save. Try again." }, 500);
     let relogin = false;
     if (phone !== acct.phone) {   // new phone = new login; keep their code, they log in again with the new number
       const { data: taken } = await db.from("parent_accounts").select("id").eq("gym_id", gym).eq("phone", phone).maybeSingle();
@@ -469,21 +542,37 @@ Deno.serve(async (req) => {
       relogin = true;
     }
     await notify(`Parent portal: ${kidName(sid)} family info changed — ${diff.join("; ")}`.slice(0, 600));
-    return json({ ok: true, relogin });
+    return J({ ok: true, relogin });
+  }
+
+  if (b.action === "wl_save") {
+    const sid = String(b.student_id || "");
+    const w = (wlRows || []).filter(x => x.student_id === sid).sort((a, c) => String(a.signup_date || "").localeCompare(String(c.signup_date || "")))[0];
+    if (!kidIds.has(sid) || !w) return J({ error: "That can't be changed here. Text Coach Steve." });
+    const open = !!b.open;
+    const times = open ? [] : [...new Set((Array.isArray(b.times) ? b.times : []).map((x: unknown) => String(x).trim()).filter((x: string) => /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday) \d{1,2}:\d{2} [AP]M$/.test(x)))].slice(0, 80) as string[];
+    if (!open && !times.length) return J({ error: "Pick at least one time, or tick \"Open to any day and time\"." });
+    times.sort((a, c) => DAYS.indexOf(a.split(" ")[0]) - DAYS.indexOf(c.split(" ")[0]) || timeVal(a.split(" ").slice(1).join(" ")) - timeVal(c.split(" ").slice(1).join(" ")));
+    const days = [...new Set(times.map(x => x.split(" ")[0]))].join(", ");
+    const { error } = await db.from("waitlist").update({ open_to_anything: open, preferred_days: open ? null : days, preferred_times: open ? null : times.join(", "),
+      extra: { ...(w.extra || {}), portal_edit: new Date().toISOString() } }).eq("id", w.id);
+    if (error) return J({ error: "Couldn't save. Try again." }, 500);
+    await notify(`Parent portal (waitlist): ${kidName(sid)} changed waitlist times → ${open ? "open to any day and time" : days}`);
+    return J({ ok: true });
   }
 
   if (b.action === "waiver_sign") {
     const sid = String(b.student_id || ""), sig = String(b.signature || "").trim().slice(0, 120);
     const kid = kids.find(k => k.id === sid);
-    if (!kid) return json({ error: "That can't be signed here. Text Coach Steve." });
-    if (sig.length < 3) return json({ error: "Type your full name to sign." });
+    if (!kid) return J({ error: "That can't be signed here. Text Coach Steve." });
+    if (sig.length < 3) return J({ error: "Type your full name to sign." });
     const photo = b.photo === "No" ? "No" : "Yes";
     const { error } = await db.from("waivers").insert({ id: "WV_" + crypto.randomUUID(), gym_id: gym, student_id: sid, parent_name: kid.parent_name || sig,
       signature: sig, signed_at: new Date().toISOString(), photo_permission: photo, extra: { via: "Portal", phone: acct.phone } });
-    if (error) return json({ error: "Couldn't save. Try again." }, 500);
+    if (error) return J({ error: "Couldn't save. Try again." }, 500);
     await notify(`Parent portal: waiver SIGNED for ${kidName(sid)} by ${sig} (photos: ${photo})`);
-    return json({ ok: true });
+    return J({ ok: true });
   }
 
-  return json({ error: "Unknown action" }, 400);
+  return J({ error: "Unknown action" }, 400);
 });

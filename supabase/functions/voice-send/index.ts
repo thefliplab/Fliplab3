@@ -2,8 +2,9 @@
 // Voice forwards each text to Gmail from a special address (…@txt.voice.google.com). Emailing that address from the
 // Gmail that owns Voice sends a text from the Voice number. Only works for families who texted the Voice number lately.
 // Signed-in user only (verify_jwt on).
+//   List:  { list: true }                    → { ok, families: [{ phone, last }] }  (everyone who ever texted Voice, from Gmail)
 //   Check: { check: "5135551234" }            → { ok: true/false }  (is there a recent Voice email for that phone?)
-//   Send:  { to, text, student_id?, family? }  → logs text_log OUT (status "Sent (Voice)", extra.line Voice)
+//   Send:  { to, text, student_id?, family?, batch? }  → logs text_log OUT (status "Sent (Voice)", extra.line Voice, extra.batch for Communicate sends)
 // Secrets: GMAIL_VOICE_APP_PASSWORD. Gmail address: GMAIL_VOICE_USER secret or the default below.
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
@@ -43,7 +44,7 @@ async function findVoice(user: string, pw: string, p10: string) {
   try {
     await c.cmd('EXAMINE "[Gmail]/All Mail"');
     const s = await c.cmd('UID SEARCH X-GM-RAW "from:txt.voice.google.com newer_than:30d"');
-    const uids = ((s.match(/\* SEARCH([^\r\n]*)/) || [])[1] || "").trim().split(/\s+/).filter(Boolean).map(Number).sort((a, b) => b - a).slice(0, 60);
+    const uids = ((s.match(/\* SEARCH([^\r\n]*)/) || [])[1] || "").trim().split(/\s+/).filter(Boolean).map(Number).sort((a, b) => b - a).slice(0, 500);
     if (!uids.length) return null;
     const f = await c.cmd(`UID FETCH ${uids.join(",")} (BODY.PEEK[HEADER.FIELDS (FROM SUBJECT MESSAGE-ID)])`);
     const parts = f.split(/\r\n(?=\* \d+ FETCH)/).map((x) => {
@@ -55,6 +56,34 @@ async function findVoice(user: string, pw: string, p10: string) {
       return { uid, from, subj, msgId };
     }).filter((x) => x.from).sort((a, b) => b.uid - a.uid);
     return parts.find((x) => (x.from.replace(/\D/g, "") + " " + x.subj.replace(/\D/g, "")).includes(p10)) || null;
+  } finally { c.close(); }
+}
+
+// Every family that ever texted the Voice number (all Voice emails in Gmail, newest 3000) → [{ phone, last }] newest first
+const ME = "5134432674";   // Steve's own Voice number (left out)
+async function listVoice(user: string, pw: string) {
+  const c = await imap(user, pw);
+  try {
+    await c.cmd('EXAMINE "[Gmail]/All Mail"');
+    const s = await c.cmd('UID SEARCH X-GM-RAW "from:txt.voice.google.com"');
+    const uids = ((s.match(/\* SEARCH([^\r\n]*)/) || [])[1] || "").trim().split(/\s+/).filter(Boolean).map(Number).sort((a, b) => b - a).slice(0, 3000);
+    const seen: Record<string, string> = {};
+    for (let i = 0; i < uids.length; i += 500) {
+      const f = await c.cmd(`UID FETCH ${uids.slice(i, i + 500).join(",")} (INTERNALDATE BODY.PEEK[HEADER.FIELDS (FROM SUBJECT)])`);
+      for (const x of f.split(/\r\n(?=\* \d+ FETCH)/)) {
+        const hdr = x.replace(/\r\n[ \t]+/g, " ");
+        const subj = ((hdr.match(/^Subject:\s*(.*)$/im) || [])[1] || "");
+        const from = ((hdr.match(/^From:.*?<?([^\s<>"]+@txt\.voice\.google\.com)>?/im) || [])[1] || "");
+        if (!from) continue;
+        const m = subj.match(/\((\d{3})\)\s*(\d{3})-(\d{4})/);
+        const p10 = m ? m[1] + m[2] + m[3] : ((from.split("@")[0].split(".").map(d10).filter((d) => d.length === 10 && d !== ME))[0] || "");
+        if (!p10 || p10 === ME) continue;
+        const dt = new Date(((x.match(/INTERNALDATE "([^"]+)"/) || [])[1] || "").replace(/-/g, " "));
+        const iso = isNaN(dt.getTime()) ? "" : dt.toISOString();
+        if (!seen[p10] || iso > seen[p10]) seen[p10] = iso;
+      }
+    }
+    return Object.entries(seen).map(([phone, last]) => ({ phone, last })).sort((a, b) => b.last.localeCompare(a.last));
   } finally { c.close(); }
 }
 
@@ -70,6 +99,7 @@ Deno.serve(async (req) => {
   const b = await req.json().catch(() => ({}));
 
   try {
+    if (b.list) return json({ ok: true, families: await listVoice(gmail, pw) });
     if (b.check) { const v = await findVoice(gmail, pw, d10(b.check)); return json({ ok: !!v }); }
     const p10 = d10(b.to), text = String(b.text || "").trim();
     if (p10.length !== 10 || !text) return json({ error: "Bad phone or empty text" }, 400);
@@ -81,7 +111,7 @@ Deno.serve(async (req) => {
     await client.close();
     const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     await db.from("text_log").insert({ gym_id: gym, direction: "OUT", phone: p10, student_id: b.student_id || null, family_name: b.family || null,
-      body: text, status: "Sent (Voice)", received_at: new Date().toISOString(), extra: { line: "Voice" } });
+      body: text, status: "Sent (Voice)", received_at: new Date().toISOString(), extra: b.batch ? { line: "Voice", batch: b.batch } : { line: "Voice" } });
     return json({ ok: true });
   } catch (e) {
     return json({ ok: false, error: String((e as Error).message || e).slice(0, 300) });

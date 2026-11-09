@@ -76,6 +76,7 @@ body.in .wrap{padding-bottom:90px}
 .btn-pick{background:transparent;color:var(--blue-light);border:1px solid var(--blue)}.btn-pick.on{background:var(--blue);color:#03101f}
 .wkchips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .wkchip{background:var(--surface);border:1px solid var(--line);color:var(--white);border-radius:4px;padding:7px 10px;font-size:13px;font-family:'DM Sans',sans-serif;cursor:pointer}
+.wkchip.on{border-color:var(--blue);background:rgba(30,140,255,.16)}
 .wkchip.no{border-color:rgba(255,181,71,.5);color:var(--warn)}.wkchip.off{color:var(--muted);cursor:default;text-decoration:line-through}
 .thread{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:12px;display:flex;flex-direction:column;gap:8px;max-height:55vh;overflow-y:auto}
 .bub{max-width:80%;padding:9px 11px;border-radius:4px;font-size:15px;line-height:1.4;white-space:pre-wrap;word-wrap:break-word}
@@ -108,7 +109,8 @@ button.fl-tap,a.btn.fl-tap{outline:2px solid #1e8cff;outline-offset:2px}
 <body>
 <div class="vbar" id="vbar"><span id="vbarTxt"><b>Admin view</b> · look only</span><button id="bVExit">Exit</button></div>
 <div class="top">
-  <img src="https://fliplabcoachsteve.com/images/logo.png" alt="Flip Lab with Coach Steve">
+  <img id="topLogo" src="https://fliplabcoachsteve.com/images/logo.png" alt="Flip Lab with Coach Steve">
+  <span id="topName" style="display:none;font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:1px"></span>
   <span class="who" id="who"></span>
 </div>
 
@@ -117,7 +119,7 @@ button.fl-tap,a.btn.fl-tap{outline:2px solid #1e8cff;outline-offset:2px}
   <div class="view" id="vPhone">
     <p class="eyebrow">Parent portal</p>
     <h1>Welcome <span>back</span></h1>
-    <p class="sub">Cancel or move lessons, sign up for classes, pay and message Coach Steve.</p>
+    <p class="sub" id="phoneSub">Cancel or move lessons, sign up for classes, pay and message Coach Steve.</p>
     <div class="card">
       <label for="phone">Your phone number</label>
       <input id="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(513) 555-1234">
@@ -144,10 +146,11 @@ button.fl-tap,a.btn.fl-tap{outline:2px solid #1e8cff;outline-offset:2px}
   <!-- 3. Texted one-time code -->
   <div class="view" id="vCode">
     <p class="eyebrow" id="codeFor">First time here</p>
-    <h1>Check your <span>texts</span></h1>
+    <h1 id="codeH">Check your <span>texts</span></h1>
     <p class="sub" id="codeSub">We'll text a 6-number code to prove this phone is yours.</p>
     <div class="card">
       <button class="btn btn-primary" id="bSend">Text me a code</button>
+      <button class="link" id="bHave" style="display:none">I have a code from my coach</button>
       <div id="codeBox" style="display:none">
         <label for="code" style="margin-top:4px">6-number code</label>
         <input id="code" class="code" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code">
@@ -157,6 +160,14 @@ button.fl-tap,a.btn.fl-tap{outline:2px solid #1e8cff;outline-offset:2px}
       <div class="msg" id="mCode"></div>
       <button class="link" data-go="vPhone">Use a different number</button>
     </div>
+  </div>
+
+  <!-- Other gyms: the coach turned the portal off -->
+  <div class="view" id="vSoon">
+    <p class="eyebrow">Parent portal</p>
+    <h1>Portal is <span>off</span></h1>
+    <p class="sub">The parent portal isn't turned on right now. Contact your coach with any questions.</p>
+    <button class="link" id="bSoonOut">Log out</button>
   </div>
 
   <!-- 4. Pick their own code -->
@@ -181,6 +192,7 @@ button.fl-tap,a.btn.fl-tap{outline:2px solid #1e8cff;outline-offset:2px}
     <div class="kids" id="kids"></div>
 
     <div class="tab on" id="tHome">
+      <div id="wlHome" style="display:none"></div>
       <div id="homeNext"></div>
       <div id="homeSkill"></div>
       <div class="card" id="a2hs"><p class="tip" style="margin:0"><b>Tip:</b> add this to your home screen so it opens like an app.<br>iPhone: tap Share → <b>Add to Home Screen</b>. Android: tap ⋮ → <b>Add to Home screen</b>.</p></div>
@@ -188,6 +200,7 @@ button.fl-tap,a.btn.fl-tap{outline:2px solid #1e8cff;outline-offset:2px}
     <div class="tab" id="tLessons"><div id="lessonList"></div>
       <button class="btn btn-primary" id="bExtra" style="margin-top:6px">Book an extra lesson</button>
       <p class="tip" id="policyLine" style="margin-top:4px"></p></div>
+    <div class="tab" id="tSpot"><div id="spotBox"></div></div>
     <div class="tab" id="tClasses"><div id="classList"></div></div>
     <div class="tab" id="tSkills"><div id="skillsBox"><div class="card"><p class="tip" style="margin:0">Loading…</p></div></div></div>
     <div class="tab" id="tMsg">
@@ -216,6 +229,7 @@ button.fl-tap,a.btn.fl-tap{outline:2px solid #1e8cff;outline-offset:2px}
 <nav class="nav" id="nav">
   <button data-t="tHome" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Home</button>
   <button data-t="tLessons"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Lessons</button>
+  <button data-t="tSpot" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 4h8v3H8zM6 6H5a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1h-1M8 12h8M8 16h5"/></svg>My spot</button>
   <button data-t="tClasses"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M15 14.5c3 0 6 1.8 6 5.5"/></svg>Classes</button>
   <button data-t="tSkills"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg>Skills</button>
   <button data-t="tMsg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16v11H8l-4 4z"/></svg>Message</button>
@@ -225,7 +239,7 @@ button.fl-tap,a.btn.fl-tap{outline:2px solid #1e8cff;outline-offset:2px}
 <script>
 // Birthday boxes = Month / Day / Year dropdowns (the phone date picker opens on today and saved wrong years).
 // The original input stays (hidden, same id), so existing .value code keeps working. Partly picked → value '' and data-part="1".
-function dobPick(inp, oldest) {
+function dobPick(inp, oldest, lock) {
   if (!inp || inp.dataset.dob) return; inp.dataset.dob = '1';
   const P = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value'), start = inp.value, now = new Date().getFullYear();
   const MO = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -236,15 +250,33 @@ function dobPick(inp, oldest) {
   let ys = '<option value="">Year</option>'; for (let i = now - 1; i >= oldest; i--) ys += `<option>${i}</option>`; y.innerHTML = ys;
   const days = () => { const cur = d.value, n = new Date(+y.value || 2000, +m.value || 1, 0).getDate(); let s = '<option value="">Day</option>'; for (let i = 1; i <= n; i++) s += `<option>${i}</option>`; d.innerHTML = s; if (cur && +cur <= n) d.value = cur; };
   const p2 = v => String(v).padStart(2, '0');
+
+  // Locked view (Steve, Nov 8): saved birthday shows as text + age + red Edit; Edit opens the dropdowns, Cancel puts the saved one back.
+  let saved = '', lk = null, cx = null;
+  const draw = open => {
+    if (!lk) return;
+    const v = P.get.call(inp), show = open || !v || inp.dataset.part;
+    wrap.style.display = show ? 'grid' : 'none'; lk.style.display = show ? 'none' : 'flex'; cx.style.display = show && saved ? '' : 'none';
+    if (show || !v) return;
+    const b = new Date(v + 'T00:00:00'), n = new Date(); let a = n.getFullYear() - b.getFullYear(); if (n < new Date(n.getFullYear(), b.getMonth(), b.getDate())) a--;
+    lk.querySelector('.dobd').textContent = b.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); lk.querySelector('.doba').textContent = 'Age ' + a;
+  };
+  if (lock) {
+    lk = document.createElement('div'); lk.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--line);border-radius:4px;background:var(--surface);padding:8px 14px;min-height:54px;';
+    lk.innerHTML = '<span><div class="dobd" style="white-space:nowrap;font-size:18px;color:var(--white);line-height:1.25"></div><div class="doba" style="font-size:14px;color:var(--muted);line-height:1.2"></div></span><a href="#" style="color:#E24B4A;font-weight:400;font-size:15px;text-decoration:none;padding:6px 0 6px 10px">Edit</a>';
+    lk.lastChild.onclick = e => { e.preventDefault(); draw(true); };
+    cx = document.createElement('a'); cx.href = '#'; cx.textContent = 'Cancel'; cx.style.cssText = 'display:none;color:#E24B4A;font-weight:700;text-decoration:none;font-size:14px;margin-top:6px';
+    cx.onclick = e => { e.preventDefault(); inp.value = saved; };
+  }
   const sync = () => { days(); const all = m.value && d.value && y.value; P.set.call(inp, all ? `${y.value}-${p2(m.value)}-${p2(d.value)}` : ''); inp.dataset.part = !all && (m.value || d.value || y.value) ? '1' : ''; };
   m.onchange = y.onchange = d.onchange = sync;
   Object.defineProperty(inp, 'value', { get() { return P.get.call(inp); }, set(v) {
     const t = /^(\d{4})-(\d{2})-(\d{2})/.exec(v || ''); P.set.call(inp, t ? t[0] : ''); inp.dataset.part = '';
     if (t && ![...y.options].some(o => o.value === String(+t[1]))) y.add(new Option(String(+t[1]), String(+t[1])), +t[1] > now - 1 ? 1 : undefined);
-    y.value = t ? String(+t[1]) : ''; m.value = t ? String(+t[2]) : ''; days(); d.value = t ? String(+t[3]) : ''; } });
-  inp.type = 'hidden'; inp.after(wrap); inp.value = start;
+    y.value = t ? String(+t[1]) : ''; m.value = t ? String(+t[2]) : ''; days(); d.value = t ? String(+t[3]) : ''; saved = t ? t[0] : ''; draw(); } });
+  inp.type = 'hidden'; inp.after(wrap); if (lk) { wrap.before(lk); wrap.after(cx); } inp.value = start;
 }
-const dobAll = () => document.querySelectorAll('input#fDob').forEach(i => dobPick(i, new Date().getFullYear() - 25));
+const dobAll = () => document.querySelectorAll('input#fDob').forEach(i => dobPick(i, new Date().getFullYear() - 25, true));
 new MutationObserver(dobAll).observe(document.body, { childList: true, subtree: true }); dobAll();
 const GYM = new URLSearchParams(location.search).get('gym') || 'fliplab';
 const SB_URL = 'https://angmtyojkwlrefxpcgoa.supabase.co';
@@ -252,7 +284,7 @@ const SB_URL = 'https://angmtyojkwlrefxpcgoa.supabase.co';
 const VIEW = (new URLSearchParams(location.search).get('view') || '').replace(/\D/g, '').slice(-10);
 const sb = VIEW ? supabase.createClient(SB_URL, 'sb_publishable_fPciNfnNHpHQikB8mqHNpw_hIVRIGo5')
   : supabase.createClient(SB_URL, 'sb_publishable_fPciNfnNHpHQikB8mqHNpw_hIVRIGo5', { auth: { storageKey: 'fl3-portal', persistSession: true, autoRefreshToken: true } });
-const meRpc = () => VIEW ? sb.rpc('portal_me_view', { p_phone: VIEW }) : sb.rpc('portal_me');
+const meRpc = () => VIEW ? sb.rpc('portal_me_view', { p_phone: VIEW, p_wl: true }) : sb.rpc('portal_me', { p_wl: true });   // p_wl: waitlist kids count too
 const $ = id => document.getElementById(id);
 let PHONE = '', TOKEN = '';
 
@@ -262,11 +294,53 @@ function fmt(p) { return '(' + p.slice(0, 3) + ') ' + p.slice(3, 6) + '-' + p.sl
 function busy(b, on) { b.disabled = on; }
 async function call(body) {
   try {
-    const r = await fetch(SB_URL + '/functions/v1/portal-auth', { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: 'sb_publishable_fPciNfnNHpHQikB8mqHNpw_hIVRIGo5' }, body: JSON.stringify({ gym: GYM, phone: PHONE, ...body }) });
+    const r = await fetch(SB_URL + '/functions/v1/portal-auth', { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: 'sb_publishable_fPciNfnNHpHQikB8mqHNpw_hIVRIGo5' }, body: JSON.stringify({ gym: GYM, phone: PHONE, wl: 1, ...body }) });
     return await r.json();
   } catch (e) { return { error: 'No connection. Try again.' }; }
 }
-const NOT_FOUND = "We don't have that number. Use the phone number you signed up with, or text Coach Steve.";
+const FL = GYM === 'fliplab';
+const NOT_FOUND = "We don't have that number. Use the phone number you signed up with, or " + (FL ? 'text Coach Steve.' : 'contact your coach.');
+// Other gyms: their name, logo and main color (Settings in their admin), read through signup_look
+async function lookFor(slug) {
+  $('topLogo').style.display = 'none'; $('topName').style.display = 'inline'; document.title = 'Parent portal'; $('homeGym').textContent = '';
+  $('phoneSub').textContent = 'Cancel or move lessons, sign up for classes, pay and message your coach.';
+  $('foot').innerHTML = ''; $('phone').placeholder = '(555) 555-1234';
+  $('codeH').innerHTML = 'Check your <span>email</span>'; $('bSend').textContent = 'Email me a code'; $('bHave').style.display = 'block';
+  let L = null; try { L = (await sb.rpc('signup_look', { p_slug: slug })).data; } catch (e) {}
+  if (!L) return;
+  document.title = L.name + ' — Parent portal'; $('topName').textContent = L.name;
+  document.querySelector('meta[name="apple-mobile-web-app-title"]').content = L.name;
+  document.querySelectorAll('link[rel="icon"],link[rel="apple-touch-icon"]').forEach(l => { if (L.logo_url) l.href = L.logo_url; else l.remove(); });
+  if (L.logo_url) { $('topLogo').src = L.logo_url; $('topLogo').alt = L.name; $('topLogo').style.display = ''; $('topName').style.display = 'none'; }
+  if (L.color) ['--blue', '--blue-light'].forEach(k => document.documentElement.style.setProperty(k, L.color));
+  // Before login: the gym's own contact (Settings → Policies and contact). After login applyGym() takes over.
+  const who = !L.coach ? 'your coach' : /^coach\b/i.test(L.coach) ? L.coach : 'Coach ' + L.coach, tx = String(L.c_text || '').replace(/\D/g, '').slice(-10);
+  if (!G) $('foot').innerHTML = tx.length === 10 ? 'Questions? Text ' + esc(who) + ' <a href="sms:+1' + tx + '">' + fmt(tx) + '</a>'
+    : L.c_email ? 'Questions? Email ' + esc(who) + ' <a href="mailto:' + esc(L.c_email) + '">' + esc(L.c_email) + '</a>' : '';
+}
+if (!FL) lookFor(GYM);
+// Other gyms (after login): their coach's name + contact instead of Coach Steve / 513, and tabs the coach turned off
+let G = null;
+function swapCoach(root) {
+  if (!G || !root) return;
+  const verb = G.text ? 'Text ' : 'Contact ';
+  const tw = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); let t;
+  while ((t = tw.nextNode())) if (t.nodeValue.includes('Coach Steve'))
+    t.nodeValue = t.nodeValue.replace(/Text Coach Steve/g, verb + G.coach).replace(/text Coach Steve/g, verb.toLowerCase() + G.coach).replace(/Coach Steve/g, G.coach);
+  if (root.querySelectorAll) root.querySelectorAll('a[href^="sms:+15134432674"]').forEach(a => { if (G.text) a.href = 'sms:+1' + G.text; else if (G.email) a.href = 'mailto:' + G.email; else a.removeAttribute('href'); });
+}
+new MutationObserver(ms => { if (G) ms.forEach(m => m.addedNodes.forEach(nd => swapCoach(nd.nodeType === 3 ? nd.parentNode : nd))); }).observe(document.body, { childList: true, subtree: true });
+function applyGym(g) {
+  G = g;
+  const T = { lessons: 'tLessons', classes: 'tClasses', skills: 'tSkills', message: 'tMsg', account: 'tAcct' }; let n = 6;
+  Object.entries(T).forEach(([k, id]) => { const b = document.querySelector('#nav [data-t="' + id + '"]'); if (!b) return; const off = (g.hide || []).includes(k); b.style.display = off ? 'none' : ''; if (off) n--; });
+  $('nav').style.gridTemplateColumns = 'repeat(' + n + ',1fr)';
+  if ((g.hide || []).includes('lessons') && $('bExtra')) $('bExtra').style.display = 'none';
+  $('foot').innerHTML = g.text ? 'Questions? Text ' + esc(g.coach) + ' <a href="sms:+1' + g.text + '">' + fmt(g.text) + '</a>'
+    : g.email ? 'Questions? Email ' + esc(g.coach) + ' <a href="mailto:' + esc(g.email) + '">' + esc(g.email) + '</a>' : '';
+  swapCoach(document.body);
+}
+$('bHave').onclick = () => { $('bSend').style.display = 'none'; $('bHave').style.display = 'none'; $('codeBox').style.display = 'block'; say('mCode', 'Enter the 6-number code your coach gave you.', true); $('code').focus(); };
 
 $('bPhone').onclick = async () => {
   PHONE = $('phone').value.replace(/\D/g, '').slice(-10);
@@ -282,8 +356,9 @@ $('phone').onkeydown = e => { if (e.key === 'Enter') $('bPhone').click(); };
 
 function openCode(forgot) {
   $('codeFor').textContent = forgot ? 'Forgot your code' : 'First time here';
-  $('codeSub').textContent = "We'll text a 6-number code to " + fmt(PHONE) + ' to prove this phone is yours.';
-  $('codeBox').style.display = 'none'; $('bSend').style.display = 'block'; $('code').value = ''; say('mCode', '');
+  $('codeSub').textContent = FL ? "We'll text a 6-number code to " + fmt(PHONE) + ' to prove this phone is yours.'
+    : "We'll email a 6-number code to the email your coach has on file for " + fmt(PHONE) + '.';
+  $('codeBox').style.display = 'none'; $('bSend').style.display = 'block'; $('bHave').style.display = FL ? 'none' : 'block'; $('code').value = ''; say('mCode', '');
   show('vCode');
 }
 $('bForgot').onclick = () => openCode(true);
@@ -292,14 +367,16 @@ async function sendCode() {
   busy($('bSend'), true); say('mCode', 'Sending…', true);
   const r = await call({ action: 'send_code' });
   busy($('bSend'), false);
+  if (r.error === 'no_email') { $('bSend').style.display = 'none'; $('bHave').style.display = 'none'; $('codeBox').style.display = 'block'; return say('mCode', "We can't email a code for this number. Ask your coach for a login code, then enter it here."); }
   if (r.error) return say('mCode', r.error === 'not_found' ? NOT_FOUND : r.error);
-  $('bSend').style.display = 'none'; $('codeBox').style.display = 'block'; say('mCode', 'Code sent. It can take a minute.', true); $('code').focus();
+  $('bSend').style.display = 'none'; $('bHave').style.display = 'none'; $('codeBox').style.display = 'block';
+  say('mCode', r.via === 'email' ? 'Code sent to ' + r.to + '. It can take a minute. Check spam too.' : 'Code sent. It can take a minute.', true); $('code').focus();
 }
 $('bSend').onclick = sendCode; $('bResend').onclick = sendCode;
 
 $('bCode').onclick = async () => {
   const code = $('code').value.replace(/\D/g, '');
-  if (code.length !== 6) return say('mCode', 'Enter the 6-number code from the text.');
+  if (code.length !== 6) return say('mCode', 'Enter the 6-number code' + (FL ? ' from the text.' : '.'));
   busy($('bCode'), true);
   const r = await call({ action: 'verify', code });
   busy($('bCode'), false);
@@ -337,12 +414,14 @@ async function startSession(s) {
   loadHome();
 }
 
+$('bSoonOut').onclick = async () => { await sb.auth.signOut(); localStorage.removeItem('fl3-portal-phone'); show('vPhone'); };
 // ================= Logged in =================
 let ME = null, DATA = null, KID = '';
 async function loadHome() {
   const { data: me, error } = await meRpc();
   if (VIEW && (error || !me || me.error || !(me.kids || []).length)) { $('vbarTxt').innerHTML = '<b>Admin view</b> · ' + (me && !me.error ? 'no active students for this phone' : 'log in to admin first, then try again'); return; }
   if (error || !me || me.error) { await sb.auth.signOut(); return show('vPhone'); }
+  if (me.gym_slug && me.gym_slug !== 'fliplab' && FL) lookFor(me.gym_slug);   // logged in without ?gym= in the link
   if (VIEW) $('vbarTxt').innerHTML = '<b>Admin view</b> · ' + esc(me.parent_name || fmt(me.phone)) + ' · look only';
   ME = me;
   const first = String(me.parent_name || '').trim().split(/\s+/)[0];
@@ -361,16 +440,20 @@ async function loadHome() {
 function drawKids() {
   const ks = ME.kids || [];
   $('kids').innerHTML = ks.length > 1 ? ks.map(k => `<span class="chip${k.id === KID ? ' on' : ''}" data-k="${esc(k.id)}">${esc(k.first_name)}</span>`).join('') : '';
-  $('kids').querySelectorAll('[data-k]').forEach(c => c.onclick = () => { KID = c.dataset.k; PAY_ALL = WAV_SHOW = false; drawKids(); draw(); drawClasses(); drawAcct(); });
+  $('kids').querySelectorAll('[data-k]').forEach(c => c.onclick = () => { KID = c.dataset.k; PAY_ALL = WAV_SHOW = false; drawKids(); if (WL) { WPICK = null; drawWl(); drawSpot(); } else draw(); drawClasses(); drawAcct(); });
 }
 async function act(body) {
-  try { if (VIEW) body = { ...body, view_phone: VIEW }; const r = await sb.functions.invoke('portal-act', { body }); return r.data || { error: (r.error && r.error.message) || 'Something went wrong.' }; }
+  try { body = { ...body, wl: 1 }; if (VIEW) body = { ...body, view_phone: VIEW }; const r = await sb.functions.invoke('portal-act', { body }); return r.data || { error: (r.error && r.error.message) || 'Something went wrong.' }; }
   catch (e) { return { error: 'No connection. Try again.' }; }
 }
 async function refresh() {
   const r = await act({ action: 'load' });
+  if (r.error === 'portal_off') return show('vSoon');
+  if (r.gym) applyGym(r.gym);
   if (r.error) { $('homeNext').innerHTML = $('lessonList').innerHTML = `<div class="card"><p class="msg err" style="margin:0">${esc(r.error)}</p></div>`; return; }
-  DATA = r; draw();
+  DATA = r;
+  if (r.mode === 'waitlist') { if (!WL) wlMode(); WL = r.wl; WLX = {}; drawWl(); drawSpot(); return; }
+  draw();
 }
 
 const SH = { Monday: 'Mon', Tuesday: 'Tue', Wednesday: 'Wed', Thursday: 'Thu', Friday: 'Fri', Saturday: 'Sat', Sunday: 'Sun' };
@@ -566,8 +649,92 @@ async function openExtra() {
   };
 }
 
+// ================= Waitlist portal (every kid on the waitlist, no weekly lesson) =================
+// Home = this week's + next week's cancellations (one-time lessons, limit 1 per kid per week); My spot = waitlist days/times.
+let WL = null, WLX = {}, WPICK = null, SPOT = {};
+function wlMode() {
+  ['tLessons', 'tClasses', 'tSkills'].forEach(t => { const b = document.querySelector(`#nav [data-t="${t}"]`); if (b) b.style.display = 'none'; });
+  document.querySelector('#nav [data-t="tSpot"]').style.display = '';
+  $('nav').style.gridTemplateColumns = 'repeat(' + [...document.querySelectorAll('#nav button')].filter(b => b.style.display !== 'none').length + ',1fr)';
+  $('homeNext').style.display = $('homeSkill').style.display = 'none'; $('wlHome').style.display = '';
+}
+const wlKid = () => (WL.kids || []).find(k => k.student_id === KID) || {};
+const wlBanner = () => { const nm = esc(kidFirst(KID) || 'Your child');
+  return `<div class="card" style="border-color:var(--blue)"><p class="eyebrow" style="margin:0">Waitlist</p><div class="ltitle" style="margin:4px 0">${nm} is on the waitlist</div>
+    <p class="tip" style="margin:0">There's no weekly spot for ${nm} yet. Until one opens, you can book a one-time lesson when a regular student cancels.</p></div>`; };
+async function drawWl() {
+  if (!WL) return;
+  const kid = KID, hidden = G && (G.hide || []).includes('lessons');
+  if (hidden) { $('wlHome').innerHTML = wlBanner(); return; }
+  if (!WLX[kid]) { $('wlHome').innerHTML = wlBanner() + '<div class="card"><p class="tip" style="margin:0">Finding open times…</p></div>';
+    const r = await act({ action: 'extra_options', student_id: kid }); WLX[kid] = r; if (kid !== KID) return; }
+  const r = WLX[kid];
+  if (r.error) { $('wlHome').innerHTML = wlBanner() + `<div class="card"><p class="msg err" style="margin:0">${esc(r.error)}</p></div>`; return; }
+  const booked = items().filter(it => it.kind === 'Add' && !it.past && it.status !== 'Cancelled');
+  const row = (a, b, btn, hi) => `<div class="lrow" style="padding:10px 0;border-top:1px solid ${hi ? 'var(--blue)' : 'var(--line)'}"><div><div class="ltitle" style="font-size:17px">${a}</div><div class="lsub">${b}</div></div>${btn}</div>`;
+  const wks = r.weeks.map((w, wi) => {
+    const mine = booked.filter(it => it.ws === w.ws), n = w.used ? 1 : 0;
+    let body = mine.map(it => row(`${dlabel(it.date, it.day)} · Booked`, `${esc(it.time)} · ${esc(it.coach || r.coach)} · ${esc(r.price)}`,
+      it.undo_id ? `<button class="small" data-undo="${esc(it.undo_id)}" data-x="1">Cancel booking</button>` : '', true)).join('');
+    if (!w.used) body += w.slots.length ? w.slots.map((s, i) => row(dlabel(s.date, s.day), `${esc(s.time)} · ${esc(r.coach)}`, `<button class="small blue" data-wb="${wi}_${i}">Book</button>`)).join('')
+      : `<p class="tip" style="margin:6px 0 0">No open times${wi ? ' next week' : ' this week'} yet. Times open up when a regular student cancels.</p>`;
+    return `<div class="wk" style="margin-top:${wi ? 14 : 8}px">${wi ? 'Next week' : 'This week'} · ${n} of 1 booked</div>${body}`;
+  }).join('');
+  let conf = '';
+  if (WPICK && WPICK.kid === kid) { const s = WPICK.s, nm = esc(kidFirst(kid));
+    conf = `<div class="card" style="border-color:var(--blue)"><div class="ltitle">Confirm lesson</div>
+      <p style="margin:6px 0">${dlabel(s.date, s.day)} · ${esc(s.time)} · 30 min · ${esc(r.coach)} · ${esc(r.price)}</p>
+      <p class="tip" style="margin:0 0 8px">This is a one-time lesson. It is not a weekly spot, and it does not change ${nm}'s place on the waitlist.</p>
+      <label style="display:flex;gap:10px;align-items:flex-start;text-transform:none;letter-spacing:0;font-family:inherit;font-size:14px;color:var(--white)"><input type="checkbox" id="wOk" style="width:18px;height:18px;margin-top:2px;flex:none"><span>I understand this is one time only, on ${dlabel(s.date, s.day)}.</span></label>
+      <button class="btn btn-primary" id="wBook">Book lesson</button><button class="link" id="wBack">Back</button><div class="msg" id="wMsg"></div></div>`; }
+  $('wlHome').innerHTML = wlBanner() + `<div class="card"><div class="lrow"><div class="ltitle">Open times</div><p class="eyebrow" style="margin:0;color:var(--muted)">30 min · ${esc(r.price)}</p></div>${wks}</div>` + conf
+    + `<p class="eyebrow" style="text-align:center;color:var(--muted)">1 lesson per week · Cancel up to ${esc(r.cancel_hrs || 24)} hrs before</p>`;
+  $('wlHome').querySelectorAll('[data-wb]').forEach(b => b.onclick = () => { const [wi, i] = b.dataset.wb.split('_').map(Number);
+    WPICK = { kid, s: { ...r.weeks[wi].slots[i], ws: r.weeks[wi].ws } }; drawWl().then(() => { const c = $('wBook'); if (c) c.scrollIntoView({ behavior: 'smooth', block: 'center' }); }); });
+  $('wlHome').querySelectorAll('[data-undo]').forEach(b => b.onclick = () => doUndo(b.dataset.undo, true));
+  if ($('wBack')) $('wBack').onclick = () => { WPICK = null; drawWl(); };
+  if ($('wOk')) $('wOk').onchange = () => say('wMsg', '');
+  if ($('wBook')) $('wBook').onclick = async () => {
+    if (!$('wOk').checked) return say('wMsg', 'Tick the box first.');
+    busy($('wBook'), true);
+    const s = WPICK.s, x = await act({ action: 'extra_book', student_id: kid, ws: s.ws, day: s.day, time: s.time, ok_once: true });
+    busy($('wBook'), false);
+    if (x.error) { if (/taken/i.test(x.error)) delete WLX[kid]; return say('wMsg', x.error); }
+    WPICK = null; delete WLX[kid]; await refresh();
+  };
+}
+function drawSpot() {
+  if (!WL) return;
+  const w = wlKid(), nm = esc(kidFirst(KID)), ST = WL.slot_times || {};
+  if (!SPOT[KID]) SPOT[KID] = { open: !!w.open, times: new Set(w.times || []), days: new Set((w.times || []).map(t => t.split(' ')[0])) };
+  const sp = SPOT[KID];
+  const LOOK = { solo: 'Weekly private', private: 'Weekly private', shared: 'Weekly shared', group: 'Small group', class: 'Class' };
+  const dayChips = Object.keys(ST).map(d => `<button class="wkchip${sp.days.has(d) ? ' on' : ''}" data-d="${esc(d)}">${SH[d]}</button>`).join('');
+  const timeRows = Object.keys(ST).filter(d => sp.days.has(d)).map(d => `<div class="wk" style="margin:12px 0 0">${esc(d)}</div><div class="wkchips">`
+    + ST[d].map(t => `<button class="wkchip${sp.times.has(d + ' ' + t) ? ' on' : ''}" data-t="${esc(d + ' ' + t)}">${esc(t.replace(/ [AP]M$/, ''))}</button>`).join('') + '</div>').join('');
+  $('spotBox').innerHTML = `<div class="card"><div class="ltitle">My waitlist spot</div>
+    <div class="prow" style="margin-top:8px"><span style="color:var(--muted)">On the list since</span><span>${w.since ? fmtD(w.since) : '—'}</span></div>
+    <div class="prow"><span style="color:var(--muted)">Looking for</span><span>${esc(LOOK[String(w.looking || '').toLowerCase()] || w.looking || 'Weekly lesson')}</span></div>
+    <label style="display:flex;gap:10px;align-items:center;margin-top:14px;text-transform:none;letter-spacing:0;font-family:inherit;font-size:14px;color:var(--white)"><input type="checkbox" id="spOpen" style="width:18px;height:18px;flex:none"${sp.open ? ' checked' : ''}>Open to any day and time</label>
+    <div id="spPick" style="${sp.open ? 'display:none' : ''}"><div class="wk" style="margin-top:14px">Days that work</div><div class="wkchips">${dayChips}</div>${timeRows}</div>
+    <button class="btn btn-primary" id="spSave" style="margin-top:14px">Save changes</button><div class="msg" id="spMsg"></div>
+    <p class="tip" style="margin-top:6px">Coach Steve will text you when a weekly spot opens for ${nm}.</p></div>`;
+  $('spOpen').onchange = () => { sp.open = $('spOpen').checked; drawSpot(); };
+  $('spotBox').querySelectorAll('[data-d]').forEach(b => b.onclick = () => { const d = b.dataset.d;
+    if (sp.days.has(d)) { sp.days.delete(d); [...sp.times].forEach(t => { if (t.startsWith(d + ' ')) sp.times.delete(t); }); } else sp.days.add(d); drawSpot(); });
+  $('spotBox').querySelectorAll('[data-t]').forEach(b => b.onclick = () => { const t = b.dataset.t; sp.times.has(t) ? sp.times.delete(t) : sp.times.add(t); b.classList.toggle('on'); say('spMsg', ''); });
+  $('spSave').onclick = async () => {
+    if (!sp.open && !sp.times.size) return say('spMsg', 'Pick at least one time, or tick "Open to any day and time".');
+    busy($('spSave'), true);
+    const x = await act({ action: 'wl_save', student_id: KID, open: sp.open, times: [...sp.times] });
+    busy($('spSave'), false);
+    if (x.error) return say('spMsg', x.error);
+    w.open = sp.open; w.times = [...sp.times]; say('spMsg', 'Saved', true);
+  };
+}
+
 async function doUndo(exId, extra) {
-  if (!confirm(extra ? 'Cancel this one-time extra lesson?' : 'Undo this change and go back to the regular time?')) return;
+  if (!confirm(extra ? (WL ? 'Cancel this one-time lesson?' : 'Cancel this one-time extra lesson?') : 'Undo this change and go back to the regular time?')) return;
   const x = await act({ action: 'undo', ex_id: exId });
   if (x.error) return alert(x.error);
   await refresh();
@@ -592,7 +759,7 @@ const ST_WAV = 'By signing below, I acknowledge that participation in gymnastics
 const ftext = t => t.trim().split(/\n\s*\n/).map(p => { const ls = p.split('\n').map(esc); return (ls.length > 1 && ls[0].length < 70 ? '<strong>' + ls.shift() + '</strong><br>' : '') + ls.join('<br>'); }).join('<br><br>');
 const polHtml = () => ACCT.policy_text ? ftext(ACCT.policy_text) : ST_POL.replace(/24 hours/g, (ACCT.cancel_hrs || 24) + ' hours');
 const wavHtml = () => ACCT.waiver_text ? ftext(ACCT.waiver_text) : ST_WAV;
-const textNum = () => (ACCT && String(ACCT.contact.text || '').replace(/\D/g, '').slice(-10)) || '5134432674';
+const textNum = () => (ACCT && String(ACCT.contact.text || '').replace(/\D/g, '').slice(-10)) || (G ? '' : '5134432674');
 async function loadAcct() {
   const r = await act({ action: 'account' });
   if (r.error) { $('acctBox').innerHTML = `<div class="card"><p class="msg err" style="margin:0">${esc(r.error)}</p></div>`; return; }
@@ -614,17 +781,17 @@ function drawAcct() {
   // Family info
   const ph = p => p && p.length === 10 ? fmt(p) : '';
   h.push(`<div class="card"><div class="ahd"><label>Family info</label><button class="link" id="bFamEdit" style="padding:0">Edit</button></div>
-    <div>${esc(k.first_name)} ${esc(k.last_name || '')}${k.dob ? ' · born ' + esc(fmtD(k.dob)) : ''}</div>
+    <div>${esc(k.first_name)} ${esc(k.last_name || '')}${k.dob ? ' · born ' + esc(fmtD(k.dob)) + ' · Age ' + kidAge(k.dob) : ''}</div>
     <div style="margin-top:6px">${esc(k.parent_name || '')}${ph(k.parent_phone) ? ' · ' + ph(k.parent_phone) : ''}</div>
     <div class="tip" style="font-size:14px">${esc(k.parent_email || 'No email')}</div>
     <div class="tip" style="font-size:14px">Emergency: ${k.emergency_name ? esc(k.emergency_name) + (ph(k.emergency_phone) ? ' ' + ph(k.emergency_phone) : '') : 'none'}</div></div>`);
   // Waiver
-  const w = k.waiver;
-  h.push(`<div class="card"><label>Waiver</label>` + (w ? `<div>✓ Signed by ${esc(w.signature || w.parent_name)}${w.signed_at ? ' · ' + esc(fmtD(w.signed_at.slice(0, 10))) : ''}</div><button class="link" id="bWavView">${WAV_SHOW ? 'Hide waiver' : 'View waiver'}</button>${WAV_SHOW ? `<div class="ftxt">${wavHtml()}</div>` : ''}`
+  const w = k.waiver, noWav = G && !ACCT.waiver_text, noPol = G && !ACCT.policy_text;   // other gyms: blank = coach hasn't added one, so no card
+  if (!noWav) h.push(`<div class="card"><label>Waiver</label>` + (w ? `<div>✓ Signed by ${esc(w.signature || w.parent_name)}${w.signed_at ? ' · ' + esc(fmtD(w.signed_at.slice(0, 10))) : ''}</div><button class="link" id="bWavView">${WAV_SHOW ? 'Hide waiver' : 'View waiver'}</button>${WAV_SHOW ? `<div class="ftxt">${wavHtml()}</div>` : ''}`
     : `<div class="warnbox" style="margin-top:0">No waiver on file for ${esc(k.first_name)}.</div><button class="btn btn-primary" id="bWavSign">Sign waiver</button>`) + '</div>');
   // Policies
-  h.push(`<div class="card"><label>Policies</label><div class="ftxt" style="margin-top:0">${polHtml()}</div>
-    <p class="tip" style="margin:10px 0 0">Text Coach Steve <a href="sms:+1${textNum()}" style="color:var(--blue-light)">${fmt(textNum())}</a>${C.email ? ' · <a href="mailto:' + esc(C.email) + '" style="color:var(--blue-light)">' + esc(C.email) + '</a>' : ''}</p></div>`);
+  h.push(`<div class="card"><label>${noPol ? 'Contact' : 'Policies'}</label>${noPol ? '' : `<div class="ftxt" style="margin-top:0">${polHtml()}</div>`}
+    <p class="tip" style="margin:10px 0 0">${textNum() ? `Text Coach Steve <a href="sms:+1${textNum()}" style="color:var(--blue-light)">${fmt(textNum())}</a>` : 'Contact Coach Steve'}${C.email ? ' · <a href="mailto:' + esc(C.email) + '" style="color:var(--blue-light)">' + esc(C.email) + '</a>' : ''}</p></div>`);
   $('acctBox').innerHTML = h.join('');
   const on = (id, f) => { const e = $(id); if (e) e.onclick = f; };
   on('bZelle', () => { const z = C.zelle; try { navigator.clipboard.writeText(z); } catch (e) {} alert('Zelle: ' + z + (navigator.clipboard ? '\n(copied)' : '')); });
@@ -678,6 +845,7 @@ function drawHomeSkill(k) {
     <div class="bar"><div style="width:${Math.round(done / l.skills.length * 100)}%"></div></div></div>`;
   $('bHomeSkill').onclick = () => goTab('tSkills');
 }
+function kidAge(v) { const b = new Date(v + 'T00:00:00'), n = new Date(); let a = n.getFullYear() - b.getFullYear(); if (n < new Date(n.getFullYear(), b.getMonth(), b.getDate())) a--; return a; }
 function goTab(t) { const b = document.querySelector(`#nav button[data-t="${t}"]`); if (b) b.click(); }
 function openFam(k) {
   const f = (id, lb, v, t) => `<div class="fld"><label for="${id}">${lb}</label><input id="${id}" ${t || ''} value="${esc(v || '')}"></div>`;

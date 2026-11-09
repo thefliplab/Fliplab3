@@ -21,28 +21,50 @@ Rules:
 - Fix grammar and punctuation, but keep his natural, friendly wording.
 - Reply with only the message text.`;
 
+// Other gyms: a plain friendly coach voice with their own gym + coach name (never Steve / Flip Lab / Loveland)
+const SYSTEM_GYM = (gym: string, coach: string) => `You write text messages from ${coach} at ${gym} to parents of athletes they coach.
+
+Voice:
+- Opens with a simple greeting, e.g. "Hi {parent}!" Do NOT have the coach introduce themselves.
+- Warm, friendly and genuine, in plain conversational sentences. Not corporate or salesy.
+- Bad news is plain and kind, then right away what the coach CAN offer.
+- Ends with a clear, easy next step. No sign-off line, no emojis, no pile of exclamation marks.
+- Use {kid} for the athlete's first name where it fits and keep {parent} and {kid} exactly as written.
+
+Rules:
+- Use only facts the coach gives you. Never invent dates, times, prices, policies or names.
+- Fix grammar and punctuation, but keep the coach's natural, friendly wording.
+- Reply with only the message text.`;
+
 const ASK: Record<string, (b: any) => string> = {
   draft: b => `Write a text to ${b.audience || "families"} about this: ${b.idea}`,
-  shorter: b => `Make this text shorter in Steve's voice, keeping every fact:\n${b.text}`,
+  shorter: b => `Make this text shorter in ${b._fl ? "Steve's" : "the same"} voice, keeping every fact:\n${b.text}`,
   friendlier: b => `Make this text warmer and friendlier, keeping every fact:\n${b.text}`,
   professional: b => `Make this text more professional, keeping every fact:\n${b.text}`,
-  reply: b => `Write Steve's reply to ${b.parent || "the parent"}${b.kid ? " (parent of " + b.kid + ")" : ""}. This goes to one person, so use their real first name, not {parent} or {kid}. Only use facts from the conversation or the coach's note; if you'd need a fact you don't have, keep it general. Conversation so far, oldest first:\n${b.thread}\n\nCoach's note on what to say (may be empty): ${b.idea || ""}`,
+  reply: b => `Write ${b._fl ? "Steve's" : "the coach's"} reply to ${b.parent || "the parent"}${b.kid ? " (parent of " + b.kid + ")" : ""}. This goes to one person, so use their real first name, not {parent} or {kid}. Only use facts from the conversation or the coach's note; if you'd need a fact you don't have, keep it general. Conversation so far, oldest first:\n${b.thread}\n\nCoach's note on what to say (may be empty): ${b.idea || ""}`,
   onetext: b => `Rewrite this text to fit in one SMS: 150 characters or fewer counting {parent} and {kid} as 8 characters each. Keep the key facts:\n${b.text}`,
 };
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   const user = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: req.headers.get("Authorization") || "" } } });
-  const { data: gyms } = await user.from("gyms").select("id").limit(1);
+  const { data: gyms } = await user.from("gyms").select("id,slug,name").limit(1);
   if (!gyms?.length) return json({ error: "Not signed in" }, 401);
   const key = Deno.env.get("ANTHROPIC_API_KEY");
   if (!key) return json({ error: "AI isn't set up yet (ANTHROPIC_API_KEY secret missing)" }, 500);
   const b = await req.json().catch(() => ({}));
+  let system = SYSTEM;
+  b._fl = gyms[0].slug === "fliplab";
+  if (!b._fl) {
+    const { data: co } = await user.from("coaches").select("name").eq("gym_id", gyms[0].id).eq("active", true).order("created_at").limit(1).maybeSingle();
+    const cn = co?.name ? (/^coach\b/i.test(co.name) ? co.name : "Coach " + co.name) : "the coach";
+    system = SYSTEM_GYM(gyms[0].name || "their gym", cn);
+  }
   const ask = ASK[b.mode];
   if (!ask || (b.mode === "draft" ? !b.idea : b.mode === "reply" ? !b.thread : !b.text)) return json({ error: "Nothing to work with" }, 400);
   const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST",
     headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-    body: JSON.stringify({ model: "claude-sonnet-5-5", max_tokens: 600, system: SYSTEM, messages: [{ role: "user", content: ask(b).slice(0, 4000) }] }) });
+    body: JSON.stringify({ model: "claude-sonnet-5-5", max_tokens: 600, system, messages: [{ role: "user", content: ask(b).slice(0, 4000) }] }) });
   const out = await r.json().catch(() => ({}));
   if (!r.ok) return json({ error: out?.error?.message || "AI error " + r.status }, 502);
   return json({ text: (out.content || []).map((c: any) => c.text || "").join("").trim() });
