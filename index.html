@@ -765,7 +765,7 @@ function dobPick(inp, oldest, lock) {
   };
   if (lock) {
     lk = document.createElement('div'); lk.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--line);border-radius:8px;background:#fff;padding:3px 12px;margin:4px 0 10px;min-height:42px;';
-    lk.innerHTML = '<span><div class="dobd" style="white-space:nowrap;font-size:16px;line-height:1.25"></div><div class="doba" style="font-size:13px;color:#888;line-height:1.2"></div></span><a href="#" style="color:#E24B4A;font-weight:700;text-decoration:none;padding:6px 0 6px 10px">Edit</a>';
+    lk.innerHTML = '<span><div class="dobd" style="white-space:nowrap;font-size:16px;line-height:1.25"></div><div class="doba" style="font-size:13px;color:#888;line-height:1.2"></div></span><a href="#" style="color:#E24B4A;font-weight:400;text-decoration:none;padding:6px 0 6px 10px">Edit</a>';
     lk.lastChild.onclick = e => { e.preventDefault(); draw(true); };
     cx = document.createElement('a'); cx.href = '#'; cx.textContent = 'Cancel'; cx.style.cssText = 'display:none;color:#E24B4A;font-weight:700;text-decoration:none;font-size:14px;margin-top:6px';
     cx.onclick = e => { e.preventDefault(); inp.value = saved; };
