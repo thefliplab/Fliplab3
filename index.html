@@ -270,9 +270,9 @@ button.fl-tap,a.btn.fl-tap{outline:2px solid #1D9E75;outline-offset:2px}
     <div id="cm_will" style="font-size:12px;color:#666;margin:-4px 2px 8px"></div>
     <div class="sec">Message <select id="cm_saved" onchange="cmUseSaved()"><option value="">Saved messages…</option></select></div>
     <div class="card">
-      <div style="display:flex;gap:6px;margin-bottom:6px"><input id="cm_idea" placeholder="✨ What do you want to say? e.g. gym closed Thu for Thanksgiving" style="flex:1;margin:0"><button class="paybtn" style="background:#EEEDFE;color:#3C3489;white-space:nowrap" onclick="cmAI('draft')">✨ Write it</button></div>
+      <div class="aiOnly" style="display:flex;gap:6px;margin-bottom:6px"><input id="cm_idea" placeholder="✨ What do you want to say? e.g. gym closed Thu for Thanksgiving" style="flex:1;margin:0"><button class="paybtn" style="background:#EEEDFE;color:#3C3489;white-space:nowrap" onclick="cmAI('draft')">✨ Write it</button></div>
       <textarea id="cm_msg" rows="4" placeholder="Hi {parent}! …" oninput="cmLen()"></textarea>
-      <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin:4px 0"><button class="paybtn" style="background:#EEEDFE;color:#3C3489" onclick="cmAI('shorter')">Shorter</button><button class="paybtn" style="background:#EEEDFE;color:#3C3489" onclick="cmAI('friendlier')">Friendlier</button><button class="paybtn" style="background:#EEEDFE;color:#3C3489" onclick="cmAI('professional')">More professional</button><button class="paybtn" style="background:#EEEDFE;color:#3C3489" onclick="cmAI('onetext')">Fit in 1 text</button><small id="cm_len" style="margin-left:auto;color:#888"></small></div><div id="cm_ai" class="msg"></div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin:4px 0"><button class="paybtn aiOnly" style="background:#EEEDFE;color:#3C3489" onclick="cmAI('shorter')">Shorter</button><button class="paybtn aiOnly" style="background:#EEEDFE;color:#3C3489" onclick="cmAI('friendlier')">Friendlier</button><button class="paybtn aiOnly" style="background:#EEEDFE;color:#3C3489" onclick="cmAI('professional')">More professional</button><button class="paybtn aiOnly" style="background:#EEEDFE;color:#3C3489" onclick="cmAI('onetext')">Fit in 1 text</button><small id="cm_len" style="margin-left:auto;color:#888"></small></div><div id="cm_ai" class="msg"></div>
       <small style="color:#888;display:block;margin:4px 0 8px">{parent} and {kid} fill in for each family. A family with two kids gets one text. <a href="#" onclick="cmSaveMsg();return false" style="color:#185FA5">Save this message</a> · <a href="#" onclick="cmDelSaved();return false" style="color:#A32D2D">Delete saved</a></small>
       <input id="cm_subj" placeholder="Email subject (default: your gym name)" style="margin:0 0 4px">
       <div id="cm_vwarn"></div><div id="cm_viaBox"></div>
@@ -296,7 +296,7 @@ button.fl-tap,a.btn.fl-tap{outline:2px solid #1D9E75;outline-offset:2px}
       <div class="sec" style="margin-top:4px"><a href="#" onclick="msBack();return false" style="color:#185FA5;text-decoration:none">‹ Messages</a> <span id="ms_who" style="font-weight:600"></span> <button class="paybtn" style="float:right;background:#fff;color:#d64545;border:1px solid #d64545" onclick="msDelete()">🗑 Delete</button></div>
       <div class="card" id="ms_bubbles" style="display:flex;flex-direction:column;gap:6px;max-height:55vh;overflow-y:auto"></div>
       <div class="card">
-        <div style="display:flex;gap:6px;margin-bottom:6px"><input id="ms_idea" placeholder="✨ Optional: what to say, e.g. yes Tue 5:30 works" style="flex:1;margin:0"><button class="paybtn" style="background:#EEEDFE;color:#3C3489;white-space:nowrap" onclick="msAI()">✨ Draft reply</button></div>
+        <div class="aiOnly" style="display:flex;gap:6px;margin-bottom:6px"><input id="ms_idea" placeholder="✨ Optional: what to say, e.g. yes Tue 5:30 works" style="flex:1;margin:0"><button class="paybtn" style="background:#EEEDFE;color:#3C3489;white-space:nowrap" onclick="msAI()">✨ Draft reply</button></div>
         <textarea id="ms_msg" rows="3" placeholder="Type a reply…"></textarea>
         <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:6px"><label style="margin:0;font-size:13px;font-weight:400;color:#555">From <select id="ms_line" style="width:auto;margin:0;padding:4px 6px;font-size:13px"><option value="Cell">📱 Cell</option><option value="Voice">☎️ Voice</option></select></label><button class="btn" id="ms_send" onclick="msSend()" style="width:auto;padding:8px 18px">Send text</button></div>
       </div>
@@ -1692,6 +1692,7 @@ async function loadSettings() {
 function applySettings() {
   const notMine = !!gymSlug && gymSlug !== 'fliplab';   // Print boxes, Google Calendar sync and Friday RSVP email run on Steve's own setup
   ['printBtn', 'calBox', 'rf_bar'].forEach(id => $(id) && $(id).classList.toggle('hidden', notMine));
+  document.querySelectorAll('.aiOnly').forEach(e => e.classList.toggle('hidden', notMine));   // AI writing is Flip Lab only (Steve, Nov 8)
   ST_TABS.forEach(([t]) => $('tabBtn_' + t).classList.toggle('hidden', (SET.hide_tabs || []).includes(t)));
   Object.assign(PRICING.Solo, SET.prices.Solo); Object.assign(PRICING.Shared, SET.prices.Shared);
   const root = document.documentElement.style;

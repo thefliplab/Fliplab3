@@ -50,6 +50,8 @@ Deno.serve(async (req) => {
   const user = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: req.headers.get("Authorization") || "" } } });
   const { data: gyms } = await user.from("gyms").select("id,slug,name").limit(1);
   if (!gyms?.length) return json({ error: "Not signed in" }, 401);
+  // Steve, Nov 8: AI writing is Flip Lab only for now (runs on Steve's key). SYSTEM_GYM kept for turning it back on later.
+  if (gyms[0].slug !== "fliplab") return json({ error: "AI writing isn't available for your gym." }, 403);
   const key = Deno.env.get("ANTHROPIC_API_KEY");
   if (!key) return json({ error: "AI isn't set up yet (ANTHROPIC_API_KEY secret missing)" }, 500);
   const b = await req.json().catch(() => ({}));
