@@ -3160,7 +3160,9 @@ function renderDash() {
   opens.map(o => [o, wl.filter(w => matchesSlot(w, o.day, o.time)).length]).filter(x => x[1]).slice(0, 3)
     .forEach(([o, n]) => alerts.push(['#378ADD', o.day + ' ' + o.time + ' slot open', n + ' waitlist match' + (n === 1 ? '' : 'es') + ' · tap for Openings', "go('openings')"]));
   if (recentClaims.length) alerts.push(['#1D9E75', recentClaims.length + ' spot' + (recentClaims.length === 1 ? '' : 's') + ' claimed from a text', recentClaims.slice(0, 4).map(c => (c.student_name || '').split(' ')[0] + ' ' + SHORT[c.day] + ' ' + c.time).join(' · '), "go('schedule')"]);
-  const out = weekRows.filter(p => p.status === 'Cancelled' && p.exType !== 'MoveOrigin' && !slotPast(p.day, p.time));
+  // A spot is only "to fill" when nobody else is coming at that day/time with that coach (filled, or shared partner still coming)
+  const someoneThere = p => weekRows.some(q => q.status !== 'Cancelled' && q.day === p.day && q.time === p.time && (q.coach || '') === (p.coach || ''));
+  const out = weekRows.filter(p => p.status === 'Cancelled' && p.exType !== 'MoveOrigin' && !slotPast(p.day, p.time) && !someoneThere(p));
   if (out.length) alerts.push(['#B45309', out.length + ' out this week — spot' + (out.length === 1 ? '' : 's') + ' to fill', out.map(p => p.student_name.split(' ')[0] + ' ' + SHORT[p.day] + ' ' + p.time).join(' · '), "go('openings')"]);
   // Changes parents made in the parent portal this week
   const pp = weekEx.filter(e => (e.extra || {}).by === 'parent' && e.status === 'Active');
