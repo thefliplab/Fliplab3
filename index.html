@@ -1706,6 +1706,9 @@ function applySettings() {
   $('cx_price').value = SET.class_price;
 }
 async function saveSettings(extra) {
+  // The email connection is owned by email-connect (server). Always keep the server's copy so a page opened earlier can't wipe it.
+  const cur = await sb.from('gym_settings').select('value').eq('gym_id', gymId).eq('key', 'settings').maybeSingle();
+  if (cur.data && cur.data.value) { const v = cur.data.value; SET.email_from = v.email_from || ''; SET.email_provider = v.email_provider || ''; }
   const r = await sb.from('gym_settings').upsert({ gym_id: gymId, key: 'settings', value: { ...SET, ...extra }, updated_at: new Date().toISOString() });
   if (r.error) { alert(r.error.message); return false; }
   Object.assign(SET, extra || {}); applySettings(); return true;

@@ -11,7 +11,23 @@ const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers
 const json = (o: unknown, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { ...cors, "Content-Type": "application/json" } });
 const okEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e || "").trim());
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-const toHtml = (t: string) => `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5">${esc(t).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1">$1</a>').replace(/\n/g, "<br>")}</div>`;
+// Claim links (Openings) become buttons in the gym's main color: "Mon Nov 9 at 4:00 PM: <link>" → BOOK MON NOV 9 · 4:00 PM; a link inside a sentence → BOOK THIS SPOT. Plain-text part keeps the links.
+const CLAIM = /(https?:\/\/[^\s<]+\/claim\.html\?t=[^\s<]+)/;
+const btn = (u: string, label: string, color: string) => `<a href="${u}" style="display:block;text-align:center;background:${color};color:#ffffff;text-decoration:none;font-weight:bold;font-size:15px;padding:13px;border-radius:6px;margin:10px 0;letter-spacing:.5px">${label}</a>`;
+const link = (s: string) => s.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1">$1</a>');
+const toHtml = (t: string, color = "#1D9E75") => {
+  let n = 0;
+  const out = esc(t).split("\n").map((line) => {
+    const m = line.match(CLAIM);
+    if (!m) return link(line) + "<br>";
+    n++;
+    const before = line.slice(0, m.index).trim(), after = line.slice(m.index! + m[1].length).trim();
+    const day = before.match(/^((?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b.*):$/);
+    if (day && !after) return btn(m[1], "BOOK " + day[1].toUpperCase().replace(" AT ", " · "), color);
+    return (before ? before + "<br>" : "") + btn(m[1], "BOOK THIS SPOT", color) + (after ? link(after) + "<br>" : "");
+  }).join("");
+  return `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5">${out}${n > 1 ? '<div style="font-size:12px;color:#999999;margin-top:6px">You can book one of these times.</div>' : ""}</div>`;
+};
 const HOSTS: Record<string, string> = { gmail: "smtp.gmail.com", yahoo: "smtp.mail.yahoo.com", aol: "smtp.aol.com" };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -33,6 +49,8 @@ Deno.serve(async (req) => {
   }
   if (!pw || !host) return json({ error: "Email isn't set up yet" }, 500);
   const { messages = [], batch = null } = await req.json().catch(() => ({}));
+  const { data: gs } = await db.from("gym_settings").select("value").eq("gym_id", gym).eq("key", "settings").maybeSingle();
+  const color = /^#[0-9a-f]{6}$/i.test(gs?.value?.color || "") ? gs!.value.color : "#1D9E75";
 
   // Yahoo cuts a connection off after ~10 emails, so open a fresh connection every 8 (same as before).
   // If the server drops us / refuses login: wait 30s, try ONCE more; still no → stop and mark the rest "paused" (don't hammer it).
@@ -50,7 +68,7 @@ Deno.serve(async (req) => {
   for (const [i, m] of messages.slice(0, 40).entries()) {
     const to = String(m.to || "").trim();
     let ok = false, error: string | undefined;
-    const mail = { from: `${name} <${from}>`, to, subject: m.subject || name, content: m.text, html: toHtml(m.text || "") };
+    const mail = { from: `${name} <${from}>`, to, subject: m.subject || name, content: m.text, html: toHtml(m.text || "", color) };
     if (!okEmail(to) || !m.text) error = "Bad email address or empty message";
     else if (paused) error = "Mail server paused sending. Resend in 30 min.";
     else {
