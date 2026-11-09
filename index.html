@@ -1420,15 +1420,15 @@ function cmBuild() {
   cmOn = new Set(cmFams.filter(f => !f.key.startsWith('none:')).map(f => f.key));
   cmDefaults(keep);
 }
-// Per-family send: f.em (email on/off), f.tx ('off' | 'cell' | 'voice'). Text/Email/Both at the top sets everyone's starting choice.
+// Per-family send: f.em (email on/off), f.tx ('off' | 'cell' | 'voice'). Text/Email/Both at the top sets everyone's starting choice. Per-family switches = Flip Lab only (other gyms just use the top choice).
 const cmDef = () => { const v = viaGet('cm_via'); return { em: v !== 'text', tx: v === 'email' ? 'off' : 'cell' }; };
 function cmDefaults(keep) { const d = cmDef(); (cmFams || []).forEach(f => { const o = keep && keep[f.key]; f.em = o ? o.em : d.em; f.tx = o ? o.tx : d.tx; if (o) f.vOk = o.vOk; }); if ($('cm_fam')) cmRender(); }   // keep = earlier choices (adding a kid doesn't reset them)
 const cmChip = (on, dim) => `class="paybtn" style="padding:2px 9px;font-size:12px;margin:0;${dim ? 'opacity:.4;text-decoration:line-through;' : ''}${on ? 'background:var(--mint);color:#fff' : 'background:#eef0f2;color:#555'}"`;
 function cmRender() {
   const d = cmDef(), voiceOk = !HAND();
   if ($('cm_vlink')) $('cm_vlink').style.display = voiceOk ? '' : 'none';
-  $('cm_fam').innerHTML = cmFams.map((f, i) => { const no = f.key.startsWith('none:'), chg = !no && ((f.email && f.em !== d.em) || (f.phone && f.tx !== d.tx));
-    const sw = no ? '' : `<div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin-top:5px">`
+  $('cm_fam').innerHTML = cmFams.map((f, i) => { const no = f.key.startsWith('none:'), chg = voiceOk && !no && ((f.email && f.em !== d.em) || (f.phone && f.tx !== d.tx));
+    const sw = no || !voiceOk ? '' : `<div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin-top:5px">`
       + (f.email ? `<button type="button" ${cmChip(f.em)} onclick="event.preventDefault();cmEm(${i})">Email</button>` : '')
       + (f.phone ? `<small style="color:#888;margin:0 2px 0 ${f.email ? 6 : 0}px">Text:</small><button type="button" ${cmChip(f.tx === 'off')} onclick="event.preventDefault();cmTx(${i},'off')">Off</button><button type="button" ${cmChip(f.tx === 'cell')} onclick="event.preventDefault();cmTx(${i},'cell')">Cell</button>`
         + (voiceOk ? `<button type="button" ${cmChip(f.tx === 'voice', f.vOk === false)} onclick="event.preventDefault();cmTx(${i},'voice')">${f.vChk ? 'Checking…' : 'Voice'}</button>` : '') : '')
