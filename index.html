@@ -1412,7 +1412,7 @@ function cmBuild() {
   else cmPicked.forEach(fromStu);
   cmSkipped = kids.filter(k => k.unsub).length;
   const fam = {};
-  kids.filter(k => !k.unsub).forEach(k => { const key = (HAND() && k.parent ? 'p:' + String(k.parent).trim().toLowerCase() : '') || String(k.phone || '').replace(/\D/g, '').slice(-10) || (okMail(k.email) ? String(k.email).trim().toLowerCase() : '') || 'none:' + k.sid;
+  kids.filter(k => !k.unsub).forEach(k => { const key = String(k.phone || '').replace(/\D/g, '').slice(-10) || (okMail(k.email) ? String(k.email).trim().toLowerCase() : '') || 'none:' + k.sid;
     const f = fam[key] = fam[key] || { key, phone: k.phone, email: okMail(k.email) ? String(k.email).trim() : '', parent: k.parent, kids: [], sid: k.sid };
     if (!f.email && okMail(k.email)) f.email = String(k.email).trim(); if (!f.kids.includes(k.kid)) f.kids.push(k.kid); });
   const keep = Object.fromEntries((cmFams || []).map(f => [f.key, f]));
@@ -1855,7 +1855,6 @@ function stDraw() {
        <label>Welcome message</label><textarea id="st_wel" rows="2" style="width:100%" placeholder="Welcome! Pick a lesson time below.">${esc(wz.su_welcome)}</textarea>
        <div style="margin-top:10px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden"><div style="padding:10px 12px;font-weight:700;${wz.su_header === 'white' ? 'background:#fff;color:#1f2933;border-bottom:1px solid #eee' : 'background:' + (wz.su_header === 'main' ? wz.color : '#0b1020') + ';color:#fff'}">${wz.logo_url ? `<img src="${esc(wz.logo_url)}" style="height:22px;vertical-align:middle;margin-right:6px;border-radius:3px">` : ''}${esc(gymTitle)}</div>
          <div style="padding:10px 12px;font-size:13px;color:#555">${esc(wz.su_welcome || 'Your welcome message shows here.')}</div><div style="padding:0 12px 12px"><span style="display:inline-block;background:${wz.color};color:#fff;border-radius:6px;padding:6px 12px;font-size:13px">Continue</span></div></div>
-       <div style="font-size:12px;color:var(--muted);margin-top:4px">Preview only. Your sign-up page starts using these in the next update.</div>
        <label>Your sign-up page link</label><div style="font-family:monospace;font-size:12px;background:#f7f8fa;border-radius:8px;padding:8px 10px;word-break:break-all">${esc(suUrl())}</div>
        <div style="display:flex;gap:8px;margin-top:8px"><button class="btn ghost" style="margin:0" onclick="ptCopy(1)">Copy link</button><button class="btn ghost" style="margin:0" onclick="ptText(1)">Text link</button></div></div>`
     + `<button class="btn" style="margin-top:18px" onclick="stSave()">Save settings</button>
@@ -3242,7 +3241,7 @@ async function miAsk() {
   if (!tpl) return m.textContent = 'Type a message.';
   if (!ids.length) return m.textContent = 'Tick at least one family.';
   if (test && !to) return m.textContent = 'Test mode is on. Type a test phone number first.';
-  const fams = {}; ids.forEach(id => { const s = students.find(x => x.id === id), k = (HAND() && s.parent_name ? 'p:' + String(s.parent_name).trim().toLowerCase() : '') || String(s.parent_phone).replace(/\D/g, '').slice(-10); (fams[k] = fams[k] || { phone: s.parent_phone, parent: s.parent_name, sid: s.id, kids: [] }).kids.push(s.first_name); });
+  const fams = {}; ids.forEach(id => { const s = students.find(x => x.id === id), k = String(s.parent_phone).replace(/\D/g, '').slice(-10); (fams[k] = fams[k] || { phone: s.parent_phone, parent: s.parent_name, sid: s.id, kids: [] }).kids.push(s.first_name); });
   const list = Object.values(fams).slice(0, test ? 3 : 60), fill = f => tpl.replace(/\{parent\}/g, (f.parent || '').split(' ')[0] || 'there').replace(/\{kid\}/g, f.kids.join(' and '));
   if (!HAND() && !confirm(test ? 'TEST: send ' + list.length + ' sample text(s) to ' + to + '?' : 'Text ' + list.length + ' famil' + (list.length === 1 ? 'y' : 'ies') + ' for real?\n' + list.map(f => (f.parent || '?') + ' (' + f.phone + ')').join('\n'))) return;
   $('mi_send').disabled = true; m.className = 'msg'; m.textContent = 'Sending…';
