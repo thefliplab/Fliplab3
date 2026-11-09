@@ -1801,8 +1801,9 @@ async function emDisconnect() {
 const PT_TABS = [['lessons', 'Lessons'], ['classes', 'Classes'], ['skills', 'Skills'], ['message', 'Message'], ['account', 'Account']];
 const ptUrl = () => location.origin + '/portal.html' + (HAND() ? '?gym=' + encodeURIComponent(gymSlug) : '');
 function ptTab(t) { stKeep(); const h = wz.portal_hide = (wz.portal_hide || []).slice(); const i = h.indexOf(t); i >= 0 ? h.splice(i, 1) : h.push(t); stDraw(); }
-function ptCopy() { const u = ptUrl(); (navigator.clipboard ? navigator.clipboard.writeText(u) : Promise.reject()).then(() => alert('Link copied'), () => prompt('Copy this link:', u)); }
-function ptText() { location.href = 'sms:' + (IOS ? '&body=' : '?body=') + encodeURIComponent('Here is the link to your parent portal: ' + ptUrl()); }
+const suUrl = () => location.origin + '/register.html' + (HAND() ? '?gym=' + encodeURIComponent(gymSlug) : '');
+function ptCopy(su) { const u = su ? suUrl() : ptUrl(); (navigator.clipboard ? navigator.clipboard.writeText(u) : Promise.reject()).then(() => alert('Link copied'), () => prompt('Copy this link:', u)); }
+function ptText(su) { location.href = 'sms:' + (IOS ? '&body=' : '?body=') + encodeURIComponent(su ? 'Here is the link to sign up for lessons: ' + suUrl() : 'Here is the link to your parent portal: ' + ptUrl()); }
 function stPortal() {
   const on = !wz.portal_off, chip = (txt, act, sel) => `<button class="paybtn" style="margin:0 6px 6px 0;padding:8px 12px;${sel ? 'background:var(--mint-soft);color:#1c7a5a' : 'background:#eee;color:#aaa;text-decoration:line-through'}" onclick="${act}">${sel ? '✓ ' : ''}${txt}</button>`;
   return `<div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px"><b style="font-size:16px">Parent portal</b><div style="color:var(--muted);font-size:13px">Families log in to see lessons, cancel or move, message you and more.</div>`
@@ -1851,7 +1852,9 @@ function stDraw() {
        <label>Welcome message</label><textarea id="st_wel" rows="2" style="width:100%" placeholder="Welcome! Pick a lesson time below.">${esc(wz.su_welcome)}</textarea>
        <div style="margin-top:10px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden"><div style="padding:10px 12px;font-weight:700;${wz.su_header === 'white' ? 'background:#fff;color:#1f2933;border-bottom:1px solid #eee' : 'background:' + (wz.su_header === 'main' ? wz.color : '#0b1020') + ';color:#fff'}">${wz.logo_url ? `<img src="${esc(wz.logo_url)}" style="height:22px;vertical-align:middle;margin-right:6px;border-radius:3px">` : ''}${esc(gymTitle)}</div>
          <div style="padding:10px 12px;font-size:13px;color:#555">${esc(wz.su_welcome || 'Your welcome message shows here.')}</div><div style="padding:0 12px 12px"><span style="display:inline-block;background:${wz.color};color:#fff;border-radius:6px;padding:6px 12px;font-size:13px">Continue</span></div></div>
-       <div style="font-size:12px;color:var(--muted);margin-top:4px">Preview only. Your sign-up page starts using these in the next update.</div></div>`
+       <div style="font-size:12px;color:var(--muted);margin-top:4px">Preview only. Your sign-up page starts using these in the next update.</div>
+       <label>Your sign-up page link</label><div style="font-family:monospace;font-size:12px;background:#f7f8fa;border-radius:8px;padding:8px 10px;word-break:break-all">${esc(suUrl())}</div>
+       <div style="display:flex;gap:8px;margin-top:8px"><button class="btn ghost" style="margin:0" onclick="ptCopy(1)">Copy link</button><button class="btn ghost" style="margin:0" onclick="ptText(1)">Text link</button></div></div>`
     + `<button class="btn" style="margin-top:18px" onclick="stSave()">Save settings</button>
        <button class="btn ghost" style="margin-top:8px" onclick="stClose()">Cancel</button><div id="st_msg" class="msg"></div>`;
   skMasterDraw();
