@@ -50,6 +50,7 @@
   .srow.away .tm { color:#B45309; } .pairwrap { display:flex; align-items:stretch; background:#FAF7FF; border-bottom:1px solid #f0f0f0; }
   .pairwrap .bar { width:3px; background:#7C3AED; margin:8px 8px; border-radius:2px; } .pairwrap .srow { background:transparent; border-bottom:1px dashed #d8cfee; padding-left:4px; }
   .pairwrap .srow:last-child { border-bottom:0; }
+  .skq { font-size:11px; font-weight:600; color:#1c7a5a; border:1px solid #1c7a5a; border-radius:12px; padding:3px 9px; background:#fff; flex-shrink:0; cursor:pointer; }
   .srow.tap { cursor:pointer; } .srow.tap:hover { background:#f6fbf9; }
   .ovl { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:flex-start; justify-content:center; z-index:20; overflow:auto; padding:30px 12px; }
   .mdl { background:#fff; border-radius:12px; width:100%; max-width:460px; padding:16px; }
@@ -1158,12 +1159,14 @@ async function skFull(s) {
   } catch (e) { $('sdPanel').innerHTML = '<div class="card msg err">' + esc(e.message) + '</div>'; }
 }
 // Edit lesson → Skills button (shared lessons: chip per kid)
-async function skQuick() {
-  if (!lmRow) return;
-  skKidsList = [lmRow].concat(partnersOf(lmRow)).filter(r => r.student_id).map(r => r.student_id);
+async function skQuick(row) {
+  row = row || lmRow; if (!row) return;
+  skKidsList = [row].concat(partnersOf(row)).filter(r => r.student_id).map(r => r.student_id);
   $('skModal').classList.remove('hidden');
-  skQuickDraw(lmRow.student_id);
+  skQuickDraw(row.student_id);
 }
+// Schedule row → Skills button (opens the checklist without Edit lesson)
+function skFromRow(id) { const p = weekRows.find(r => r.id === id && r.status !== 'Cancelled'); if (p && p.student_id) skQuick(p); }
 async function skQuickDraw(id) {
   const s = students.find(x => x.id === id); if (!s) { $('skQBody').innerHTML = '<div class="center">Student not found.</div>'; return; }
   skStu = { s, full: false };
@@ -2506,7 +2509,7 @@ function renderWeek() {
   const openRow = (d, slot) => { if (mine(slot)) fill[d.name].open++; const n = wlOn.filter(w => w.status !== 'Drop-In' && matchesSlot(w, d.name, slot.time)).length;
     return `<div class="srow open tap${slot.summer ? ' summer' : ''}" onclick="openAdd('${d.name}','${esc(slot.time)}','${esc(slot.coach)}')"><div class="tm">${esc(slot.time)}</div><div class="nm"><span class="tag ${slot.summer ? 't-summer' : 't-open'}">${slot.summer ? '☀️ Summer Open' : 'Open'}</span>${mTag(n)}</div><div class="co" style="color:#bbb">${esc(slot.coach)}</div></div>`; };
   const oc = p => p.coach && mc && p.coach !== mc ? ' oc' : '';  // another coach's lesson → pink row
-  const row = (p, showTime) => `<div class="srow tap${oc(p)}" onclick="openLesson('${esc(p.id)}')"><div class="tm">${showTime ? esc(p.time) : ''}</div><div class="nm"><b>${esc(p.student_name)}</b>${pills(p)}${covering(p)}</div><div class="co">${esc(p.coach || 'TBD')}</div></div>`;
+  const row = (p, showTime) => `<div class="srow tap${oc(p)}" onclick="openLesson('${esc(p.id)}')"><div class="tm">${showTime ? esc(p.time) : ''}</div><div class="nm"><b>${esc(p.student_name)}</b>${pills(p)}${covering(p)}</div>${p.student_id ? `<span class="skq" onclick="event.stopPropagation();skFromRow('${esc(p.id)}')">Skills</span>` : ''}<div class="co">${esc(p.coach || 'TBD')}</div></div>`;
   // One-week fill sitting in a slot whose regular is Away → "covering for <name>"
   const covering = coverNote;
 
