@@ -62,6 +62,8 @@ Deno.serve(async (req) => {
     const cn = co?.name ? (/^coach\b/i.test(co.name) ? co.name : "Coach " + co.name) : "the coach";
     system = SYSTEM_GYM(gyms[0].name || "their gym", cn);
   }
+  const today = new Date().toLocaleDateString("en-US", { timeZone: "America/New_York", weekday: "long", month: "long", day: "numeric", year: "numeric" });
+  system += `\n\nToday is ${today}. When the coach names a day in words ("this Monday", "the Monday after next", "back the Monday after that"), work out the real date from today and write it like "Monday, Nov 16". That counts as a fact the coach gave you.`;
   const ask = ASK[b.mode];
   if (!ask || (b.mode === "draft" ? !b.idea : b.mode === "reply" ? !b.thread : !b.text)) return json({ error: "Nothing to work with" }, 400);
   const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST",
