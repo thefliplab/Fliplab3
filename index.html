@@ -1325,7 +1325,7 @@ async function skMAdd(lvId) {
   skMDone(await sb.from('skills').insert({ id: 'SK_' + Date.now(), gym_id: gymId, level_id: lvId, name: v, sort: max + 10, active: true, created_at: new Date().toISOString() }));
 }
 // ================= COMMUNICATE: text blasts to a group (dedup by parent phone, skip unsubscribed) =================
-const CM_AUD = [['active','Everyone active'],['day','A day'],['class','A class'],['wl','Waitlist'],['di','Drop-In'],['pick','Pick kids']];
+const CM_AUD = [['active','Everyone active'],['off','Inactive'],['day','A day'],['class','A class'],['wl','Waitlist'],['di','Drop-In'],['pick','Pick kids']];
 let cmAud = 'active', cmData = null, cmFams = [], cmOn = new Set(), cmPicked = [], cmSaved = [], cmSkipped = 0;
 async function loadComm() {
   const today = ymd(new Date());
@@ -1404,6 +1404,7 @@ function cmBuild() {
   const fromStu = id => { const s = byId[id]; if (s) kids.push({ phone: s.parent_phone, email: s.parent_email, parent: s.parent_name, kid: s.first_name, sid: s.id, unsub: !!s.unsubscribed }); };
   const fromWl = w => { const s = byId[w.student_id] || {}; kids.push({ phone: s.parent_phone || w.parent_phone, email: s.parent_email || w.parent_email, parent: s.parent_name || w.parent_name, kid: s.first_name || (w.student_name || '').split(' ')[0], sid: w.student_id, unsub: !!s.unsubscribed || (w.extra || {}).Unsubscribed === 'Yes' }); };
   if (cmAud === 'active') students.filter(s => isOn(s) && (grp.priv.has(s.id) || grp.cls.has(s.id))).forEach(s => fromStu(s.id));
+  else if (cmAud === 'off') students.filter(s => !isOn(s)).forEach(s => fromStu(s.id));
   else if (cmAud === 'day') { const day = $('cm_day') && $('cm_day').value, cls = new Set(d.C.filter(c => c.day === day).map(c => c.id));
     new Set(d.L.filter(l => l.day === day).map(l => l.student_id).concat(d.E.filter(e => cls.has(e.schedule_id)).map(e => e.student_id))).forEach(fromStu); }
   else if (cmAud === 'class') { const id = $('cm_cls') && $('cm_cls').value; new Set(d.E.filter(e => e.schedule_id === id).map(e => e.student_id)).forEach(fromStu); }
@@ -2198,13 +2199,13 @@ async function loadStudents(quiet) {
   render();
 }
 let grp = { priv: new Set(), cls: new Set(), wl: new Set(), di: new Set() }, stuGroup = 'priv';
-const GROUPS = [['priv','Private'],['cls','Class'],['wl','Waitlist'],['di','Drop-In'],['all','All']];
+const GROUPS = [['priv','Private'],['cls','Class'],['wl','Waitlist'],['di','Drop-In'],['off','Inactive'],['all','All']];
 function setGroup(g) { stuGroup = g; ss.set('group', g); render(); }
 
 function render() {
   const q = $('q').value.trim().toLowerCase(), all = $('showInactive').checked;
-  const inG = (s, g) => g === 'all' || grp[g].has(s.id);
-  const base = students.filter(s => (all || isOn(s)) && (!q || [s.first_name, s.last_name, s.parent_name, s.parent_phone, s.parent_email].join(' ').toLowerCase().includes(q)));
+  const inG = (s, g) => g === 'off' ? !isOn(s) : (all || isOn(s)) && (g === 'all' || grp[g].has(s.id));
+  const base = students.filter(s => (!q || [s.first_name, s.last_name, s.parent_name, s.parent_phone, s.parent_email].join(' ').toLowerCase().includes(q)));
   $('grpTabs').innerHTML = GROUPS.map(([g, l]) => `<button class="${g === stuGroup ? 'on' : ''}" onclick="setGroup('${g}')">${l} <span style="font-size:11px;opacity:.7">${base.filter(s => inG(s, g)).length}</span></button>`).join('');
   const rows = base.filter(s => inG(s, stuGroup));
   const tags = s => [grp.priv.has(s.id) && 'Private', grp.cls.has(s.id) && 'Class', grp.wl.has(s.id) && 'Waitlist', grp.di.has(s.id) && 'Drop-In'].filter(Boolean);
