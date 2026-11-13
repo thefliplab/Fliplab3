@@ -182,6 +182,7 @@ button.fl-tap,a.btn.fl-tap{outline:2px solid #1D9E75;outline-offset:2px}
       <div class="wklabel" id="wkLabel"></div>
       <button onclick="openAdd()" style="background:var(--mint);color:#fff;border:0;font-weight:600">+ Add lesson</button>
       <button id="printBtn" onclick="openPrint()">🖨 Print</button>
+      <button onclick="doOpen()">Days off</button>
     </div>
     <div class="wk">
       <select id="coachFilter" onchange="renderWeek()"><option value="">All coaches</option></select>
@@ -657,6 +658,21 @@ button.fl-tap,a.btn.fl-tap{outline:2px solid #1D9E75;outline-offset:2px}
     <div id="aw_matches" style="margin-bottom:10px"></div>
     <button class="btn" id="aw_fill">+ Fill with someone else</button>
     <button class="btn" id="aw_back" style="background:#fff;color:#92400E;border:1px solid #F59E0B;margin-top:8px"></button>
+  </div>
+</div>
+<!-- Days off: cancel every lesson (and class) between two dates; those times never show as openings -->
+<div class="ovl hidden" id="doModal" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="mdl">
+    <div class="mh"><b>Days off</b><button class="x" onclick="$('doModal').classList.add('hidden')">✕</button></div>
+    <div style="font-size:13px;color:var(--muted);margin:-4px 0 6px">Cancels every lesson in these dates. The times won't show as openings anywhere.</div>
+    <div class="row2"><div><label>From</label><input type="date" id="do_from" onchange="doPreview()"></div><div><label>To</label><input type="date" id="do_to" onchange="doPreview()"></div></div>
+    <label>Coach</label><select id="do_coach" onchange="doPreview()"></select>
+    <label>Reason (shows on Schedule)</label><input id="do_note" value="Vacation">
+    <div class="chk"><input type="checkbox" id="do_cls" checked onchange="doPreview()"><span>Also cancel classes in these dates</span></div>
+    <div id="do_box" style="background:#FEF3C7;color:#92400E;border-radius:8px;padding:10px;font-size:13px;line-height:1.45;margin-bottom:10px">Pick the dates.</div>
+    <button class="btn" id="do_save" style="background:#E24B4A" onclick="doSave()" disabled>Cancel these days</button>
+    <div style="border-top:1px solid #eee;margin-top:16px;padding-top:10px"><b style="font-size:14px">Coming up</b><div id="do_list"><div class="center">Loading…</div></div>
+    <div style="font-size:12px;color:var(--muted);margin-top:6px">Remove = puts every lesson back.</div></div>
   </div>
 </div>
 <!-- Edit payment: tap ✓ Paid → change amount / method / date, or remove -->
@@ -2413,7 +2429,7 @@ const isExtraSlot = sl => { const se = seasons.find(x => x.id === slotSeason(sl)
 let attMode = 'privates', clsSched = [], clsRoster = [], clsAtt = [], clsOff = new Set(), clsRsvp = [], schClsOpen = new Set();
 let allLessons = [];
 let monthTotal = 0, waitlist = [], openSlots = [];
-let weekOffset = 0, weekRows = [], weekSlots = [], weekEx = [], weekAtt = [], weekPay = [], weekLoading = 0;
+let weekOffset = 0, weekRows = [], weekSlots = [], weekEx = [], weekAtt = [], weekPay = [], weekLoading = 0, daysOff = [];
 
 const ymd = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 function weekDates() {
@@ -2428,7 +2444,7 @@ async function loadWeek(quiet) {
   $('wkLabel').textContent = $('attWkLabel').textContent = $('payWkLabel').textContent = $('openWkLabel').textContent = (weekOffset === 0 ? 'This week · ' : '') + wd[0].label + ' – ' + wd[6].label;
   if (!quiet) $('schedGrid').innerHTML = $('attList').innerHTML = $('balList').innerHTML = $('openList').innerHTML = '<div class="center">Loading…</div>';
   const att = curTab === 'attendance' || curTab === 'payments' || curTab === 'dashboard', mStart = ymd(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
-  const [L, X, S, A, P, M, C, W] = await Promise.all([
+  const [L, X, S, A, P, M, C, W, DO] = await Promise.all([
     sb.from('private_lessons').select('*').not('status', 'in', '("Cancelled","Dropped")'),
     sb.from('schedule_exceptions').select('*').eq('week_start', ws).not('status', 'in', '("Deleted","Expired")'),
     sb.from('available_slots').select('*').eq('active', true),
@@ -2436,12 +2452,13 @@ async function loadWeek(quiet) {
     att || curTab === 'schedule' ? sb.from('payments').select('*').eq('week_start', ws) : { data: [] },
     curTab === 'payments' ? sb.from('payments').select('amount').gte('date', mStart) : { data: [] },
     (curTab === 'attendance' && attMode === 'classes') || curTab === 'payments' || curTab === 'dashboard' || curTab === 'schedule' ? Promise.all([sb.from('class_schedule').select('*').eq('active', true), sb.from('class_enrollments').select('*').not('status', 'in', '("Dropped","Waitlisted")'), sb.from('class_attendance').select('*').eq('week_start', ws), sb.from('class_week_off').select('schedule_id').eq('week_start', ws), sb.from('class_rsvp').select('*').eq('week_start', ws)]) : null,
-    curTab === 'openings' || curTab === 'dashboard' || curTab === 'schedule' ? sb.from('waitlist').select('*').in('status', ['Waiting','Waitlist','Drop-In']).order('signup_date') : { data: [] }
+    curTab === 'openings' || curTab === 'dashboard' || curTab === 'schedule' ? sb.from('waitlist').select('*').in('status', ['Waiting','Waitlist','Drop-In']).order('signup_date') : { data: [] },
+    sb.from('days_off').select('*').gte('end_date', ws).lte('start_date', we)
   ]);
   if (my !== weekLoading) return;
   const err = L.error || X.error || S.error || A.error || P.error || M.error || W.error;
   if (err) { $('schedGrid').innerHTML = $('attList').innerHTML = '<div class="msg err">' + esc(err.message) + '</div>'; return; }
-  weekAtt = A.data; weekPay = P.data; waitlist = W.data || [];
+  weekAtt = A.data; weekPay = P.data; waitlist = W.data || []; daysOff = (DO && DO.data) || [];
   if (C) { const ce = C.find(r => r.error); if (ce) { $('attList').innerHTML = '<div class="msg err">' + esc(ce.error.message) + '</div>'; return; } [clsSched, clsRoster, clsAtt] = C.map(r => r.data); clsOff = new Set((C[3].data || []).map(o => o.schedule_id)); clsRsvp = C[4].data || []; } monthTotal = (M.data || []).reduce((t, x) => t + (+x.amount || 0), 0);
   allLessons = L.data; dashNextMon = null; dashHist = null;
   weekEx = X.data;
@@ -2519,7 +2536,8 @@ function renderWeek() {
     Object.keys(byTime).forEach(t => { if (!times[t]) times[t] = { time: t, coach: '' }; });
     const list = Object.values(times).sort((a, b) => timeVal(a.time) - timeVal(b.time));
     fill[d.name] = { total: list.filter(mine).length, open: 0, away: 0 };
-    html += `<div class="dayhd${d.name === todayName ? ' today' : ''}">${d.name}<span>${d.label}</span>{{FILL_${d.name}}}</div><div class="card" style="padding:0;margin-bottom:6px;border-radius:0 0 10px 10px;overflow:hidden">`;
+    const dOff = offOn(ymd(d.date), coach);
+    html += `<div class="dayhd${d.name === todayName ? ' today' : ''}">${d.name}<span>${d.label}</span>${dOff ? ` <span style="background:#FEF3C7;color:#92400E;border-radius:10px;padding:1px 8px;opacity:1">Day off${dOff.note ? ' · ' + esc(dOff.note) : ''}</span>` : ''}{{FILL_${d.name}}}</div><div class="card" style="padding:0;margin-bottom:6px;border-radius:0 0 10px 10px;overflow:hidden">`;
     const dCls = clsSched.filter(c => c.day === d.name && (!coach || !c.coach || c.coach === coach) && (!q || wkKids(c).some(k => (k.student_name || '').toLowerCase().includes(q)))).sort((a, b) => timeVal(a.time) - timeVal(b.time));
     const clsOut = t => { let h = ''; while (dCls.length && (t === null || timeVal(dCls[0].time) <= t)) h += schClsHtml(dCls.shift()); return h; };
     if (!list.length && !dCls.length) html += '<div class="srow" style="color:#aaa;font-style:italic">No slots configured</div>';
@@ -2538,6 +2556,8 @@ function renderWeek() {
         if (slot.coach && !ls.some(p => !p.coach || p.coach === 'TBD' || p.coach === slot.coach)) html += openRow(d, slot);
       } else {
         const away = weekRows.find(p => p.day === d.name && p.time === slot.time && p.status === 'Cancelled');
+        const sOff = offOn(ymd(d.date), slot.coach);
+        if (sOff) { if (mine(slot)) fill[d.name].total--; html += `<div class="srow" style="background:#FAFAF7"><div class="tm">${esc(slot.time)}</div><div class="nm"><span class="tag t-away">Day off</span>${away ? `<b style="color:#999;text-decoration:line-through">${esc(away.student_name)}</b>` : ''}</div><div class="co">${esc((away && away.coach) || slot.coach)}</div></div>`; return; }
         if (away && mine(slot)) fill[d.name].away++;
         if (away) html += `<div class="srow away tap" onclick="openAway('${esc(away.id)}')"><div class="tm">${esc(slot.time)}</div><div class="nm"><span class="tag t-away">🏖 Away</span><b style="color:#92400E">${esc(away.student_name)}</b><i style="font-size:11px;color:#B45309">out this week</i>${mTag(wlOn.filter(w => matchesSlot(w, d.name, slot.time)).length)}</div><div class="co">${esc(away.coach || slot.coach)}</div></div>`;
         else html += openRow(d, slot);
@@ -2549,6 +2569,111 @@ function renderWeek() {
   wd.forEach(d => { const f = fill[d.name] || { total: 0, open: 0, away: 0 }; T += f.total; O += f.open; A += f.away;
     html = html.replace('{{FILL_' + d.name + '}}', f.total ? `<span style="float:right">${f.total - f.open}/${f.total} filled${f.away ? ' · ' + f.away + ' away' : ''}</span>` : ''); });
   $('schedGrid').innerHTML = (T ? `<div style="font-size:13px;color:#555;margin:4px 2px 2px"><b>${T - O} of ${T}</b> slots filled (${Math.round((T - O) / T * 100)}%) · <span style="color:${O ? '#1c9a73' : '#888'}">${O} open</span>${A ? ` · <span style="color:#B45309">${A} away this week</span>` : ''}</div>` : '') + html;
+}
+
+// ================= DAYS OFF (vacation / holidays) =================
+// days_off row = gym_id, coach (null = all coaches), start_date, end_date, note, extra = what it changed (so Remove can put it all back):
+// extra.made = new Cancel exception ids · extra.changed = [{id, prev}] (a Move / price change that week turned into a Cancel)
+// extra.dropped = one-week Add ids set to Deleted · extra.cls = [{schedule_id, week_start}] class_week_off rows it added.
+// Day-off dates never show as openings (Schedule, Openings, parent portal extras/moves, website "This week only").
+const addD = (s, n) => { const d = new Date(s + 'T12:00:00'); d.setDate(d.getDate() + n); return ymd(d); };
+const doCoachOk = (off, c) => !off || !c || c === 'TBD' || off === c || off.replace(/^coach\s+/i, '') === c.replace(/^coach\s+/i, '');
+const offOn = (date, coach) => date ? daysOff.find(o => date >= o.start_date && date <= o.end_date && doCoachOk(o.coach, coach)) : null;
+const niceD = s => new Date(s + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+let doPlan = null, doSeq = 0;
+async function doOpen() {
+  $('do_coach').innerHTML = '<option value="">All coaches</option>' + coachNames().map(c => `<option>${esc(c)}</option>`).join('');
+  $('do_from').value = $('do_to').value = ''; $('do_note').value = 'Vacation'; $('do_cls').checked = true;
+  $('doModal').classList.remove('hidden'); doPreview(); doLoadList();
+}
+async function doLoadList() {
+  const { data, error } = await sb.from('days_off').select('*').gte('end_date', ymd(new Date())).order('start_date');
+  if (error) return $('do_list').innerHTML = '<div class="msg err">' + esc(error.message) + '</div>';
+  $('do_list').innerHTML = data.length ? data.map(o => { const x = o.extra || {}, n = (x.made || []).length + (x.changed || []).length + (x.dropped || []).length, k = (x.cls || []).length;
+    return `<div class="stu" style="cursor:default"><div>${niceD(o.start_date)} – ${niceD(o.end_date)}${o.note ? ' · ' + esc(o.note) : ''}<small>${esc(o.coach || 'All coaches')} · ${n} lesson${n === 1 ? '' : 's'}${k ? ' · ' + k + ' class' + (k === 1 ? '' : 'es') : ''}</small></div><button class="paybtn" style="background:#eef0f2;color:#555" onclick="doRemove('${esc(o.id)}')">Remove</button></div>`; }).join('')
+    : '<div class="center" style="padding:8px">None</div>';
+}
+// Everything the days off would change (read-only)
+async function doGather(from, to, coach, cls) {
+  const weeks = []; for (let m = mondayOf(from); m <= to; m = addD(m, 7)) weeks.push(m);
+  const [L, X, C, O] = await Promise.all([
+    sb.from('private_lessons').select('*').not('status', 'in', '("Cancelled","Dropped")'),
+    sb.from('schedule_exceptions').select('*').in('week_start', weeks).not('status', 'in', '("Deleted","Expired")'),
+    cls ? sb.from('class_schedule').select('*').eq('active', true) : { data: [] },
+    cls ? sb.from('class_week_off').select('schedule_id,week_start').in('week_start', weeks) : { data: [] }]);
+  const err = L.error || X.error || C.error || O.error; if (err) throw err;
+  const plan = { cancel: [], change: [], drop: [], cls: [] }, inR = (ws, day) => { const i = DAYS.indexOf(day), dt = addD(ws, i); return i >= 0 && dt >= from && dt <= to; };
+  weeks.forEach(ws => {
+    const exs = X.data.filter(e => e.week_start === ws);
+    buildWeek(L.data, exs, ws, addD(ws, 6)).forEach(p => {
+      if (p.status === 'Cancelled' || !inR(ws, p.day) || !doCoachOk(coach, p.coach)) return;
+      if (p.exType === 'Add') { const id = String(p.id), exId = id.startsWith('EX_ONLY_') ? id.slice(8) : id.split('_EX_')[1], ex = exs.find(e => e.id === exId); if (ex) plan.drop.push({ ex, p }); return; }
+      const ex = exs.find(e => e.lesson_id === p.id && e.type !== 'Add');
+      if (ex) plan.change.push({ ex, p }); else plan.cancel.push({ p, ws });
+    });
+    C.data.forEach(c => { if (inR(ws, c.day) && doCoachOk(coach, c.coach) && !O.data.some(o => o.schedule_id === c.id && o.week_start === ws)) plan.cls.push({ c, ws }); });
+  });
+  return plan;
+}
+async function doPreview() {
+  const from = $('do_from').value, to = $('do_to').value, coach = $('do_coach').value, my = ++doSeq;
+  doPlan = null; $('do_save').disabled = true;
+  if (!from || !to) return $('do_box').textContent = 'Pick the dates.';
+  if (to < from) return $('do_box').textContent = '"To" is before "From".';
+  $('do_box').textContent = 'Counting…';
+  let plan; try { plan = await doGather(from, to, coach, $('do_cls').checked); } catch (e) { return $('do_box').textContent = e.message; }
+  if (my !== doSeq) return;
+  doPlan = plan;
+  const n = plan.cancel.length + plan.change.length + plan.drop.length, k = plan.cls.length;
+  $('do_box').innerHTML = `<b>This cancels ${n} lesson${n === 1 ? '' : 's'}${k ? ' + ' + k + ' class' + (k === 1 ? '' : 'es') : ''}</b><br>${niceD(from)} – ${niceD(to)} · nobody is charged`
+    + (plan.drop.length ? `<br>Includes ${plan.drop.length} one-week extra lesson${plan.drop.length === 1 ? '' : 's'} (${esc(plan.drop.map(d => d.p.student_name.split(' ')[0]).join(', '))})` : '')
+    + `<br>Parents can't book, move or add lessons on these days.`;
+  $('do_save').disabled = false;
+}
+async function doSave() {
+  const from = $('do_from').value, to = $('do_to').value, coach = $('do_coach').value || null, note = $('do_note').value.trim(), plan = doPlan;
+  if (!plan) return;
+  const btn = $('do_save'); btn.disabled = true; btn.textContent = 'Cancelling…';
+  const id = 'DO_' + Date.now(), tag = { days_off: id }, why = 'Day off' + (note ? ': ' + note : ''), now = new Date().toISOString();
+  const x = { made: [], changed: [], dropped: [], cls: [] }, errs = [];
+  const r0 = await sb.from('days_off').insert({ id, gym_id: gymId, coach, start_date: from, end_date: to, note, extra: x });
+  if (r0.error) { btn.disabled = false; btn.textContent = 'Cancel these days'; return alert(r0.error.message); }
+  if (plan.cancel.length) {
+    const rows = plan.cancel.map(({ p, ws }) => ({ id: crypto.randomUUID(), gym_id: gymId, lesson_id: p.id, student_id: p.student_id, student_name: p.student_name, coach: p.coach,
+      base_day: p.bday, base_time: p.btime, week_start: ws, original_date: addD(ws, DAYS.indexOf(p.bday)), status: 'Active', type: 'Cancel', notes: why, created_at: now, extra: tag }));
+    const r = await sb.from('schedule_exceptions').insert(rows); if (r.error) errs.push(r.error.message); else x.made = rows.map(r => r.id);
+  }
+  await Promise.all(plan.change.map(async ({ ex }) => {
+    const prev = { type: ex.type, new_day: ex.new_day, new_time: ex.new_time, new_coach: ex.new_coach, lesson_type: ex.lesson_type, notes: ex.notes, extra: ex.extra };
+    const r = await sb.from('schedule_exceptions').update({ type: 'Cancel', new_day: null, new_time: null, new_coach: null, notes: why, extra: { ...(ex.extra || {}), ...tag } }).eq('id', ex.id);
+    r.error ? errs.push(r.error.message) : x.changed.push({ id: ex.id, prev });
+  }));
+  await Promise.all(plan.drop.map(async ({ ex }) => {
+    const r = await sb.from('schedule_exceptions').update({ status: 'Deleted', extra: { ...(ex.extra || {}), ...tag } }).eq('id', ex.id);
+    r.error ? errs.push(r.error.message) : x.dropped.push({ id: ex.id, prev: ex.status, extra: ex.extra });
+  }));
+  if (plan.cls.length) {
+    const rows = plan.cls.map(({ c, ws }) => ({ gym_id: gymId, schedule_id: c.id, week_start: ws }));
+    const r = await sb.from('class_week_off').insert(rows); if (r.error) errs.push(r.error.message); else x.cls = rows.map(r => ({ schedule_id: r.schedule_id, week_start: r.week_start }));
+  }
+  const r1 = await sb.from('days_off').update({ extra: x }).eq('id', id); if (r1.error) errs.push(r1.error.message);
+  btn.textContent = 'Cancel these days';
+  if (errs.length) alert('Some changes failed:\n' + errs.join('\n'));
+  $('do_from').value = $('do_to').value = ''; doPreview(); doLoadList(); loadWeek(true);
+}
+async function doRemove(id) {
+  const { data: o, error } = await sb.from('days_off').select('*').eq('id', id).maybeSingle();
+  if (error || !o) return alert(error ? error.message : 'Not found');
+  if (!confirm('Remove days off ' + niceD(o.start_date) + ' – ' + niceD(o.end_date) + '?\n\nEvery lesson and class it cancelled goes back on the schedule.')) return;
+  const x = o.extra || {}, errs = [], ok = r => { if (r.error) errs.push(r.error.message); };
+  if ((x.made || []).length) ok(await sb.from('schedule_exceptions').update({ status: 'Deleted' }).in('id', x.made));
+  await Promise.all((x.changed || []).map(async c => ok(await sb.from('schedule_exceptions').update(c.prev).eq('id', c.id))));
+  await Promise.all((x.dropped || []).map(async c => ok(await sb.from('schedule_exceptions').update({ status: c.prev || 'Active', extra: c.extra || {} }).eq('id', c.id))));
+  await Promise.all((x.cls || []).map(async c => ok(await sb.from('class_week_off').delete().eq('schedule_id', c.schedule_id).eq('week_start', c.week_start))));
+  if (errs.length) return alert('Some changes failed — days off kept so you can try again:\n' + errs.join('\n'));
+  ok(await sb.from('days_off').delete().eq('id', id));
+  if (errs.length) alert(errs.join('\n'));
+  doLoadList(); doPreview(); loadWeek(true);
 }
 
 // ================= EDIT LESSON (port of 2.0 openMoveLesson / saveMoveLesson / cancelFromSchedule) =================
@@ -3412,7 +3537,7 @@ function computeOpenings() {
   // A slot is taken only by a lesson with the same coach (lessons with no coach / TBD still block it)
   const live = weekRows.filter(p => p.status !== 'Cancelled'), seen = new Set();
   const taken = s => live.some(p => p.day === s.day && p.time === s.time && (!p.coach || p.coach === 'TBD' || !s.coach || p.coach === s.coach));
-  return slots.filter(s => { const k = s.day + '|' + s.time; if (seen.has(k) || slotPast(s.day, s.time) || taken(s)) return false; seen.add(k); return true; })
+  return slots.filter(s => { const k = s.day + '|' + s.time; if (seen.has(k) || slotPast(s.day, s.time) || taken(s) || offOn(dateFor(s.day), s.coach)) return false; seen.add(k); return true; })
     .sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || timeVal(a.time) - timeVal(b.time));
 }
 function renderOpen() {
