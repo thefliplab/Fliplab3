@@ -3,6 +3,10 @@
 //   { cron: true }  ← pg_cron Fridays 12:00 + 13:00 UTC. Only sends when it's Friday 8 AM in New York, the
 //                     gym's switch (gym_settings 'rsvp_friday' {on}) is ON, and it hasn't already sent this week.
 //   { test: true }  ← signed-in admin ("Send me a test"): one sample email to the gym's Yahoo address only.
+//   { resend: true } ← "send missing": same kids, but only those with no answer AND no Sent RSVP email this week
+//                     to the address now on file. Safe to run twice — nobody gets a second copy.
+// If Yahoo rejects or hangs on one email (20s limit), it's logged Failed and the connection is reopened,
+// so one bad email can't stop the rest. The summary to Steve lists failed kids by name.
 // Who gets it: kids enrolled (not Dropped/Waitlisted) in active weekly Sunday classes, with no answer yet this week.
 // Each kid gets a class_rsvp row (week_start = Monday) with a token; the buttons open <site_url>rsvp.html?t=..&a=yes|no.
 // Sends through Yahoo (same as send-email), logs email_log, then emails Steve a short summary.
@@ -56,16 +60,30 @@ Deno.serve(async (req) => {
     if (!data?.length) return json({ error: "Not signed in" }, 401);
     if (data[0].slug !== "fliplab") return json({ error: "Automatic emails are not set up for this gym yet" }, 403);
     gyms = data;
-  } else if (body.cron) {
-    if (now.wd !== "Fri" || now.hour !== 8) return json({ skipped: "not Friday 8 AM in New York" });
+  } else if (body.cron || body.resend) {
+    if (body.cron && (now.wd !== "Fri" || now.hour !== 8)) return json({ skipped: "not Friday 8 AM in New York" });
     const { data } = await db.from("gyms").select("id,name").eq("slug", "fliplab");   // sends from Steve's Yahoo → Flip Lab only
     gyms = data || [];
   } else return json({ error: "Nothing to do" }, 400);
 
+  const connect = () => new SMTPClient({ connection: { hostname: "smtp.mail.yahoo.com", port: 465, tls: true, auth: { username: from, password: pw } } });
   let client: SMTPClient;
-  try { client = new SMTPClient({ connection: { hostname: "smtp.mail.yahoo.com", port: 465, tls: true, auth: { username: from, password: pw } } }); }
+  try { client = connect(); }
   catch (e) { return json({ error: "Couldn't connect to Yahoo: " + String(e).slice(0, 200) }, 500); }
-  const send = async (to: string, subject: string, html: string, text: string) => client.send({ from: `Flip Lab <${from}>`, to, subject, content: text, html });
+  // One email, max 20s. On any error/hang: drop the connection and open a fresh one for the next email.
+  const send = async (to: string, subject: string, html: string, text: string) => {
+    let timer: number | undefined;
+    const p = client.send({ from: `Flip Lab <${from}>`, to, subject, content: text, html });
+    p.catch(() => {});   // if it times out, a late error mustn't crash the function
+    try {
+      await Promise.race([p, new Promise((_, rej) => { timer = setTimeout(() => rej(new Error("Timed out after 20s")), 20000); })]);
+    } catch (e) {
+      const old = client;
+      Promise.resolve().then(() => old.close()).catch(() => {});   // drop the broken connection
+      try { client = connect(); } catch (_) { /* next send will fail and be logged */ }
+      throw e;
+    } finally { clearTimeout(timer); }
+  };
 
   const out: Record<string, unknown>[] = [];
   for (const g of gyms) {
@@ -95,7 +113,14 @@ Deno.serve(async (req) => {
     const sids = [...new Set(kids.map((k) => k.student_id))];
     const { data: ST } = sids.length ? await db.from("students").select("id,first_name,last_name,parent_name,parent_email,unsubscribed").in("id", sids) : { data: [] as any[] };
     const stu = Object.fromEntries((ST || []).map((s) => [s.id, s]));
-    let sent = 0, failed = 0; const skipped: string[] = [], batch = crypto.randomUUID();
+    // "send missing": who already got a Sent RSVP email this week (student + address)
+    const already = new Set<string>();
+    if (body.resend && sids.length) {
+      const { data: L } = await db.from("email_log").select("student_id,to_email").eq("gym_id", g.id).eq("body", "Friday RSVP email")
+        .eq("status", "Sent").gte("sent_at", ws).in("student_id", sids);
+      (L || []).forEach((l) => already.add(l.student_id + "|" + String(l.to_email || "").trim().toLowerCase()));
+    }
+    let sent = 0, failed = 0; const skipped: string[] = [], failedNames: string[] = [], batch = crypto.randomUUID();
     for (const k of kids) {
       const s = stu[k.student_id] || {}, c = (C || []).find((x) => x.id === k.schedule_id)!;
       const name = ((s.first_name || "") + " " + (s.last_name || "")).trim() || k.student_name || "";
@@ -104,6 +129,7 @@ Deno.serve(async (req) => {
       if (cur?.answer) { skipped.push(name + " (already answered)"); continue; }
       const to = String(s.parent_email || k.email || "").trim();
       if (!okEmail(to)) { skipped.push(name + " (no email)"); continue; }
+      if (body.resend && already.has(k.student_id + "|" + to.toLowerCase())) continue;   // already got it this week
       const t = cur?.token || token();
       const up = await db.from("class_rsvp").upsert({ gym_id: g.id, schedule_id: k.schedule_id, student_id: k.student_id, student_name: name, week_start: ws, token: t,
         once: cur?.once || false, source: cur?.source || "admin", answer: cur?.answer || null }, { onConflict: "gym_id,schedule_id,student_id,week_start" });
@@ -116,15 +142,16 @@ Deno.serve(async (req) => {
         await send(to, subject, emailHtml(g.name, parentFirst, first, sunLabel, c.time, `${site}rsvp.html?t=${t}&a=yes`, `${site}rsvp.html?t=${t}&a=no`, `${site}portal.html`),
           `Hi ${parentFirst},\nWill ${first} be at Sunday's class on ${sunLabel} at ${c.time}?\nYes: ${site}rsvp.html?t=${t}&a=yes\nCan't make it: ${site}rsvp.html?t=${t}&a=no\nOr reply in your parent portal: ${site}portal.html`);
         ok = true; sent++;
-      } catch (e) { failed++; error = String((e as Error)?.message || e).slice(0, 300); }
+      } catch (e) { failed++; failedNames.push(name); error = String((e as Error)?.message || e).slice(0, 300); }
       await db.from("email_log").insert({ gym_id: g.id, to_email: to, student_id: k.student_id, family_name: name, subject, body: "Friday RSVP email", status: ok ? "Sent" : "Failed", error, batch });
     }
     try {
       await sleep(1500);
-      await send(from, `Friday RSVP email: ${sent} sent${failed ? `, ${failed} failed` : ""}`, `<div style="font-family:Arial,sans-serif;font-size:15px">Sunday ${sunLabel}: <b>${sent}</b> sent${failed ? `, <b>${failed}</b> failed` : ""}.${skipped.length ? "<br><br>Skipped:<br>" + skipped.map(esc).join("<br>") : ""}</div>`,
-        `Sunday ${sunLabel}: ${sent} sent${failed ? `, ${failed} failed` : ""}.${skipped.length ? "\nSkipped:\n" + skipped.join("\n") : ""}`);
+      const label = body.resend ? "Missing RSVP emails" : "Friday RSVP email";
+      await send(from, `${label}: ${sent} sent${failed ? `, ${failed} failed` : ""}`, `<div style="font-family:Arial,sans-serif;font-size:15px">Sunday ${sunLabel}: <b>${sent}</b> sent${failed ? `, <b>${failed}</b> failed` : ""}.${failedNames.length ? "<br><br><b>Failed:</b><br>" + failedNames.map(esc).join("<br>") : ""}${skipped.length ? "<br><br>Skipped:<br>" + skipped.map(esc).join("<br>") : ""}</div>`,
+        `Sunday ${sunLabel}: ${sent} sent${failed ? `, ${failed} failed` : ""}.${failedNames.length ? "\nFailed:\n" + failedNames.join("\n") : ""}${skipped.length ? "\nSkipped:\n" + skipped.join("\n") : ""}`);
     } catch (_) { /* summary is best-effort */ }
-    out.push({ gym: g.name, sent, failed, skipped });
+    out.push({ gym: g.name, sent, failed, failedNames, skipped });
   }
   try { await client.close(); } catch (_) { /* closed */ }
   return json({ ok: true, week: ws, out });
