@@ -2253,6 +2253,14 @@ async function saveStudent() {
   if (res.error) { $('editMsg').className = 'msg err'; $('editMsg').textContent = res.error.message; return; }
   // Always line the list entry up for Waitlist / Drop-In (fixes earlier saves); otherwise only when Status changed
   if (editingId && (st !== prevStatus || st === 'Waitlist' || st === 'Drop-In')) { const e = await syncWaitlist({ ...cur, ...rec, id: editingId }, st); if (e) { $('editMsg').className = 'msg err'; $('editMsg').textContent = 'Saved, but the waitlist list did not update: ' + e; return; } }
+  // Parent phone/email/name changed → copy to their open waitlist / drop-in entry (Openings texts and emails use that entry)
+  const PC = ['parent_phone', 'parent_email', 'parent_name'];
+  if (editingId && PC.some(f => (cur[f] || null) !== rec[f])) {
+    const up = {}; PC.forEach(f => up[f] = rec[f]);
+    const wr = await sb.from('waitlist').update(up).eq('student_id', editingId).in('status', ['Waiting', 'Waitlist', 'Drop-In']);
+    if (wr.error) { $('editMsg').className = 'msg err'; $('editMsg').textContent = 'Saved, but the waitlist contact info did not update: ' + wr.error.message; return; }
+    waitlist.filter(w => w.student_id === editingId).forEach(w => Object.assign(w, up));
+  }
   await loadStudents();
   if (editingId) { $('editMsg').className = 'msg'; $('editMsg').textContent = '✓ Saved'; const s = students.find(x => x.id === editingId); if (s) renderSdTop(s); }
   else go('students');
