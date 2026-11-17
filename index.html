@@ -3597,10 +3597,12 @@ async function sendOpening() {
   const ins = await sb.from('claim_links').insert(links);
   if (ins.error) { $('so_send').disabled = false; r.className = 'msg err'; r.textContent = ins.error.message; return; }
   const base = location.origin + location.pathname.replace(/[^/]*$/, '') + 'claim.html?t=';
-  const linkTxt = w => { const ls = per.get(w.id); return many ? ls.map(([o, l]) => soLabel(o) + ': ' + base + l.token).join('\n') : base + ls[0][1].token; };
-  const body = w => tpl.replace(/\{parent\}/g, () => (w.parent_name || '').split(' ')[0] || 'there').replace(/\{kid\}/g, () => (w.student_name || '').split(' ')[0]).replace(/\{link\}/g, () => linkTxt(w));
+  // Flip Lab texts use the short website link (fliplabcoachsteve.com/c/CODE → claim page); emails keep the full link (shown as a button)
+  const tBase = HAND() ? base : 'fliplabcoachsteve.com/c/';
+  const linkTxt = (w, b) => { const ls = per.get(w.id); return many ? ls.map(([o, l]) => soLabel(o) + ': ' + b + l.token).join('\n') : b + ls[0][1].token; };
+  const body = (w, b = base) => tpl.replace(/\{parent\}/g, () => (w.parent_name || '').split(' ')[0] || 'there').replace(/\{kid\}/g, () => (w.student_name || '').split(' ')[0]).replace(/\{link\}/g, () => linkTxt(w, b));
   let sent = 0, failed = 0; const errs = [];
-  const messages = picks.filter(hasT).map(w => ({ to: w.parent_phone, student_id: w.student_id, family: w.parent_name || w.student_name, text: body(w) }));
+  const messages = picks.filter(hasT).map(w => ({ to: w.parent_phone, student_id: w.student_id, family: w.parent_name || w.student_name, text: body(w, tBase) }));
   if (messages.length) {
     const res = await sb.functions.invoke('sms-send', { body: { messages } });
     if (res.error || (res.data && res.data.error)) errs.push('Texts: ' + ((res.data && res.data.error) || res.error.message)); else { sent += res.data.sent || 0; failed += res.data.failed || 0; }
