@@ -13,6 +13,7 @@
   button { width:100%; margin-top:20px; padding:15px; font-size:17px; font-weight:700; border:0; border-radius:12px; background:#1D9E75; color:#fff; }
   button:disabled { opacity:.6; }
   .ok { background:#EAF3DE; color:#27500A; } .no { background:#FCEBEB; color:#791F1F; }
+  .note { margin-top:18px; padding:8px 10px; border-radius:8px; font-size:12px; line-height:1.5; background:#FAEEDA; color:#633806; }
   .box { margin-top:18px; padding:16px; border-radius:12px; font-size:15px; }
 </style>
 <style>/* Button feedback: hover darker + small shadow, press in, short ring after a tap */
@@ -33,7 +34,7 @@ function show(i) {
   const head = `<div class="gym">${esc(i.gym || 'Flip Lab')}</div>`;
   const when = `<div class="when">${esc((i.day || '').slice(0, 3))} ${esc(i.date || '')} · ${esc(i.time || '')}</div><div class="sub">${esc(i.coach || '')} · 30 min · ${esc(i.price || '')} · this week only</div>`;
   let body;
-  if (i.state === 'open') body = `<div style="margin-top:14px">A spot opened for <b>${esc(i.first)}</b></div>${when}<button id="go" onclick="claim()">Claim this spot</button>`;
+  if (i.state === 'open') body = `<div style="margin-top:14px">A spot opened for <b>${esc(i.first)}</b></div>${when}<div class="note">Note: this opening was sent to several families. The first one to tap Claim gets the spot.</div><button id="go" onclick="claim()" style="margin-top:12px">Claim this spot</button>`;
   else if (i.state === 'won') body = `${when}<div class="box ok"><b>You got it!</b><br>${esc(i.first)} is booked. See you then.</div>`;
   else if (i.state === 'taken') body = `${when}<div class="box no"><b>Sorry, just taken</b><br>Another family claimed it first. You're still on the list for the next one.</div>`;
   else if (i.state === 'used') body = `${when}<div class="box no"><b>Already booked</b><br>${esc(i.first)} is already booked for another time from this message. Text ${esc(i.coach || 'your coach')} if you need to change it.</div>`;
