@@ -15,6 +15,8 @@
   .ok { background:#EAF3DE; color:#27500A; } .no { background:#FCEBEB; color:#791F1F; }
   .note { margin-top:18px; padding:8px 10px; border-radius:8px; font-size:12px; line-height:1.5; background:#FAEEDA; color:#633806; }
   .box { margin-top:18px; padding:16px; border-radius:12px; font-size:15px; }
+  .opt { display:flex; justify-content:space-between; align-items:center; padding:13px 14px; margin-top:8px; border-radius:12px; border:1px solid #d5dcda; cursor:pointer; font-size:16px; }
+  .opt.on { border:2px solid #1D9E75; background:#E1F5EE; padding:12px 13px; } .opt.off { opacity:.45; text-decoration:line-through; cursor:default; }
 </style>
 <style>/* Button feedback: hover darker + small shadow, press in, short ring after a tap */
 button,.btn{transition:transform .08s,filter .12s,box-shadow .12s}
@@ -30,7 +32,27 @@ button.fl-tap,a.btn.fl-tap{outline:2px solid #1e8cff;outline-offset:2px}
 const sb = supabase.createClient('https://angmtyojkwlrefxpcgoa.supabase.co', 'sb_publishable_fPciNfnNHpHQikB8mqHNpw_hIVRIGo5');
 const t = new URLSearchParams(location.search).get('t') || '';
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+// One text link can carry several spots (i.opts): family picks one; claiming it closes their others
+let pick = null, lastMsg = '';
+function showMany(i, head) {
+  const won = i.opts.find(o => o.state === 'won'), open = i.opts.filter(o => o.state === 'open');
+  const w = o => `<div class="when">${esc((o.day || '').slice(0, 3))} ${esc(o.date || '')} · ${esc(o.time || '')}</div><div class="sub">${esc(o.coach || '')} · 30 min · ${esc(o.price || '')}</div>`;
+  let body;
+  if (won) body = `${w(won)}<div class="box ok"><b>You got it!</b><br>${esc(i.first)} is booked. See you then.</div>`;
+  else if (!open.length) body = `<div class="box no"><b>Sorry, these spots are gone</b><br>Other families claimed them first. You're still on the list for the next one.</div>`;
+  else {
+    if (!open.some(o => o.token === pick)) pick = null;
+    const o0 = i.opts[0], p = i.opts.find(o => o.token === pick);
+    body = `<div style="margin-top:14px">Spots opened this week for <b>${esc(i.first)}</b></div><div class="sub">${esc(o0.coach || '')} · 30 min · ${esc(o0.price || '')} · this week only<br>Pick one</div>`
+      + (lastMsg ? `<div class="box no" style="margin-top:12px;padding:10px">${lastMsg}</div>` : '')
+      + i.opts.map(o => { const ok = o.state === 'open'; return `<div class="opt${o.token === pick ? ' on' : ''}${ok ? '' : ' off'}" ${ok ? `onclick="pick='${esc(o.token)}';showMany(cur, curHead)"` : ''}><b>${esc((o.day || '').slice(0, 3))} ${esc(o.date || '')}</b><span>${esc(o.time || '')}${ok ? '' : o.state === 'expired' ? ' · passed' : ' · taken'}</span></div>`; }).join('')
+      + `<div class="note">These spots were sent to several families. The first one to tap Claim gets each spot.</div><button id="go" ${p ? 'onclick="claim()"' : 'disabled'} style="margin-top:12px">${p ? 'Claim ' + esc((p.day || '').slice(0, 3)) + ' ' + esc(p.time || '') : 'Pick a time'}</button>`;
+  }
+  document.getElementById('c').innerHTML = head + body;
+}
+let cur = null, curHead = '';
 function show(i) {
+  if (i && i.opts && i.opts.length > 1) { cur = i; curHead = `<div class="gym">${esc(i.gym || 'Flip Lab')}</div>`; return showMany(i, curHead); }
   const head = `<div class="gym">${esc(i.gym || 'Flip Lab')}</div>`;
   const when = `<div class="when">${esc((i.day || '').slice(0, 3))} ${esc(i.date || '')} · ${esc(i.time || '')}</div><div class="sub">${esc(i.coach || '')} · 30 min · ${esc(i.price || '')} · this week only</div>`;
   let body;
@@ -42,11 +64,15 @@ function show(i) {
   else body = `<div class="box no">This link isn't valid.</div>`;
   document.getElementById('c').innerHTML = head + body;
 }
-async function load() { const r = await sb.rpc('claim_info', { t }); show(r.error ? { state: 'missing' } : r.data); }
+// claim_opts = this family's other spots from the same send (null for a one-spot link, or if the lookup isn't there)
+async function info() { const [r, o] = await Promise.all([sb.rpc('claim_info', { t }), sb.rpc('claim_opts', { t })]);
+  if (r.error) return { state: 'missing' }; const d = r.data || {}; if (!o.error && Array.isArray(o.data) && o.data.length > 1) d.opts = o.data; return d; }
+async function load() { show(await info()); }
 async function claim() {
   const b = document.getElementById('go'); b.disabled = true; b.textContent = 'Claiming…';
-  const r = await sb.rpc('claim_take', { t });
+  const tk = pick || t, r = await sb.rpc('claim_take', { t: tk });
   if (r.error) { b.disabled = false; b.textContent = 'Try again'; return; }
+  if (pick) { lastMsg = r.data && r.data.state === 'won' ? '' : 'Sorry, that one was just taken. Pick another.'; return show(await info()); }
   show(r.data);
 }
 load();
