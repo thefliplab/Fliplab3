@@ -690,7 +690,7 @@ button.fl-tap,a.btn.fl-tap{outline:2px solid #1D9E75;outline-offset:2px}
     <textarea id="so_msg" rows="4" oninput="soEdited = true; soCount()"></textarea>
     <label id="so_everyBox" style="display:flex;align-items:center;gap:6px;font-size:13px;margin:6px 0"><input type="checkbox" id="so_every" style="width:auto" onchange="soEvery = this.checked; soRender()">Send every picked day to every student (not just their matches)</label>
     <div id="so_viaBox"></div>
-    <div id="so_mailNote" style="display:none;font-size:12px;color:#888;margin:6px 0">Several days are sent by email. Each family can book one of them.</div>
+    <div id="so_mailNote" style="display:none;font-size:12px;color:#888;margin:6px 0">Each family gets one link with all their days and can book one of them.</div>
     <div id="so_vwarn"></div>
     <div id="so_will" style="font-size:12px;color:#888;margin:4px 0"></div>
     <button class="btn" id="so_send" onclick="sendOpening()">Send</button>
@@ -3549,8 +3549,8 @@ const soLabel = o => { const d = weekDates().find(x => x.name === o.day); return
 const soMatch = w => soSel().filter(o => matchesSlot(w, o.day, o.time));
 // Days a family gets: their matches among the picked days; all picked days if "every day" is ticked or none match
 const soFor = w => { const m = soMatch(w); return soEvery || !m.length ? soSel() : m; };
-// 2+ days go by email only (texts are for one-off openings)
-const soCan = w => soSel().length > 1 ? okMail(w.parent_email) : (w.parent_phone || okMail(w.parent_email));
+// 2+ days: texts get ONE short link that lists all their days (they book one); emails list a link per day
+const soCan = w => w.parent_phone || okMail(w.parent_email);
 function openSendOpen(i) {
   const o = openSlots[i]; if (!o) return;
   soDays = new Set([i]); soEvery = false; soEdited = false; soShowAll = false; soLine = new Map(); soVTried = new Set(); $('so_vnote').textContent = '';
@@ -3575,8 +3575,7 @@ function soRender() {
   $('so_sub').textContent = (many ? '' : (s[0].coach || '') + ' · ') + 'this week only · first family to tap gets each spot';
   $('so_days').innerHTML = openSlots.map((o, i) => `<button type="button" class="paybtn" style="${soDays.has(i) ? 'background:var(--mint);color:#fff' : 'background:#eef0f2;color:#555'}" onclick="soDay(${i})">${SHORT[o.day]} ${esc(o.time)}</button>`).join('');
   $('so_everyBox').style.display = many ? 'flex' : 'none';
-  $('so_viaBox').style.display = many ? 'none' : ''; $('so_mailNote').style.display = many ? '' : 'none';
-  if (many) openLive.forEach(w => { if (!soCan(w)) soPick.delete(w.id); });
+  $('so_mailNote').style.display = many ? '' : 'none';
   if (!soEdited) $('so_msg').value = soDefMsg();
   const rows = openLive.map(w => ({ w, m: soMatch(w) })).filter(x => soShowAll || x.m.length || soPick.has(x.w.id));
   soVis = rows.filter(x => soCan(x.w)).map(x => x.w.id);
@@ -3594,14 +3593,14 @@ function soRender() {
 function soCount() {
   $('so_send').textContent = 'Send to ' + soPick.size + ' famil' + (soPick.size === 1 ? 'y' : 'ies');
   $('so_cnt').textContent = '(' + soPick.size + ' picked)';
-  const via = soSel().length > 1 ? 'email' : viaGet('so_via'), pk = openLive.filter(w => soPick.has(w.id));
+  const via = viaGet('so_via'), pk = openLive.filter(w => soPick.has(w.id));
   const t = pk.filter(w => via !== 'email' && w.parent_phone), e = pk.filter(w => via !== 'text' && okMail(w.parent_email)), v = t.filter(soIsV);
   $('so_will').textContent = pk.length ? 'Will send: ' + (t.length - v.length) + ' text' + (t.length - v.length === 1 ? '' : 's') + ' from cell' + (soVoiceOn() ? ' · ' + v.length + ' from Voice' : '') + ' · ' + e.length + ' email' + (e.length === 1 ? '' : 's') : '';
   const long = v.map(soVText).sort((a, b) => b.length - a.length)[0] || '';
   $('so_vwarn').innerHTML = long && vOver(long) ? `<div class="msg err" style="margin:4px 0">Too long for Voice: ${long.length} of ${vLim(long)} characters${vLim(long) === 70 ? ' (an emoji, curly quote or long dash drops the limit to 70)' : ''}. Google Voice would cut it off. Shorten it, or <a href="#" onclick="soVoiceToCell();return false" style="color:#A32D2D;font-weight:600">send the ${v.length} Voice famil${v.length === 1 ? 'y' : 'ies'} from Cell</a>.</div>` : '';
 }
-// Voice = Flip Lab only, one opening (texts), and Text or Both picked
-const soVoiceOn = () => !HAND() && soSel().length === 1 && viaGet('so_via') !== 'email';
+// Voice = Flip Lab only, Text or Both picked
+const soVoiceOn = () => !HAND() && viaGet('so_via') !== 'email';
 const soIsV = w => soVoiceOn() && w.parent_phone && soLine.get(w.id) === 'voice';
 // The text a Voice family gets (link = short website link, 9-letter code — same length as the real one)
 const soVText = w => $('so_msg').value.replace(/\{parent\}/g, () => (w.parent_name || '').split(' ')[0] || 'there').replace(/\{kid\}/g, () => (w.student_name || '').split(' ')[0]).replace(/\{link\}/g, 'fliplabcoachsteve.com/c/XXXXXXXXX');
@@ -3631,7 +3630,7 @@ async function soVoiceUse() {
 function soVoiceToCell() { [...soLine.keys()].forEach(k => soLine.set(k, 'cell')); soRender(); }
 const soToken = () => { const a = new Uint8Array(9); crypto.getRandomValues(a); return [...a].map(b => 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'[b % 57]).join(''); };
 async function sendOpening() {
-  const s = soSel(), many = s.length > 1, via = many ? 'email' : viaGet('so_via'), r = $('so_res');
+  const s = soSel(), many = s.length > 1, via = viaGet('so_via'), r = $('so_res');
   const hasT = w => via !== 'email' && w.parent_phone, hasE = w => via !== 'text' && okMail(w.parent_email);
   const picks = openLive.filter(w => soPick.has(w.id) && (hasT(w) || hasE(w)));
   if (!picks.length) { r.className = 'msg err'; r.textContent = soPick.size ? 'None of the picked families have ' + (via === 'email' ? 'an email' : 'a phone') + ' on file.' : 'Pick at least one family.'; return; }
@@ -3655,11 +3654,11 @@ async function sendOpening() {
   const base = location.origin + location.pathname.replace(/[^/]*$/, '') + 'claim.html?t=';
   // Flip Lab texts use the short website link (fliplabcoachsteve.com/c/CODE → claim page); emails keep the full link (shown as a button)
   const tBase = HAND() ? base : 'fliplabcoachsteve.com/c/';
-  const linkTxt = (w, b) => { const ls = per.get(w.id); return many ? ls.map(([o, l]) => soLabel(o) + ': ' + b + l.token).join('\n') : b + ls[0][1].token; };
-  const body = (w, b = base) => tpl.replace(/\{parent\}/g, () => (w.parent_name || '').split(' ')[0] || 'there').replace(/\{kid\}/g, () => (w.student_name || '').split(' ')[0]).replace(/\{link\}/g, () => linkTxt(w, b));
+  const linkTxt = (w, b, one) => { const ls = per.get(w.id); return many && !one ? ls.map(([o, l]) => soLabel(o) + ': ' + b + l.token).join('\n') : b + ls[0][1].token; };
+  const body = (w, b = base, one) => tpl.replace(/\{parent\}/g, () => (w.parent_name || '').split(' ')[0] || 'there').replace(/\{kid\}/g, () => (w.student_name || '').split(' ')[0]).replace(/\{link\}/g, () => linkTxt(w, b, one));
   let sent = 0, failed = 0; const errs = [];
   const notes = [];
-  const messages = picks.filter(w => hasT(w) && !vl.includes(w)).map(w => ({ to: w.parent_phone, student_id: w.student_id, family: w.parent_name || w.student_name, text: body(w, tBase) }));
+  const messages = picks.filter(w => hasT(w) && !vl.includes(w)).map(w => ({ to: w.parent_phone, student_id: w.student_id, family: w.parent_name || w.student_name, text: body(w, tBase, true) }));
   if (messages.length) {
     const res = await sb.functions.invoke('sms-send', { body: { messages } });
     if (res.error || (res.data && res.data.error)) errs.push('Texts: ' + ((res.data && res.data.error) || res.error.message)); else { sent += res.data.sent || 0; failed += res.data.failed || 0; }
@@ -3668,11 +3667,11 @@ async function sendOpening() {
   for (const [i, w] of vl.entries()) {
     if (i) await new Promise(ok => setTimeout(ok, 3000));
     r.textContent = 'Sending from Voice ' + (i + 1) + ' of ' + vl.length + '…';
-    const v = await sb.functions.invoke('voice-send', { body: { to: w.parent_phone, student_id: w.student_id, family: w.parent_name || w.student_name, text: body(w, tBase), batch: stamp } }).catch(() => ({}));
+    const v = await sb.functions.invoke('voice-send', { body: { to: w.parent_phone, student_id: w.student_id, family: w.parent_name || w.student_name, text: body(w, tBase, true), batch: stamp } }).catch(() => ({}));
     if (v && v.data && v.data.ok) sent++; else fb.push(w);
   }
   if (fb.length) {
-    const part = await sb.functions.invoke('sms-send', { body: { messages: fb.map(w => ({ to: w.parent_phone, student_id: w.student_id, family: w.parent_name || w.student_name, text: body(w, tBase) })) } });
+    const part = await sb.functions.invoke('sms-send', { body: { messages: fb.map(w => ({ to: w.parent_phone, student_id: w.student_id, family: w.parent_name || w.student_name, text: body(w, tBase, true) })) } });
     if (part.error || (part.data && part.data.error)) errs.push('Voice texts: ' + ((part.data && part.data.error) || part.error.message));
     else { sent += part.data.sent || 0; failed += part.data.failed || 0; notes.push(fb.length + ' Voice text' + (fb.length === 1 ? '' : 's') + ' went from your cell instead'); }
   }
