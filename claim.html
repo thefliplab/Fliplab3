@@ -64,12 +64,15 @@ function show(i) {
   else body = `<div class="box no">This link isn't valid.</div>`;
   document.getElementById('c').innerHTML = head + body;
 }
-async function load() { const r = await sb.rpc('claim_info', { t }); show(r.error ? { state: 'missing' } : r.data); }
+// claim_opts = this family's other spots from the same send (null for a one-spot link, or if the lookup isn't there)
+async function info() { const [r, o] = await Promise.all([sb.rpc('claim_info', { t }), sb.rpc('claim_opts', { t })]);
+  if (r.error) return { state: 'missing' }; const d = r.data || {}; if (!o.error && Array.isArray(o.data) && o.data.length > 1) d.opts = o.data; return d; }
+async function load() { show(await info()); }
 async function claim() {
   const b = document.getElementById('go'); b.disabled = true; b.textContent = 'Claiming…';
   const tk = pick || t, r = await sb.rpc('claim_take', { t: tk });
   if (r.error) { b.disabled = false; b.textContent = 'Try again'; return; }
-  if (pick) { lastMsg = r.data && r.data.state === 'won' ? '' : 'Sorry, that one was just taken. Pick another.'; const n = await sb.rpc('claim_info', { t }); return show(n.error ? r.data : n.data); }
+  if (pick) { lastMsg = r.data && r.data.state === 'won' ? '' : 'Sorry, that one was just taken. Pick another.'; return show(await info()); }
   show(r.data);
 }
 load();
