@@ -40,7 +40,9 @@ Deno.serve(async (req) => {
     const thisMon = mondayOf(nyNow().ymd), weeks = [];
     for (const ws of [thisMon, addDays(thisMon, 7)]) {
       const we = addDays(ws, 6);
-      const { data: exs } = await db.from("schedule_exceptions").select("*").eq("gym_id", gym).eq("week_start", ws).not("status", "in", '("Deleted","Expired")');
+      const [{ data: exs }, { data: offs }] = await Promise.all([
+        db.from("schedule_exceptions").select("*").eq("gym_id", gym).eq("week_start", ws).not("status", "in", '("Deleted","Expired")'),
+        db.from("days_off").select("coach,start_date,end_date").eq("gym_id", gym).lte("start_date", we).gte("end_date", ws)]);
       const live = (buildWeek(lessons || [], exs || [], ws, we) as any[]).filter(p => p.status !== "Cancelled");
       const regular = (buildWeek(lessons || [], [], ws, we) as any[]).filter(p => p.status !== "Cancelled");   // the normal week, no changes
       const holds = (rows: any[], s: any) => rows.some(p => p.day === s.day && p.time === s.time && (!p.coach || p.coach === "TBD" || sameCoach(p.coach, s.coach)));
@@ -54,6 +56,8 @@ Deno.serve(async (req) => {
         if (!sameCoach(s.coach, main)) return false;
         const k = s.day + "|" + s.time; if (seen.has(k)) return false;
         if (minsUntil(ws, s.day, s.time) <= 60) return false;
+        const dt = dateOf(ws, s.day);
+        if ((offs || []).some(o => dt >= o.start_date && dt <= o.end_date && (!o.coach || sameCoach(o.coach, s.coach)))) return false;   // days off
         if (holds(live, s)) return false;          // taken this week
         if (!holds(regular, s)) return false;      // permanent opening → shown as a weekly spot, not here
         seen.add(k); return true;
