@@ -232,6 +232,7 @@ button.fl-tap,a.btn.fl-tap{outline:2px solid #1D9E75;outline-offset:2px}
         <button class="btn" id="mkCopy" onclick="mkCopy()">📋 Copy Text</button>
       </div>
     </div>
+    <div id="openFail"></div>
     <div class="sec">Openings</div>
     <div class="card" style="padding:0;overflow:hidden" id="openList"><div class="center">Loading…</div></div>
     <div class="sec">Waitlist <span id="wlCount" style="font-weight:400;font-size:12px;color:#888"></span></div>
@@ -695,6 +696,7 @@ button.fl-tap,a.btn.fl-tap{outline:2px solid #1D9E75;outline-offset:2px}
     <div id="so_will" style="font-size:12px;color:#888;margin:4px 0"></div>
     <button class="btn" id="so_send" onclick="sendOpening()">Send</button>
     <div id="so_res" class="msg"></div>
+    <div id="so_fail"></div>
   </div>
 </div>
 <!-- Print schedule (port of 2.0 Print Schedule): portrait letter, one page, size A−/A+/Auto-fit -->
@@ -3428,6 +3430,7 @@ function computeOpenings() {
     .sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || timeVal(a.time) - timeVal(b.time));
 }
 function renderOpen() {
+  opFailCheck();
   openSlots = computeOpenings();
   // Booked this week via a one-week lesson → hidden from the lists (same as 2.0 getWaitlist with weekStart)
   const booked = new Set(weekEx.filter(e => e.type === 'Add').map(e => e.student_id));
@@ -3556,7 +3559,7 @@ function openSendOpen(i) {
   soDays = new Set([i]); soEvery = false; soEdited = false; soShowAll = false; soLine = new Map(); soVTried = new Set(); $('so_vnote').textContent = '';
   soPick = new Set(openLive.filter(w => soCan(w) && matchesSlot(w, o.day, o.time)).map(w => w.id));
   $('so_viaBox').innerHTML = viaHtml('so_via'); $('so_every').checked = false;
-  $('so_res').textContent = ''; $('so_send').disabled = false; soRender(); $('soModal').classList.remove('hidden');
+  $('so_res').textContent = ''; $('so_fail').innerHTML = ''; $('so_send').disabled = false; soRender(); $('soModal').classList.remove('hidden');
 }
 // Tap a day chip: add it (and tick its matching families) or remove it (at least one day stays)
 function soDay(i) {
@@ -3681,6 +3684,44 @@ async function sendOpening() {
   if (!sent) { $('so_send').disabled = false; r.className = 'msg err'; r.textContent = 'Not sent: ' + (errs.join(' · ') || 'check phone/email'); return; }
   r.className = errs.length || failed ? 'msg err' : 'msg';
   r.textContent = '✓ Sent ' + sent + (failed ? ' · ' + failed + ' failed' : '') + (errs.length ? ' · ' + errs.join(' · ') : '') + (notes.length ? ' · ' + notes.join(' · ') : '') + ' — you\'ll get a text when someone claims it';
+  if (emails.length) opFailCheck(stamp);
+}
+// ===== Openings: emails that didn't go out → notice + Resend button that unlocks 10 min after the send (Yahoo needs a break) =====
+const OP_WAIT = 10 * 60000;
+const opLast = b => { try { return +localStorage.getItem('fl3_opRs_' + b) || 0; } catch (e) { return 0; } };
+let opTick = null;
+async function opFailCheck(only) {
+  const since = Date.now() - 3 * 864e5;
+  const q = await sb.from('email_log').select('batch,family_name').like('batch', 'B%').eq('status', 'Failed');
+  const by = {}; (q.data || []).forEach(x => { const t = +String(x.batch).slice(1); if (t >= since) (by[x.batch] = by[x.batch] || []).push(x.family_name || '?'); });
+  const row = b => { const at = Math.max(+b.slice(1), opLast(b)) + OP_WAIT, n = by[b].length;
+    return `<div class="msg err" style="margin:6px 0">⚠️ Opening sent ${new Date(+b.slice(1)).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' })} — ${n} email${n === 1 ? '' : 's'} didn't go out: ${esc(by[b].join(', '))}
+      <br><button class="paybtn opRs" data-b="${b}" data-at="${at}" style="margin:4px 0 0;background:#FCEBEB;color:#A32D2D" onclick="opResend('${b}')">Resend failed emails</button></div>`; };
+  const all = Object.keys(by).sort().reverse();
+  if ($('openFail')) $('openFail').innerHTML = all.map(row).join('');
+  if (only && $('so_fail')) $('so_fail').innerHTML = by[only] ? row(only) : '';
+  opTime();
+  if (!opTick) opTick = setInterval(opTime, 1000);
+}
+function opTime() {   // greyed "Resend in 9:41" until 10 min after the send / last resend
+  const bs = document.querySelectorAll('.opRs');
+  if (!bs.length) { clearInterval(opTick); opTick = null; return; }
+  bs.forEach(b => { if (b.dataset.busy) return; const left = +b.dataset.at - Date.now();
+    b.disabled = left > 0; b.style.opacity = left > 0 ? .55 : 1;
+    b.textContent = left > 0 ? 'Resend in ' + Math.floor(left / 60000) + ':' + String(Math.floor(left / 1000) % 60).padStart(2, '0') : 'Resend failed emails'; });
+}
+// Same email (same claim links) to just the families whose email failed; old rows marked "Failed (resent)" like Communicate
+async function opResend(b) {
+  const E = await sb.from('email_log').select('id,to_email,student_id,family_name,subject,body').eq('batch', b).eq('status', 'Failed');
+  const ef = E.data || []; if (!ef.length) return opFailCheck();
+  if (!confirm('Resend ' + ef.length + ' email' + (ef.length === 1 ? '' : 's') + ' to ' + [...new Set(ef.map(x => x.family_name || '?'))].join(', ') + '?')) return;
+  document.querySelectorAll('.opRs[data-b="' + b + '"]').forEach(x => { x.dataset.busy = 1; x.disabled = true; x.textContent = 'Resending…'; });
+  try { localStorage.setItem('fl3_opRs_' + b, Date.now()); } catch (e) {}
+  const o = await sendEmails(ef.map(x => ({ to: x.to_email, student_id: x.student_id, family: x.family_name, subject: x.subject, text: x.body })), b);
+  if (!o.error) await sb.from('email_log').update({ status: 'Failed (resent)' }).in('id', ef.map(x => x.id));
+  else alert('Resend stopped: ' + o.error);
+  await opFailCheck(b);
+  if (!o.error && !o.failed && $('so_fail') && !$('soModal').classList.contains('hidden')) $('so_fail').innerHTML = '<div class="msg">✓ Resent ' + o.sent + ' email' + (o.sent === 1 ? '' : 's') + '</div>';
 }
 
 // ================= PRINT SCHEDULE =================
