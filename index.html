@@ -2765,6 +2765,8 @@ async function saveAdd() {
     // Same as 2.0: a permanent lesson makes a Waitlist/Drop-In/Inactive student Active (waitlist row left alone)
     const flip = kids.filter(k => ['Waitlist','Drop-In','Inactive'].includes(k.status)).map(k => k.id);
     if (!res.error && flip.length) { await sb.from('students').update({ status: 'Active', active: true }).in('id', flip); flip.forEach(id => students.find(s => s.id === id).status = 'Active'); }
+    // A weekly lesson closes the kid's open Waitlist entry wherever it was booked from (Drop-In entries stay for one-week openings)
+    if (!res.error) await sb.from('waitlist').update({ status: 'Converted' }).in('student_id', kids.map(k => k.id)).in('status', ['Waiting', 'Waitlist']);
   }
   $('al_save').disabled = false;
   if (res.error) return alMsg(res.error.message, true);
