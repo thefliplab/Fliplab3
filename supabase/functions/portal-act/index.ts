@@ -135,10 +135,17 @@ Deno.serve(async (req) => {
   const validWs = (ws: string) => typeof ws === "string" && /^\d{4}-\d{2}-\d{2}$/.test(ws) && ws >= thisMon && ws <= addDays(thisMon, 21) && mondayOf(ws) === ws;
   const myLesson = (id: string) => (lessons || []).find(l => l.id === id && kidIds.has(l.student_id));
 
+  // Days off (admin Schedule → Days off): rows overlapping week ws. coach null = all coaches.
+  async function daysOff(ws: string) {
+    const { data } = await db.from("days_off").select("coach,start_date,end_date").eq("gym_id", gym).lte("start_date", addDays(ws, 6)).gte("end_date", ws);
+    return data || [];
+  }
+  const isOff = (offs: any[], date: string, coach: string) => offs.some(o => date >= o.start_date && date <= o.end_date && (!o.coach || !coach || coach === "TBD" || o.coach === coach || o.coach.replace(/^coach\s+/i, "") === coach.replace(/^coach\s+/i, "")));
+
   async function openSlots(ws: string, coach: string, rows: any[]) {
-    const [{ data: slots }, { data: seasons }] = await Promise.all([
+    const [{ data: slots }, { data: seasons }, offs] = await Promise.all([
       db.from("available_slots").select("id,day,time,coach,active,is_summer,season_id,extra").eq("gym_id", gym).eq("active", true),
-      db.from("seasons").select("*").eq("gym_id", gym)]);
+      db.from("seasons").select("*").eq("gym_id", gym), daysOff(ws)]);
     const md = ws.slice(5, 10);
     const se = (seasons || []).filter(x => mdIn(md, x.start_md, x.end_md)).sort((a, c) => (c.sort || 0) - (a.sort || 0))[0];
     const live = rows.filter(p => p.status !== "Cancelled"), seen = new Set<string>();
@@ -150,6 +157,7 @@ Deno.serve(async (req) => {
       if (!sameCoach(s.coach, coach)) return false;
       const k = s.day + "|" + s.time; if (seen.has(k)) return false;
       if (minsUntil(ws, s.day, s.time) <= 60) return false;            // past or starting within the hour
+      if (isOff(offs, dateOf(ws, s.day), s.coach)) return false;       // coach's days off (vacation) — never an opening
       if (live.some(p => p.day === s.day && p.time === s.time && (!p.coach || p.coach === "TBD" || sameCoach(p.coach, s.coach)))) return false;
       seen.add(k); return true;
     }).sort((a, c) => DAYS.indexOf(a.day) - DAYS.indexOf(c.day) || timeVal(a.time) - timeVal(c.time)).map(s => ({ day: s.day, time: s.time }));
@@ -388,7 +396,8 @@ Deno.serve(async (req) => {
   // ---------- undo the parent's own change ----------
   if (b.action === "undo") {
     const { data: ex } = await db.from("schedule_exceptions").select("*").eq("gym_id", gym).eq("id", String(b.ex_id || "")).eq("status", "Active").maybeSingle();
-    if (!ex || ex.extra?.by !== "parent" || !kidIds.has(ex.student_id)) return J({ error: "That can't be undone here. Text Coach Steve." });
+    if (!ex || ex.extra?.by !== "parent" || !kidIds.has(ex.student_id) || ex.extra?.days_off) return J({ error: "That can't be undone here. Text Coach Steve." });
+    if ((ex.type === "Cancel" || ex.type === "Move") && isOff(await daysOff(ex.week_start), dateOf(ex.week_start, ex.base_day), ex.coach)) return J({ error: "That day is a day off. Text Coach Steve." });
     if (minsUntil(ex.week_start, ex.base_day, ex.base_time) <= 0 || (ex.type === "Move" && minsUntil(ex.week_start, ex.new_day, ex.new_time) <= 0)) return J({ error: "Too late to undo. Text Coach Steve." });
     if (ex.type === "Add" && minsUntil(ex.week_start, ex.new_day, ex.new_time) < cancelHrs * 60) return J({ error: `Under ${cancelHrs} hours away. Text Coach Steve to cancel.` });
     // Getting the old spot back: make sure nobody took it meanwhile (Openings / drop-in)
